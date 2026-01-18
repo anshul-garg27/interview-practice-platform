@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 
+// Base path for GitHub Pages deployment
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
 interface QuestionSource {
   id: string
   roundName: string
@@ -340,7 +343,7 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     // Fetch generated problems to know which ones have professional problem statements
-    fetch('/data/generated_problems.json')
+    fetch(`${basePath}/data/generated_problems.json`)
       .then(res => res.json())
       .then(genData => {
         const ids = new Set<string>(genData.problems?.map((p: { id: string }) => p.id) || [])
@@ -350,7 +353,7 @@ export default function QuestionsPage() {
         // Ignore errors - generated problems file may not exist yet
       })
 
-    fetch('/data/questions.json')
+    fetch(`${basePath}/data/questions.json`)
       .then(res => res.json())
       .then(data => {
         setData(data)

@@ -6,6 +6,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { cn } from '@/lib/utils'
 
+// Base path for GitHub Pages deployment
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
 interface SolutionModalProps {
   isOpen: boolean
   onClose: () => void
@@ -287,7 +290,7 @@ export function SolutionModal({
     } catch (err) {
       // Try static file fallback
       try {
-        const staticRes = await fetch(`/data/solutions/${experienceId}/round_${roundIndex}.json`)
+        const staticRes = await fetch(`${basePath}/data/solutions/${experienceId}/round_${roundIndex}.json`)
         if (staticRes.ok) {
           setSolution(await staticRes.json())
         }
