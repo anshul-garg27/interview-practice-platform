@@ -15,6 +15,35 @@ interface TouchState {
   startX: number
   startY: number
   startTime: number
+  isInsideScrollable: boolean  // Track if touch started in scrollable element
+}
+
+/**
+ * Check if an element or its parents can scroll horizontally
+ * Used to prevent swipe gestures from triggering when scrolling code blocks
+ */
+function isInsideHorizontallyScrollable(element: HTMLElement | null): boolean {
+  let current = element
+  while (current) {
+    // Check for code blocks, pre elements, or elements with horizontal scroll
+    const tagName = current.tagName.toLowerCase()
+    if (tagName === 'pre' || tagName === 'code') {
+      return true
+    }
+
+    // Check if element has horizontal overflow
+    const style = window.getComputedStyle(current)
+    const overflowX = style.overflowX
+    if (overflowX === 'auto' || overflowX === 'scroll') {
+      // Check if content is actually scrollable (scrollWidth > clientWidth)
+      if (current.scrollWidth > current.clientWidth) {
+        return true
+      }
+    }
+
+    current = current.parentElement
+  }
+  return false
 }
 
 /**
@@ -43,10 +72,16 @@ export function useSwipeGestures<T extends HTMLElement = HTMLDivElement>({
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (!enabled) return
     const touch = e.touches[0]
+    const target = e.target as HTMLElement
+
+    // Check if touch started inside a horizontally scrollable element (like code blocks)
+    const isInsideScrollable = isInsideHorizontallyScrollable(target)
+
     touchState.current = {
       startX: touch.clientX,
       startY: touch.clientY,
       startTime: Date.now(),
+      isInsideScrollable,
     }
   }, [enabled])
 
@@ -57,6 +92,7 @@ export function useSwipeGestures<T extends HTMLElement = HTMLDivElement>({
     const deltaX = touch.clientX - touchState.current.startX
     const deltaY = touch.clientY - touchState.current.startY
     const deltaTime = Date.now() - touchState.current.startTime
+    const wasInsideScrollable = touchState.current.isInsideScrollable
 
     // Reset touch state
     touchState.current = null
@@ -69,7 +105,10 @@ export function useSwipeGestures<T extends HTMLElement = HTMLDivElement>({
 
     // Determine if horizontal or vertical swipe
     if (absX > absY && absX > threshold) {
-      // Horizontal swipe
+      // Horizontal swipe - but skip if inside scrollable element (like code blocks)
+      // This allows horizontal scrolling in code without triggering phase navigation
+      if (wasInsideScrollable) return
+
       if (deltaX > 0) {
         onSwipeRight?.()
       } else {
