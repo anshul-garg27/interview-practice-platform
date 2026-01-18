@@ -1,14 +1,16 @@
 import type { NextConfig } from "next";
 
-const basePath = '/interview-practice-platform';
+// For GitHub Pages we need basePath, for Vercel we don't
+const isGitHubPages = process.env.GITHUB_PAGES === 'true';
+const basePath = isGitHubPages ? '/interview-practice-platform' : '';
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // Static export only for GitHub Pages, Vercel handles SSR natively
+  ...(isGitHubPages ? { output: 'export' } : {}),
   images: {
     unoptimized: true,
   },
-  basePath,
-  assetPrefix: `${basePath}/`,
+  ...(basePath ? { basePath, assetPrefix: `${basePath}/` } : {}),
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
   },
