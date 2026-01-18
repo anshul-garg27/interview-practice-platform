@@ -8,9 +8,15 @@ import { Button } from "@/components/ui/button"
 export function Header() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false)
   }, [])
 
   return (
@@ -57,7 +63,8 @@ export function Header() {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
           {mounted && (
             <Button
               variant="ghost"
@@ -104,8 +111,87 @@ export function Header() {
               )}
             </Button>
           )}
+
+          {/* Mobile Hamburger Menu */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden rounded-full"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="4" x2="20" y1="12" y2="12" />
+                <line x1="4" x2="20" y1="6" y2="6" />
+                <line x1="4" x2="20" y1="18" y2="18" />
+              </svg>
+            )}
+          </Button>
         </div>
       </div>
+
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-lg">
+          <nav className="container mx-auto px-4 py-4 flex flex-col gap-2">
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              🏠 Dashboard
+            </Link>
+            <Link
+              href="/experiences"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              📝 Experiences
+            </Link>
+            <Link
+              href="/questions"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              ❓ Questions
+            </Link>
+            <Link
+              href="/practice"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              🎯 Practice
+            </Link>
+          </nav>
+        </div>
+      )}
     </header>
   )
 }
