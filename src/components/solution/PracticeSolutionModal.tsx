@@ -1154,7 +1154,49 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
 
             {solution.thinking_process && (
         <Section title="Thinking Process" icon="🧠" accentColor={colors.phaseApproach}>
-          {solution.thinking_process.step_by_step && (
+          {/* Handle array format: [{ step, thought, why }, ...] */}
+          {Array.isArray(solution.thinking_process) && solution.thinking_process.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {solution.thinking_process.map((item: any, i: number) => (
+                <div key={i} style={{
+                  padding: 12,
+                  backgroundColor: colors.bgGraphite,
+                  borderRadius: 8,
+                  borderLeft: `3px solid ${colors.phaseApproach}`
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <span style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      backgroundColor: colors.phaseApproachBg,
+                      color: colors.phaseApproach,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {item.step || i + 1}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: colors.textBright, fontWeight: 500, marginBottom: 4 }}>
+                        {item.thought}
+                      </div>
+                      {item.why && (
+                        <div style={{ fontSize: 13, color: colors.textMuted, fontStyle: 'italic' }}>
+                          → {item.why}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Handle object format: { step_by_step: string[], key_insight, why_this_works } */}
+          {!Array.isArray(solution.thinking_process) && solution.thinking_process.step_by_step && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               {solution.thinking_process.step_by_step.map((step: string, i: number) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -1171,14 +1213,14 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
                     justifyContent: 'center',
                     flexShrink: 0
                   }}>
-                          {i + 1}
-                        </span>
+                    {i + 1}
+                  </span>
                   <MarkdownText text={step} className="" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {solution.thinking_process.key_insight && (
+                </div>
+              ))}
+            </div>
+          )}
+          {!Array.isArray(solution.thinking_process) && solution.thinking_process.key_insight && (
             <div style={{
               padding: 12,
               backgroundColor: colors.emberFaint,
@@ -1187,11 +1229,11 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.emberGlow, textTransform: 'uppercase', marginBottom: 4 }}>
                 Key Insight
-                  </div>
+              </div>
               <MarkdownText text={solution.thinking_process.key_insight} />
-                  </div>
-                )}
-                {solution.thinking_process.why_this_works && (
+            </div>
+          )}
+          {!Array.isArray(solution.thinking_process) && solution.thinking_process.why_this_works && (
             <div style={{
               marginTop: 16,
               padding: 12,
@@ -1203,10 +1245,10 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
                 Why This Works
               </div>
               <MarkdownText text={solution.thinking_process.why_this_works} />
-                  </div>
-                )}
-              </Section>
-            )}
+            </div>
+          )}
+        </Section>
+      )}
 
       {solution.requirements_coverage?.checklist && (
         <Section title="Requirements Checklist" icon="✅" accentColor={colors.success}>
@@ -1969,17 +2011,57 @@ function PhaseSolution({ solution }: { solution: PracticeSolution }) {
                       <div style={{ fontSize: 13, color: colors.textSecondary }}>{solution.complexity_analysis.time.overall_change}</div>
                   </div>
                     )}
-                  {/* Handle regular object format */}
-                  {!solution.complexity_analysis.time.new_methods && !solution.complexity_analysis.time.overall_change && 
-                    Object.entries(solution.complexity_analysis.time).map(([key, value]: [string, any]) => (
-                      <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: 4 }}>
-                        <span style={{ color: colors.textMuted }}>{key}:</span>
-                        <code style={{ fontFamily: fonts.mono, color: colors.textBright }}>
-                          {typeof value === 'object' ? value.complexity : value}
-                        </code>
-                      </div>
-                    ))
-                  }
+                  {/* Handle regular object format with method names */}
+                  {!solution.complexity_analysis.time.new_methods && !solution.complexity_analysis.time.overall_change && (
+                    <>
+                      {/* Render individual methods with complexity badges */}
+                      {Object.entries(solution.complexity_analysis.time)
+                        .filter(([key]) => key !== 'overall')
+                        .map(([method, details]: [string, any]) => (
+                          <div key={method} style={{
+                            padding: 8,
+                            backgroundColor: colors.bgCarbon,
+                            borderRadius: 4,
+                            marginBottom: 4,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <span style={{ color: colors.textBright, fontWeight: 500, fontFamily: fonts.mono, fontSize: 13 }}>
+                              {method}:
+                            </span>
+                            <code style={{
+                              fontFamily: fonts.mono,
+                              color: colors.success,
+                              fontSize: 12,
+                              backgroundColor: colors.successMuted,
+                              padding: '2px 8px',
+                              borderRadius: 4
+                            }}>
+                              {typeof details === 'object' ? details.complexity : details}
+                            </code>
+                          </div>
+                        ))
+                      }
+                      {/* Render overall summary separately */}
+                      {(solution.complexity_analysis.time as any).overall && (
+                        <div style={{
+                          marginTop: 8,
+                          padding: 10,
+                          backgroundColor: colors.successMuted,
+                          borderRadius: 6,
+                          borderLeft: `3px solid ${colors.success}`
+                        }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: colors.success, textTransform: 'uppercase', marginBottom: 4 }}>
+                            Overall
+                          </div>
+                          <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.5 }}>
+                            {String((solution.complexity_analysis.time as any).overall)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div style={{ fontSize: 16, color: colors.textBright }}>
