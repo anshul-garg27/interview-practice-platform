@@ -112,15 +112,16 @@ export function Header() {
             </Button>
           )}
 
-          {/* Mobile Hamburger Menu */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden rounded-full"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-            aria-expanded={mobileMenuOpen}
-          >
+          {/* Mobile Hamburger Menu - wrapper div handles visibility */}
+          <div className="block md:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+            >
             {mobileMenuOpen ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -153,7 +154,8 @@ export function Header() {
                 <line x1="4" x2="20" y1="18" y2="18" />
               </svg>
             )}
-          </Button>
+            </Button>
+          </div>
         </div>
       </div>
 
