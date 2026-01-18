@@ -63,10 +63,13 @@ export default function PracticePage() {
   const [selectedSolutionFilter, setSelectedSolutionFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Base path for GitHub Pages deployment
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
   useEffect(() => {
     Promise.all([
-      fetch('/data/all_problems.json').then(res => res.json()),
-      fetch('/api/solution-manifest').then(res => {
+      fetch(`${basePath}/data/all_problems.json`).then(res => res.json()),
+      fetch(`${basePath}/data/solution_manifest.json`).then(res => {
         if (!res.ok) throw new Error('Failed to load')
         return res.json()
       }).catch(() => {
