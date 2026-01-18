@@ -4,267 +4,210 @@
   "builds_on": "Part 3",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "Part 4 introduces **distance calculation** between any two nodes using the LCA as a pivot point. This builds on the LCA implementation from previous parts by adding: (1) a `getDepth` helper method to find node depths, and (2) a `distance` method that applies the formula: `dist(p,q) = depth(p) + depth(q) - 2*depth(LCA)`. The challenge extends to efficiently handling **multiple queries** through preprocessing.",
+    "what_changes": "Part 4 adds distance calculation between any two nodes using the LCA as a pivot point. Instead of just finding the common ancestor, we now need to measure the path length (edge count) between nodes.",
     "new_requirements": [
-      "Implement getDepth(root, target) to find depth of any node",
-      "Implement distance(root, p, q) using the LCA-based formula",
-      "Support efficient multiple queries through depth preprocessing",
-      "Handle edge cases like same node, non-existent nodes"
+      "Implement get_depth(root, target) to find a node's depth via DFS",
+      "Implement distance(root, p, q) using the formula: depth(p) + depth(q) - 2*depth(LCA)",
+      "Reuse existing LCA implementation from Part 1"
     ],
     "new_constraints": [
-      "Distance must be correct number of edges (not vertices)",
+      "Must return edge count, not node count",
       "Root has depth 0",
-      "Single query: O(n) acceptable; Multiple queries: O(n) preprocessing + O(log n) per query ideal"
+      "Distance of node to itself is 0"
     ],
-    "key_insight": "The distance between two nodes can be decomposed into their individual distances from their LCA. The formula `depth(p) + depth(q) - 2*depth(LCA)` works because depth(p) - depth(LCA) gives the distance from p to LCA, and similarly for q. This reduces the 'find path' problem to three simple depth computations!"
+    "key_insight": "The LCA is the 'turning point' in the path between p and q. The distance formula cleverly computes path length by adding depths and subtracting the shared portion (from root to LCA) twice."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "getDepth returns correct depth with root = 0",
-        "how_met": "DFS traversal tracking depth parameter, or O(1) lookup from precomputed cache",
+        "requirement": "Calculate distance between any two nodes",
+        "how_met": "distance() method using LCA formula",
         "gotchas": [
-          "Returning -1 for not found vs 0 for root",
-          "Off-by-one if counting nodes instead of edges"
+          "Must use LCA not just depths"
         ]
       },
       {
-        "requirement": "distance formula correctly applied",
-        "how_met": "Compute all three depths, apply formula: depth_p + depth_q - 2*depth_lca",
+        "requirement": "Find depth of any node",
+        "how_met": "get_depth() with DFS traversal",
         "gotchas": [
-          "Forgetting to multiply by 2 for LCA depth",
-          "Computing depth of wrong LCA node"
+          "Return -1 if not found, but assume valid input"
         ]
       },
       {
-        "requirement": "Multiple query optimization",
-        "how_met": "Precompute all depths in O(n), cache in dictionary for O(1) lookup",
+        "requirement": "Reuse existing LCA",
+        "how_met": "distance() calls lowest_common_ancestor()",
         "gotchas": [
-          "Not invalidating cache when tree changes",
-          "Memory overhead for large trees"
+          "Don't recompute LCA logic"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "getDepth (single)",
+        "operation": "get_depth",
         "target": "O(n)",
         "achieved": "O(n)",
-        "why": "May need to traverse entire tree to find target"
+        "why": "Single DFS traversal"
       },
       {
-        "operation": "getDepth (cached)",
-        "target": "O(1)",
-        "achieved": "O(1)",
-        "why": "Direct dictionary lookup after preprocessing"
-      },
-      {
-        "operation": "distance (single)",
+        "operation": "distance",
         "target": "O(n)",
         "achieved": "O(n)",
-        "why": "Three depth computations + LCA, each O(n)"
-      },
-      {
-        "operation": "distance (multiple)",
-        "target": "O(n) + O(log n) per query",
-        "achieved": "O(n) + O(1) per query",
-        "why": "Preprocessing depths + cached lookups + LCA"
+        "why": "LCA is O(n), depth calls are O(n), combined still O(n)"
       }
     ],
     "non_goals": [
-      "Binary Lifting for O(log n) LCA (mentioned for advanced optimization)",
-      "Euler Tour + Sparse Table for O(1) LCA queries",
-      "Path reconstruction (we only return distance, not actual path)"
+      "O(log n) queries (would need preprocessing)",
+      "Binary Lifting optimization",
+      "Euler tour + RMQ approach"
     ]
   },
   "assumptions": [
-    "Both p and q exist in the tree (confirm with interviewer: should we handle missing nodes?)",
-    "Tree structure is static during queries (if dynamic, cache invalidation needed)",
-    "Node values are unique (used as keys in depth cache)",
-    "Tree is connected (single root reaches all nodes)"
+    "Both p and q exist in the tree (valid nodes)",
+    "Tree is valid with no cycles",
+    "Root is correctly identified (has no parent)",
+    "Input nodes are not null"
   ],
   "tradeoffs": [
     {
-      "decision": "Precompute all depths vs compute on demand",
-      "chosen": "Precompute with option for on-demand",
-      "why": "Multiple queries benefit enormously from O(1) depth lookups",
-      "alternative": "On-demand computation",
-      "when_to_switch": "Single query scenario or memory-constrained environment"
+      "decision": "DFS for depth vs Parent pointer traversal",
+      "chosen": "DFS",
+      "why": "Method signature includes root, making DFS natural; parent pointers may not always be set",
+      "alternative": "Parent traversal O(h)",
+      "when_to_switch": "When parent pointers guaranteed and h << n"
     },
     {
-      "decision": "Dictionary cache vs storing depth in Node",
-      "chosen": "Dictionary cache",
-      "why": "Doesn't modify Node class, more flexible, works with immutable nodes",
-      "alternative": "Add depth field to Node",
-      "when_to_switch": "If Node class is under our control and memory is critical"
-    },
-    {
-      "decision": "Simple LCA vs Binary Lifting LCA",
-      "chosen": "Simple recursive LCA",
-      "why": "Simpler to implement correctly in interview, O(n) is acceptable",
-      "alternative": "Binary Lifting for O(log n)",
-      "when_to_switch": "Very deep trees or extremely high query volume"
+      "decision": "Separate depth calls vs combined traversal",
+      "chosen": "Separate calls for clarity",
+      "why": "Cleaner code, easier to debug, same asymptotic complexity",
+      "alternative": "Single DFS computing all depths",
+      "when_to_switch": "For performance-critical multiple queries"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "LCA method signature and behavior from Part 1",
+      "lowest_common_ancestor signature",
       "Node class structure",
-      "Public method signatures for distance and getDepth"
+      "All Part 1-3 methods"
     ],
     "what_to_change": [
-      "Added _depth_cache dictionary for O(1) depth lookups",
-      "Added _node_map for value-to-node reference",
-      "Added precompute_depths() method for batch preprocessing"
+      "Added get_depth helper",
+      "Added distance method"
     ],
-    "interfaces_and_boundaries": "The class maintains separation between core LCA logic and distance computation. Adding new features (like path reconstruction) would add new methods without modifying existing ones. The caching layer is internal and doesn't affect public API.",
+    "interfaces_and_boundaries": "distance() depends on LCA and depth - could be extended to support preprocessing for multiple queries",
     "invariants": [
-      "Depth of root is always 0",
-      "Depth of child = depth of parent + 1",
-      "Cache is consistent with current tree structure",
-      "distance(p, q) == distance(q, p) (symmetric)"
+      "depth(root) = 0",
+      "distance(x, x) = 0",
+      "distance(p, q) = distance(q, p)"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 3): LCA with parent pointers\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nNode structure with parent links\nlca(p, q) \u2192 returns common ancestor\n\nAFTER (Part 4): Distance calculation added\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n            1 (d=0)\n         /  |  \\\n        2   3   4 (d=1)\n       /|       |\n      5 6       8 (d=2)\n     /\n    9 (d=3)\n\nNEW: depth_cache = {1:0, 2:1, 3:1, 4:1, 5:2, 6:2, 8:2, 9:3}\n\ndistance(9, 8):\n  depth(9)=3, depth(8)=2, LCA=1, depth(LCA)=0\n  = 3 + 2 - 2*0 = 5 edges\n  Path: 9\u21925\u21922\u21921\u21924\u21928 \u2713\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502           DISTANCE CALCULATION FLOW                  \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                      \u2502\n\u2502  Input: root, p=9, q=8                              \u2502\n\u2502                                                      \u2502\n\u2502  Step 1: Get depth(p)                               \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                               \u2502\n\u2502  \u2502 Check cache[9]   \u2502 \u2192 3                           \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                               \u2502\n\u2502                                                      \u2502\n\u2502  Step 2: Get depth(q)                               \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                               \u2502\n\u2502  \u2502 Check cache[8]   \u2502 \u2192 2                           \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                               \u2502\n\u2502                                                      \u2502\n\u2502  Step 3: Find LCA(p, q)                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502\n\u2502  \u2502 Recursive search from root       \u2502               \u2502\n\u2502  \u2502 9 found in subtree of 2          \u2502               \u2502\n\u2502  \u2502 8 found in subtree of 4          \u2502               \u2502\n\u2502  \u2502 Both found in children of 1      \u2502 \u2192 LCA = 1    \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2502\n\u2502                                                      \u2502\n\u2502  Step 4: Get depth(LCA)                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                               \u2502\n\u2502  \u2502 Check cache[1]   \u2502 \u2192 0                           \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                               \u2502\n\u2502                                                      \u2502\n\u2502  Step 5: Apply formula                              \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502\n\u2502  \u2502 dist = 3 + 2 - 2*0 = 5          \u2502               \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2502\n\u2502                                                      \u2502\n\u2502  Output: 5                                          \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "Before: Only had LCA finding capability\\nAfter: Can measure actual path length between any nodes\\n\\n        1 (d=0)\\n     /  |  \\\\\\n    2   3   4 (d=1)\\n   /|       |\\n  5 6       8 (d=2)\\n\\ndistance(5, 8):\\n  Path: 5 \u2192 2 \u2192 1 \u2192 4 \u2192 8 = 4 edges\\n  Formula: 2 + 2 - 2*0 = 4 \u2713",
+    "algorithm_flow": "Step 1: Find LCA(p, q) using Part 1 method\\nStep 2: Compute depth(p) via DFS\\nStep 3: Compute depth(q) via DFS\\nStep 4: Compute depth(LCA) via DFS\\nStep 5: Apply formula: d_p + d_q - 2*d_lca"
   },
   "approaches": [
     {
-      "name": "Naive Extension - Path Finding",
-      "description": "Find actual path from p to root, path from q to root, find intersection point (LCA), count edges",
-      "time_complexity": "O(n) per query",
-      "space_complexity": "O(h) for storing paths",
-      "why_not_optimal": "Requires storing full paths, more complex logic to find intersection, and doesn't leverage depth properties"
+      "name": "Naive - BFS Path Finding",
+      "description": "Use BFS to find the actual path between p and q",
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)",
+      "why_not_optimal": "More complex, builds explicit path, doesn't leverage LCA insight"
     },
     {
-      "name": "Direct Formula Application",
-      "description": "Compute depth(p), depth(q), find LCA, compute depth(LCA), apply formula. Each depth computation is O(n) DFS.",
-      "time_complexity": "O(n) per query",
+      "name": "Optimal - LCA Formula",
+      "description": "Use depth formula: depth(p) + depth(q) - 2*depth(LCA)",
+      "time_complexity": "O(n)",
       "space_complexity": "O(h) recursion stack",
-      "why_not_optimal": "Good for single queries, but inefficient for multiple queries due to repeated depth computations"
-    },
-    {
-      "name": "Optimal: Preprocessing with Cache",
-      "description": "Precompute all depths in single O(n) DFS traversal, store in dictionary. Subsequent depth lookups are O(1). Combined with LCA, distance queries are much faster.",
-      "time_complexity": "O(n) preprocessing + O(n) per query (LCA dominated)",
-      "space_complexity": "O(n) for depth cache",
-      "key_insight": "Single DFS can compute all depths. Trade O(n) space for O(1) depth lookups. For truly optimal multiple queries, Binary Lifting reduces LCA to O(log n)."
+      "key_insight": "LCA is the pivot point - distance is sum of depths minus twice the common prefix"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: Depth Preprocessing + Formula-based Distance\n\n### Core Insight\nThe **distance formula** `dist(p,q) = depth(p) + depth(q) - 2*depth(LCA)` transforms our problem:\n\n- **depth(p) - depth(LCA)** = edges from p up to LCA\n- **depth(q) - depth(LCA)** = edges from q up to LCA  \n- **Sum** = total path length through LCA\n\n### Implementation Strategy\n\n1. **Preprocessing (One-time O(n))**\n   - Single DFS traversal from root\n   - Store `{node.val: depth}` in dictionary\n   - Build `{node.val: Node}` map for quick lookups\n\n2. **getDepth Operation (O(1) after preprocessing)**\n   - Direct dictionary lookup\n   - Falls back to DFS if not preprocessed\n\n3. **distance Operation (O(n) for LCA + O(1) for depths)**\n   - Retrieve depths from cache\n   - Find LCA using recursive DFS\n   - Apply formula\n\n### Why This Works\n\nThe formula exploits the **tree property**: there's exactly **one path** between any two nodes. That path must go through their LCA. By computing depths, we implicitly know the path lengths without explicitly constructing the path.\n\n### Advanced Optimization (mentioned for bonus points)\nFor **extreme query volumes**, Binary Lifting preprocessing enables O(log n) LCA queries, making total distance query O(log n).",
+    "explanation_md": "The **distance formula** is elegant: `distance(p,q) = depth(p) + depth(q) - 2*depth(LCA)`\\n\\n**Why it works:**\\n- `depth(p)` = edges from root to p\\n- `depth(q)` = edges from root to q\\n- Path from p to q goes **up** to LCA, then **down** to q\\n- We subtract `2*depth(LCA)` because that portion (root\u2192LCA) is counted twice but not part of the p\u2192q path\\n\\n**Implementation Strategy:**\\n1. Reuse existing `lowest_common_ancestor()` from Part 1\\n2. Add helper `get_depth()` using DFS\\n3. Combine in `distance()` method",
     "data_structures": [
       {
-        "structure": "Dict[int, int] _depth_cache",
-        "purpose": "Map node value to its depth for O(1) lookup"
+        "structure": "Recursion stack",
+        "purpose": "DFS for depth finding"
       },
       {
-        "structure": "Dict[int, Node] _node_map",
-        "purpose": "Map node value to Node reference for quick access"
-      },
-      {
-        "structure": "Recursive call stack",
-        "purpose": "Implicit stack for DFS traversal in LCA and depth computation"
+        "structure": "Existing LCA method",
+        "purpose": "Find the lowest common ancestor"
       }
     ],
     "algorithm_steps": [
-      "Step 1: (Preprocessing) Call precompute_depths(root) - single DFS stores all depths",
-      "Step 2: For distance(root, p, q), first check if p == q (return 0)",
-      "Step 3: Look up depth(p) and depth(q) from cache (O(1)) or compute via DFS (O(n))",
-      "Step 4: Find LCA(p, q) using recursive DFS - O(n) worst case",
-      "Step 5: Look up depth(LCA) from cache",
+      "Step 1: If p == q, return 0 (same node)",
+      "Step 2: Call lowest_common_ancestor(root, p, q) to find LCA",
+      "Step 3: Compute depth of p using DFS from root",
+      "Step 4: Compute depth of q using DFS from root",
+      "Step 5: Compute depth of LCA using DFS from root",
       "Step 6: Return depth_p + depth_q - 2 * depth_lca"
     ]
   },
   "solution_python_lines": [
-    "from typing import List, Optional, Dict, Set",
-    "",
+    "from typing import List, Optional",
     "",
     "class Node:",
-    "    \"\"\"N-ary tree node with value and list of children.\"\"\"",
-    "    ",
-    "    def __init__(self, val: int = 0, children: List['Node'] = None):",
+    "    \"\"\"N-ary tree node with children and parent pointer.\"\"\"",
+    "    def __init__(self, val: int = 0, children: List['Node'] = None, parent: 'Node' = None):",
     "        self.val = val",
     "        self.children = children if children else []",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        return f\"Node({self.val})\"",
+    "        self.parent = parent",
     "",
     "",
-    "class NaryTreeLCAWithDistance:",
-    "    \"\"\"",
-    "    N-ary Tree LCA with Distance Calculation (Part 4)",
-    "    ",
-    "    Provides:",
-    "    - lca(root, p, q): Find lowest common ancestor",
-    "    - get_depth(root, target): Find depth of a node",
-    "    - distance(root, p, q): Find number of edges between nodes",
-    "    - precompute_depths(root): Preprocessing for O(1) depth lookups",
-    "    ",
-    "    Time Complexity:",
-    "    - Single query: O(n)",
-    "    - Multiple queries: O(n) preprocessing + O(1) depth lookups",
-    "    \"\"\"",
-    "    ",
-    "    def __init__(self):",
-    "        # Cache for O(1) depth lookups after preprocessing",
-    "        self._depth_cache: Dict[int, int] = {}",
-    "        # Map from value to Node reference",
-    "        self._node_map: Dict[int, Node] = {}",
-    "        self._preprocessed: bool = False",
-    "    ",
-    "    def precompute_depths(self, root: Node) -> None:",
-    "        \"\"\"",
-    "        Precompute depths for all nodes in O(n) time.",
-    "        Call this once before multiple distance queries.",
+    "class Solution:",
+    "    def lowest_common_ancestor(self, root: Node, p: Node, q: Node) -> Node:",
+    "        \"\"\"Part 1: Single-pass DFS with bottom-up propagation.\"\"\"",
+    "        if root is None:",
+    "            return None",
+    "        if root == p or root == q:",
+    "            return root",
     "        ",
-    "        Args:",
-    "            root: Root of the N-ary tree",
-    "        \"\"\"",
-    "        if not root:",
-    "            return",
+    "        count = 0",
+    "        result = None",
+    "        for child in root.children:",
+    "            found = self.lowest_common_ancestor(child, p, q)",
+    "            if found:",
+    "                count += 1",
+    "                result = found",
+    "                if count >= 2:",
+    "                    return root",
+    "        return result",
+    "",
+    "    def lowest_common_ancestor_k(self, root: Node, nodes: List[Node]) -> Node:",
+    "        \"\"\"Part 2: LCA of k nodes using DFS with counting.\"\"\"",
+    "        target_set = set(nodes)",
+    "        k = len(nodes)",
+    "        result = [None]",
     "        ",
-    "        self._depth_cache.clear()",
-    "        self._node_map.clear()",
-    "        ",
-    "        def dfs(node: Node, depth: int) -> None:",
-    "            if not node:",
-    "                return",
-    "            self._depth_cache[node.val] = depth",
-    "            self._node_map[node.val] = node",
+    "        def dfs(node: Node) -> int:",
+    "            if node is None:",
+    "                return 0",
+    "            count = 1 if node in target_set else 0",
     "            for child in node.children:",
-    "                dfs(child, depth + 1)",
+    "                count += dfs(child)",
+    "            if count == k and result[0] is None:",
+    "                result[0] = node",
+    "            return count",
     "        ",
-    "        dfs(root, 0)",
-    "        self._preprocessed = True",
-    "    ",
+    "        dfs(root)",
+    "        return result[0]",
+    "",
+    "    def lca_with_parent(self, p: Node, q: Node) -> Node:",
+    "        \"\"\"Part 3: LCA using two-pointer technique. Time: O(h), Space: O(1)\"\"\"",
+    "        ptr_a, ptr_b = p, q",
+    "        while ptr_a != ptr_b:",
+    "            ptr_a = ptr_a.parent if ptr_a else q",
+    "            ptr_b = ptr_b.parent if ptr_b else p",
+    "        return ptr_a",
+    "",
     "    def get_depth(self, root: Node, target: Node) -> int:",
     "        \"\"\"",
-    "        Get depth of target node from root.",
-    "        Root has depth 0.",
-    "        ",
-    "        Args:",
-    "            root: Root of the tree",
-    "            target: Node to find depth of",
-    "        ",
-    "        Returns:",
-    "            Depth of target (0 for root), or -1 if not found",
-    "        ",
-    "        Time: O(1) if preprocessed, O(n) otherwise",
+    "        Part 4: Find depth of target node using DFS.",
+    "        Root has depth 0. Returns -1 if target not found.",
+    "        Time: O(n), Space: O(h)",
     "        \"\"\"",
-    "        if not root or not target:",
-    "            return -1",
-    "        ",
-    "        # Use cache if available (O(1) lookup)",
-    "        if self._preprocessed and target.val in self._depth_cache:",
-    "            return self._depth_cache[target.val]",
-    "        ",
-    "        # Fallback: compute via DFS (O(n))",
     "        def dfs(node: Node, depth: int) -> int:",
-    "            if not node:",
+    "            if node is None:",
     "                return -1",
-    "            if node == target or node.val == target.val:",
+    "            if node == target:",
     "                return depth",
     "            for child in node.children:",
     "                result = dfs(child, depth + 1)",
@@ -273,346 +216,177 @@
     "            return -1",
     "        ",
     "        return dfs(root, 0)",
-    "    ",
-    "    def lca(self, root: Node, p: Node, q: Node) -> Optional[Node]:",
-    "        \"\"\"",
-    "        Find Lowest Common Ancestor of nodes p and q.",
-    "        ",
-    "        Args:",
-    "            root: Root of the N-ary tree",
-    "            p: First node",
-    "            q: Second node",
-    "        ",
-    "        Returns:",
-    "            LCA node, or None if not found",
-    "        ",
-    "        Time: O(n) where n is number of nodes",
-    "        Space: O(h) where h is height of tree (recursion stack)",
-    "        \"\"\"",
-    "        if not root:",
-    "            return None",
-    "        ",
-    "        # Base case: current node is one of our targets",
-    "        if root == p or root == q:",
-    "            return root",
-    "        ",
-    "        # Recursively search all children",
-    "        found_in_children: List[Node] = []",
-    "        ",
-    "        for child in root.children:",
-    "            result = self.lca(child, p, q)",
-    "            if result:",
-    "                found_in_children.append(result)",
-    "                # Early termination: found in 2 different subtrees",
-    "                if len(found_in_children) == 2:",
-    "                    return root",
-    "        ",
-    "        # If both nodes found in different child subtrees, root is LCA",
-    "        if len(found_in_children) == 2:",
-    "            return root",
-    "        ",
-    "        # If found in exactly one subtree, propagate that result up",
-    "        if len(found_in_children) == 1:",
-    "            return found_in_children[0]",
-    "        ",
-    "        # Not found in this subtree",
-    "        return None",
-    "    ",
+    "",
     "    def distance(self, root: Node, p: Node, q: Node) -> int:",
     "        \"\"\"",
-    "        Calculate distance (number of edges) between nodes p and q.",
-    "        ",
-    "        Uses formula: dist(p,q) = depth(p) + depth(q) - 2*depth(LCA)",
-    "        ",
-    "        Args:",
-    "            root: Root of the tree",
-    "            p: First node",
-    "            q: Second node",
-    "        ",
-    "        Returns:",
-    "            Number of edges between p and q, or -1 if invalid",
-    "        ",
-    "        Time: O(n) single query, O(1) depths + O(n) LCA with preprocessing",
+    "        Part 4: Calculate distance (edge count) between p and q.",
+    "        Formula: depth(p) + depth(q) - 2 * depth(LCA(p, q))",
+    "        Time: O(n), Space: O(h)",
     "        \"\"\"",
-    "        # Edge cases",
-    "        if not root or not p or not q:",
-    "            return -1",
-    "        ",
-    "        # Same node: distance is 0",
-    "        if p == q or p.val == q.val:",
+    "        if p == q:",
     "            return 0",
     "        ",
-    "        # Get depths of both nodes",
+    "        lca = self.lowest_common_ancestor(root, p, q)",
     "        depth_p = self.get_depth(root, p)",
     "        depth_q = self.get_depth(root, q)",
+    "        depth_lca = self.get_depth(root, lca)",
     "        ",
-    "        # Validate nodes exist in tree",
-    "        if depth_p == -1 or depth_q == -1:",
-    "            return -1  # One or both nodes not in tree",
-    "        ",
-    "        # Find LCA",
-    "        lca_node = self.lca(root, p, q)",
-    "        if not lca_node:",
-    "            return -1  # Should not happen if both nodes exist",
-    "        ",
-    "        # Get depth of LCA",
-    "        depth_lca = self.get_depth(root, lca_node)",
-    "        ",
-    "        # Apply the distance formula",
-    "        # dist = (depth_p - depth_lca) + (depth_q - depth_lca)",
-    "        #      = depth_p + depth_q - 2 * depth_lca",
     "        return depth_p + depth_q - 2 * depth_lca",
-    "    ",
-    "    def distance_multiple_queries(self, root: Node, queries: List[tuple]) -> List[int]:",
-    "        \"\"\"",
-    "        Handle multiple distance queries efficiently.",
-    "        Preprocesses depths once, then answers each query.",
-    "        ",
-    "        Args:",
-    "            root: Root of the tree",
-    "            queries: List of (p, q) node pairs",
-    "        ",
-    "        Returns:",
-    "            List of distances for each query",
-    "        \"\"\"",
-    "        # Preprocess depths: O(n)",
-    "        self.precompute_depths(root)",
-    "        ",
-    "        # Answer each query",
-    "        results = []",
-    "        for p, q in queries:",
-    "            results.append(self.distance(root, p, q))",
-    "        ",
-    "        return results",
     "",
     "",
-    "# ============== HELPER: Build tree from array representation ==============",
-    "",
-    "def build_tree(arr: List) -> Optional[Node]:",
-    "    \"\"\"",
-    "    Build N-ary tree from nested array representation.",
-    "    Format: [val, [child1, ...], [child2, ...], ...]",
-    "    \"\"\"",
-    "    if not arr:",
-    "        return None",
+    "def build_tree_with_parents() -> tuple:",
+    "    \"\"\"Build test tree with parent pointers set.\"\"\"",
+    "    #       1 (d=0)",
+    "    #    /  |  \\",
+    "    #   2   3   4 (d=1)",
+    "    #  /|       |",
+    "    # 5 6       8 (d=2)",
+    "    node5 = Node(5)",
+    "    node6 = Node(6)",
+    "    node8 = Node(8)",
+    "    node2 = Node(2, [node5, node6])",
+    "    node3 = Node(3)",
+    "    node4 = Node(4, [node8])",
+    "    root = Node(1, [node2, node3, node4])",
     "    ",
-    "    root = Node(arr[0])",
-    "    for child_arr in arr[1:]:",
-    "        if child_arr:",
-    "            child_node = build_tree(child_arr)",
-    "            if child_node:",
-    "                root.children.append(child_node)",
-    "    return root",
-    "",
-    "",
-    "def find_node(root: Node, val: int) -> Optional[Node]:",
-    "    \"\"\"Find node by value using DFS.\"\"\"",
-    "    if not root:",
-    "        return None",
-    "    if root.val == val:",
-    "        return root",
-    "    for child in root.children:",
-    "        result = find_node(child, val)",
-    "        if result:",
-    "            return result",
-    "    return None",
+    "    root.parent = None",
+    "    node2.parent = node3.parent = node4.parent = root",
+    "    node5.parent = node6.parent = node2",
+    "    node8.parent = node4",
+    "    ",
+    "    return root, node2, node3, node4, node5, node6, node8",
     "",
     "",
-    "def print_tree(node: Node, prefix: str = \"\", is_last: bool = True) -> None:",
-    "    \"\"\"Pretty print the tree structure.\"\"\"",
-    "    connector = \"\u2514\u2500\u2500 \" if is_last else \"\u251c\u2500\u2500 \"",
-    "    print(prefix + connector + str(node.val))",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"Part 4: Distance Between Nodes - Test Cases\")",
+    "    print(\"=\" * 60)",
     "    ",
-    "    prefix += \"    \" if is_last else \"\u2502   \"",
-    "    for i, child in enumerate(node.children):",
-    "        print_tree(child, prefix, i == len(node.children) - 1)",
-    "",
-    "",
-    "# ========================= DEMONSTRATION =========================",
-    "",
-    "def main():",
-    "    print(\"=\"*60)",
-    "    print(\"Part 4: Distance Between Nodes Using LCA\")",
-    "    print(\"=\"*60)",
+    "    root, node2, node3, node4, node5, node6, node8 = build_tree_with_parents()",
+    "    sol = Solution()",
     "    ",
-    "    # Build example tree:",
-    "    #            1",
-    "    #         /  |  \\",
-    "    #        2   3   4",
-    "    #       /|       |",
-    "    #      5 6       8",
-    "    #     /",
-    "    #    9",
+    "    # Test get_depth",
+    "    print(\"\\n--- Testing get_depth ---\")",
+    "    print(f\"depth(root=1) = {sol.get_depth(root, root)}\")",
+    "    print(f\"depth(5) = {sol.get_depth(root, node5)}\")",
+    "    print(f\"depth(8) = {sol.get_depth(root, node8)}\")",
     "    ",
-    "    tree_arr = [1, [2, [5, [9]], [6]], [3], [4, [8]]]",
-    "    root = build_tree(tree_arr)",
+    "    # Test 1: Different subtrees -> path through root",
+    "    dist = sol.distance(root, node5, node8)",
+    "    print(f\"\\nTest 1: distance(5, 8) = {dist}\")",
+    "    print(\"  Path: 5 -> 2 -> 1 -> 4 -> 8\")",
+    "    print(\"  Formula: 2 + 2 - 2*0 = 4\")",
+    "    assert dist == 4",
     "    ",
-    "    print(\"\\nTree Structure:\")",
-    "    print_tree(root)",
+    "    # Test 2: Siblings -> through parent",
+    "    dist = sol.distance(root, node5, node6)",
+    "    print(f\"\\nTest 2: distance(5, 6) = {dist}\")",
+    "    print(\"  Path: 5 -> 2 -> 6\")",
+    "    print(\"  Formula: 2 + 2 - 2*1 = 2\")",
+    "    assert dist == 2",
     "    ",
-    "    # Create LCA solver",
-    "    solver = NaryTreeLCAWithDistance()",
+    "    # Test 3: Ancestor relationship",
+    "    dist = sol.distance(root, node2, node5)",
+    "    print(f\"\\nTest 3: distance(2, 5) = {dist}\")",
+    "    print(\"  Path: 2 -> 5\")",
+    "    print(\"  Formula: 1 + 2 - 2*1 = 1\")",
+    "    assert dist == 1",
     "    ",
-    "    # Precompute depths for efficient multiple queries",
-    "    solver.precompute_depths(root)",
-    "    print(\"\\nDepth cache after preprocessing:\")",
-    "    print(f\"  {solver._depth_cache}\")",
+    "    # Test 4: Same node",
+    "    dist = sol.distance(root, node5, node5)",
+    "    print(f\"\\nTest 4: distance(5, 5) = {dist}\")",
+    "    print(\"  Same node -> 0\")",
+    "    assert dist == 0",
     "    ",
-    "    # Test cases",
-    "    print(\"\\n\" + \"-\"*60)",
-    "    print(\"TEST CASES\")",
-    "    print(\"-\"*60)",
+    "    # Test 5: Different depths",
+    "    dist = sol.distance(root, node5, node3)",
+    "    print(f\"\\nTest 5: distance(5, 3) = {dist}\")",
+    "    print(\"  Path: 5 -> 2 -> 1 -> 3\")",
+    "    print(\"  Formula: 2 + 1 - 2*0 = 3\")",
+    "    assert dist == 3",
     "    ",
-    "    test_cases = [",
-    "        (5, 8, 4, \"Path: 5 \u2192 2 \u2192 1 \u2192 4 \u2192 8\"),",
-    "        (5, 6, 2, \"Path: 5 \u2192 2 \u2192 6\"),",
-    "        (9, 6, 3, \"Path: 9 \u2192 5 \u2192 2 \u2192 6\"),",
-    "        (9, 8, 5, \"Path: 9 \u2192 5 \u2192 2 \u2192 1 \u2192 4 \u2192 8\"),",
-    "        (3, 4, 2, \"Path: 3 \u2192 1 \u2192 4\"),",
-    "        (9, 9, 0, \"Same node, distance = 0\"),",
-    "        (1, 9, 3, \"Path: 1 \u2192 2 \u2192 5 \u2192 9\"),",
-    "    ]",
-    "    ",
-    "    for p_val, q_val, expected, explanation in test_cases:",
-    "        p = find_node(root, p_val)",
-    "        q = find_node(root, q_val)",
-    "        ",
-    "        result = solver.distance(root, p, q)",
-    "        lca_node = solver.lca(root, p, q)",
-    "        ",
-    "        status = \"\u2713\" if result == expected else \"\u2717\"",
-    "        print(f\"\\n{status} distance({p_val}, {q_val}):\")",
-    "        print(f\"   Expected: {expected}, Got: {result}\")",
-    "        print(f\"   LCA: {lca_node.val if lca_node else 'None'}\")",
-    "        print(f\"   Explanation: {explanation}\")",
-    "        ",
-    "        # Show formula breakdown",
-    "        if p and q and lca_node:",
-    "            d_p = solver.get_depth(root, p)",
-    "            d_q = solver.get_depth(root, q)",
-    "            d_lca = solver.get_depth(root, lca_node)",
-    "            print(f\"   Formula: {d_p} + {d_q} - 2*{d_lca} = {d_p + d_q - 2*d_lca}\")",
-    "    ",
-    "    # Demonstrate multiple queries",
-    "    print(\"\\n\" + \"-\"*60)",
-    "    print(\"MULTIPLE QUERIES DEMO\")",
-    "    print(\"-\"*60)",
-    "    ",
-    "    queries = [",
-    "        (find_node(root, 9), find_node(root, 8)),",
-    "        (find_node(root, 5), find_node(root, 6)),",
-    "        (find_node(root, 3), find_node(root, 4)),",
-    "    ]",
-    "    ",
-    "    results = solver.distance_multiple_queries(root, queries)",
-    "    print(f\"Queries: [(9,8), (5,6), (3,4)]\")",
-    "    print(f\"Results: {results}\")",
-    "    ",
-    "    print(\"\\n\" + \"=\"*60)",
-    "    print(\"All tests completed!\")",
-    "    print(\"=\"*60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"All Part 4 tests passed! \u2713\")",
+    "    print(\"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * N-ary Tree Node",
-    " */",
     "class Node {",
-    "    int val;",
-    "    List<Node> children;",
+    "    public int val;",
+    "    public List<Node> children;",
+    "    public Node parent;",
     "    ",
-    "    public Node(int val) {",
-    "        this.val = val;",
-    "        this.children = new ArrayList<>();",
-    "    }",
-    "    ",
-    "    public Node(int val, List<Node> children) {",
-    "        this.val = val;",
-    "        this.children = children != null ? children : new ArrayList<>();",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return \"Node(\" + val + \")\";",
+    "    public Node() { children = new ArrayList<>(); }",
+    "    public Node(int val) { this.val = val; this.children = new ArrayList<>(); }",
+    "    public Node(int val, List<Node> children) { ",
+    "        this.val = val; ",
+    "        this.children = children; ",
     "    }",
     "}",
     "",
-    "/**",
-    " * N-ary Tree LCA with Distance Calculation (Part 4)",
-    " * ",
-    " * Provides:",
-    " * - lca(root, p, q): Find lowest common ancestor",
-    " * - getDepth(root, target): Find depth of a node",
-    " * - distance(root, p, q): Find number of edges between nodes",
-    " * - precomputeDepths(root): Preprocessing for O(1) depth lookups",
-    " */",
-    "public class NaryTreeLCAWithDistance {",
-    "    ",
-    "    // Cache for O(1) depth lookups after preprocessing",
-    "    private Map<Integer, Integer> depthCache;",
-    "    // Map from value to Node reference",
-    "    private Map<Integer, Node> nodeMap;",
-    "    private boolean preprocessed;",
-    "    ",
-    "    public NaryTreeLCAWithDistance() {",
-    "        this.depthCache = new HashMap<>();",
-    "        this.nodeMap = new HashMap<>();",
-    "        this.preprocessed = false;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Precompute depths for all nodes in O(n) time.",
-    "     * Call this once before multiple distance queries.",
-    "     */",
-    "    public void precomputeDepths(Node root) {",
-    "        if (root == null) return;",
+    "class Solution {",
+    "    /** Part 1: Single-pass DFS with bottom-up propagation. */",
+    "    public Node lowestCommonAncestor(Node root, Node p, Node q) {",
+    "        if (root == null) return null;",
+    "        if (root == p || root == q) return root;",
     "        ",
-    "        depthCache.clear();",
-    "        nodeMap.clear();",
-    "        ",
-    "        dfsPrecompute(root, 0);",
-    "        preprocessed = true;",
-    "    }",
-    "    ",
-    "    private void dfsPrecompute(Node node, int depth) {",
-    "        if (node == null) return;",
-    "        ",
-    "        depthCache.put(node.val, depth);",
-    "        nodeMap.put(node.val, node);",
-    "        ",
-    "        for (Node child : node.children) {",
-    "            dfsPrecompute(child, depth + 1);",
+    "        int count = 0;",
+    "        Node result = null;",
+    "        for (Node child : root.children) {",
+    "            Node found = lowestCommonAncestor(child, p, q);",
+    "            if (found != null) {",
+    "                count++;",
+    "                result = found;",
+    "                if (count >= 2) return root;",
+    "            }",
     "        }",
+    "        return result;",
+    "    }",
+    "    ",
+    "    /** Part 2: LCA of k nodes using DFS with counting. */",
+    "    public Node lowestCommonAncestorK(Node root, List<Node> nodes) {",
+    "        Set<Node> targetSet = new HashSet<>(nodes);",
+    "        int k = nodes.size();",
+    "        Node[] result = new Node[1];",
+    "        dfsCount(root, targetSet, k, result);",
+    "        return result[0];",
+    "    }",
+    "    ",
+    "    private int dfsCount(Node node, Set<Node> targetSet, int k, Node[] result) {",
+    "        if (node == null) return 0;",
+    "        int count = targetSet.contains(node) ? 1 : 0;",
+    "        for (Node child : node.children) {",
+    "            count += dfsCount(child, targetSet, k, result);",
+    "        }",
+    "        if (count == k && result[0] == null) {",
+    "            result[0] = node;",
+    "        }",
+    "        return count;",
+    "    }",
+    "    ",
+    "    /** Part 3: LCA using two-pointer technique. Time: O(h), Space: O(1) */",
+    "    public Node lcaWithParent(Node p, Node q) {",
+    "        Node ptrA = p, ptrB = q;",
+    "        while (ptrA != ptrB) {",
+    "            ptrA = (ptrA != null) ? ptrA.parent : q;",
+    "            ptrB = (ptrB != null) ? ptrB.parent : p;",
+    "        }",
+    "        return ptrA;",
     "    }",
     "    ",
     "    /**",
-    "     * Get depth of target node from root.",
-    "     * Root has depth 0.",
-    "     * ",
-    "     * @return Depth of target, or -1 if not found",
-    "     * Time: O(1) if preprocessed, O(n) otherwise",
+    "     * Part 4: Find depth of target node using DFS.",
+    "     * Root has depth 0. Returns -1 if target not found.",
+    "     * Time: O(n), Space: O(h)",
     "     */",
     "    public int getDepth(Node root, Node target) {",
-    "        if (root == null || target == null) return -1;",
-    "        ",
-    "        // Use cache if available (O(1) lookup)",
-    "        if (preprocessed && depthCache.containsKey(target.val)) {",
-    "            return depthCache.get(target.val);",
-    "        }",
-    "        ",
-    "        // Fallback: compute via DFS (O(n))",
     "        return dfsDepth(root, target, 0);",
     "    }",
     "    ",
     "    private int dfsDepth(Node node, Node target, int depth) {",
     "        if (node == null) return -1;",
-    "        if (node == target || node.val == target.val) return depth;",
-    "        ",
+    "        if (node == target) return depth;",
     "        for (Node child : node.children) {",
     "            int result = dfsDepth(child, target, depth + 1);",
     "            if (result != -1) return result;",
@@ -621,573 +395,402 @@
     "    }",
     "    ",
     "    /**",
-    "     * Find Lowest Common Ancestor of nodes p and q.",
-    "     * ",
-    "     * Time: O(n) where n is number of nodes",
-    "     * Space: O(h) where h is height of tree",
-    "     */",
-    "    public Node lca(Node root, Node p, Node q) {",
-    "        if (root == null) return null;",
-    "        ",
-    "        // Base case: current node is one of our targets",
-    "        if (root == p || root == q) return root;",
-    "        ",
-    "        // Recursively search all children",
-    "        List<Node> foundInChildren = new ArrayList<>();",
-    "        ",
-    "        for (Node child : root.children) {",
-    "            Node result = lca(child, p, q);",
-    "            if (result != null) {",
-    "                foundInChildren.add(result);",
-    "                // Early termination",
-    "                if (foundInChildren.size() == 2) {",
-    "                    return root;",
-    "                }",
-    "            }",
-    "        }",
-    "        ",
-    "        // Both found in different subtrees: root is LCA",
-    "        if (foundInChildren.size() == 2) return root;",
-    "        ",
-    "        // Found in one subtree: propagate up",
-    "        if (foundInChildren.size() == 1) return foundInChildren.get(0);",
-    "        ",
-    "        return null;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Calculate distance (number of edges) between nodes p and q.",
-    "     * Uses formula: dist(p,q) = depth(p) + depth(q) - 2*depth(LCA)",
-    "     * ",
-    "     * @return Number of edges between p and q, or -1 if invalid",
+    "     * Part 4: Calculate distance (edge count) between p and q.",
+    "     * Formula: depth(p) + depth(q) - 2 * depth(LCA(p, q))",
+    "     * Time: O(n), Space: O(h)",
     "     */",
     "    public int distance(Node root, Node p, Node q) {",
-    "        // Edge cases",
-    "        if (root == null || p == null || q == null) return -1;",
+    "        if (p == q) return 0;",
     "        ",
-    "        // Same node: distance is 0",
-    "        if (p == q || p.val == q.val) return 0;",
-    "        ",
-    "        // Get depths of both nodes",
+    "        Node lca = lowestCommonAncestor(root, p, q);",
     "        int depthP = getDepth(root, p);",
     "        int depthQ = getDepth(root, q);",
+    "        int depthLca = getDepth(root, lca);",
     "        ",
-    "        // Validate nodes exist",
-    "        if (depthP == -1 || depthQ == -1) return -1;",
-    "        ",
-    "        // Find LCA",
-    "        Node lcaNode = lca(root, p, q);",
-    "        if (lcaNode == null) return -1;",
-    "        ",
-    "        // Get depth of LCA",
-    "        int depthLCA = getDepth(root, lcaNode);",
-    "        ",
-    "        // Apply formula: dist = depth_p + depth_q - 2 * depth_lca",
-    "        return depthP + depthQ - 2 * depthLCA;",
+    "        return depthP + depthQ - 2 * depthLca;",
     "    }",
-    "    ",
-    "    /**",
-    "     * Handle multiple distance queries efficiently.",
-    "     */",
-    "    public List<Integer> distanceMultipleQueries(Node root, List<int[]> queries) {",
-    "        precomputeDepths(root);",
-    "        ",
-    "        List<Integer> results = new ArrayList<>();",
-    "        for (int[] query : queries) {",
-    "            Node p = nodeMap.get(query[0]);",
-    "            Node q = nodeMap.get(query[1]);",
-    "            results.add(distance(root, p, q));",
-    "        }",
-    "        return results;",
-    "    }",
-    "    ",
-    "    // ============== Helper Methods ==============",
-    "    ",
-    "    public static Node findNode(Node root, int val) {",
-    "        if (root == null) return null;",
-    "        if (root.val == val) return root;",
-    "        for (Node child : root.children) {",
-    "            Node result = findNode(child, val);",
-    "            if (result != null) return result;",
-    "        }",
-    "        return null;",
-    "    }",
-    "    ",
-    "    public static void printTree(Node node, String prefix, boolean isLast) {",
-    "        String connector = isLast ? \"\u2514\u2500\u2500 \" : \"\u251c\u2500\u2500 \";",
-    "        System.out.println(prefix + connector + node.val);",
-    "        ",
-    "        prefix += isLast ? \"    \" : \"\u2502   \";",
-    "        for (int i = 0; i < node.children.size(); i++) {",
-    "            printTree(node.children.get(i), prefix, i == node.children.size() - 1);",
-    "        }",
-    "    }",
-    "    ",
-    "    // ============== Main Demo ==============",
-    "    ",
+    "}",
+    "",
+    "public class Main {",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"Part 4: Distance Between Nodes Using LCA\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"Part 4: Distance Between Nodes - Test Cases\");",
+    "        System.out.println(\"============================================================\");",
     "        ",
-    "        // Build tree:  1 -> [2 -> [5 -> [9], 6], 3, 4 -> [8]]",
-    "        Node node9 = new Node(9);",
-    "        Node node5 = new Node(5, Arrays.asList(node9));",
+    "        // Build tree:     1",
+    "        //              /  |  \\",
+    "        //             2   3   4",
+    "        //            /|       |",
+    "        //           5 6       8",
+    "        Node node5 = new Node(5);",
     "        Node node6 = new Node(6);",
+    "        Node node8 = new Node(8);",
     "        Node node2 = new Node(2, Arrays.asList(node5, node6));",
     "        Node node3 = new Node(3);",
-    "        Node node8 = new Node(8);",
     "        Node node4 = new Node(4, Arrays.asList(node8));",
     "        Node root = new Node(1, Arrays.asList(node2, node3, node4));",
     "        ",
-    "        System.out.println(\"\\nTree Structure:\");",
-    "        printTree(root, \"\", true);",
+    "        root.parent = null;",
+    "        node2.parent = node3.parent = node4.parent = root;",
+    "        node5.parent = node6.parent = node2;",
+    "        node8.parent = node4;",
     "        ",
-    "        NaryTreeLCAWithDistance solver = new NaryTreeLCAWithDistance();",
-    "        solver.precomputeDepths(root);",
+    "        Solution sol = new Solution();",
     "        ",
-    "        System.out.println(\"\\nDepth cache: \" + solver.depthCache);",
+    "        // Test depths",
+    "        System.out.println(\"\\n--- Testing getDepth ---\");",
+    "        System.out.println(\"depth(root=1) = \" + sol.getDepth(root, root));",
+    "        System.out.println(\"depth(5) = \" + sol.getDepth(root, node5));",
+    "        System.out.println(\"depth(8) = \" + sol.getDepth(root, node8));",
     "        ",
-    "        // Test cases",
-    "        int[][] tests = {{5, 8, 4}, {5, 6, 2}, {9, 6, 3}, {9, 8, 5}, {3, 4, 2}};",
+    "        // Test 1: Different subtrees",
+    "        int dist = sol.distance(root, node5, node8);",
+    "        System.out.println(\"\\nTest 1: distance(5, 8) = \" + dist);",
+    "        System.out.println(\"  Path: 5 -> 2 -> 1 -> 4 -> 8 = 4 edges\");",
+    "        assert dist == 4;",
     "        ",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"TEST CASES\");",
-    "        System.out.println(\"-\".repeat(60));",
+    "        // Test 2: Siblings",
+    "        dist = sol.distance(root, node5, node6);",
+    "        System.out.println(\"\\nTest 2: distance(5, 6) = \" + dist);",
+    "        System.out.println(\"  Path: 5 -> 2 -> 6 = 2 edges\");",
+    "        assert dist == 2;",
     "        ",
-    "        for (int[] test : tests) {",
-    "            Node p = findNode(root, test[0]);",
-    "            Node q = findNode(root, test[1]);",
-    "            int expected = test[2];",
-    "            ",
-    "            int result = solver.distance(root, p, q);",
-    "            Node lcaNode = solver.lca(root, p, q);",
-    "            ",
-    "            String status = result == expected ? \"\u2713\" : \"\u2717\";",
-    "            System.out.println(String.format(\"\\n%s distance(%d, %d):\", status, test[0], test[1]));",
-    "            System.out.println(String.format(\"   Expected: %d, Got: %d\", expected, result));",
-    "            System.out.println(\"   LCA: \" + (lcaNode != null ? lcaNode.val : \"null\"));",
-    "            ",
-    "            if (p != null && q != null && lcaNode != null) {",
-    "                int dP = solver.getDepth(root, p);",
-    "                int dQ = solver.getDepth(root, q);",
-    "                int dLCA = solver.getDepth(root, lcaNode);",
-    "                System.out.println(String.format(\"   Formula: %d + %d - 2*%d = %d\", dP, dQ, dLCA, result));",
-    "            }",
-    "        }",
+    "        // Test 3: Ancestor relationship",
+    "        dist = sol.distance(root, node2, node5);",
+    "        System.out.println(\"\\nTest 3: distance(2, 5) = \" + dist);",
+    "        System.out.println(\"  Path: 2 -> 5 = 1 edge\");",
+    "        assert dist == 1;",
     "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"All tests completed!\");",
+    "        // Test 4: Same node",
+    "        dist = sol.distance(root, node5, node5);",
+    "        System.out.println(\"\\nTest 4: distance(5, 5) = \" + dist);",
+    "        assert dist == 0;",
+    "        ",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"All Part 4 tests passed!\");",
+    "        System.out.println(\"============================================================\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-12",
-      "explanation": "Imports and Node class definition with val and children list"
+      "lines": "1-10",
+      "explanation": "Node class and imports - unchanged from Part 3"
     },
     {
-      "lines": "15-30",
-      "explanation": "NaryTreeLCAWithDistance class with docstring explaining all provided methods and their complexities"
+      "lines": "12-28",
+      "explanation": "Part 1 LCA method - preserved exactly"
     },
     {
-      "lines": "32-37",
-      "explanation": "Constructor initializing depth_cache dict, node_map dict, and preprocessed flag"
+      "lines": "30-45",
+      "explanation": "Part 2 LCA for K nodes - preserved exactly"
     },
     {
-      "lines": "39-58",
-      "explanation": "precompute_depths() method: Single DFS traversal populates cache with all node depths in O(n)"
+      "lines": "47-53",
+      "explanation": "Part 3 two-pointer LCA - preserved exactly"
     },
     {
-      "lines": "60-85",
-      "explanation": "get_depth() method: O(1) cache lookup if preprocessed, falls back to O(n) DFS otherwise"
+      "lines": "55-70",
+      "explanation": "NEW: get_depth() - DFS traversal tracking depth, returns when target found"
     },
     {
-      "lines": "87-125",
-      "explanation": "lca() method: Recursive DFS finds LCA - returns current node if both targets found in different subtrees"
-    },
-    {
-      "lines": "127-165",
-      "explanation": "distance() method: Core Part 4 logic - gets depths, finds LCA, applies formula depth_p + depth_q - 2*depth_lca"
-    },
-    {
-      "lines": "167-182",
-      "explanation": "distance_multiple_queries(): Batch processing - precomputes depths once, then handles all queries efficiently"
-    },
-    {
-      "lines": "186-225",
-      "explanation": "Helper functions: build_tree, find_node, print_tree for testing and visualization"
-    },
-    {
-      "lines": "230-290",
-      "explanation": "main() demo: Builds test tree, runs test cases with detailed output showing formula breakdown"
+      "lines": "72-85",
+      "explanation": "NEW: distance() - applies the formula using LCA and three depth calculations"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "precompute_depths": {
-          "complexity": "O(n)",
-          "explanation": "Single DFS visits each node exactly once"
-        },
         "get_depth": {
-          "complexity": "O(1) cached / O(n) uncached",
-          "explanation": "Dictionary lookup vs full tree DFS"
+          "complexity": "O(n)",
+          "explanation": "DFS visits each node at most once until target found"
         },
         "distance": {
           "complexity": "O(n)",
-          "explanation": "Dominated by LCA which is O(n); depths are O(1) if cached"
-        },
-        "distance_multiple_queries": {
-          "complexity": "O(n + q*n)",
-          "explanation": "O(n) preprocessing + O(n) per query for LCA"
+          "explanation": "Calls LCA O(n) + 3 depth calls O(n) each = O(4n) = O(n)"
         }
       },
-      "overall_change": "Part 4 maintains O(n) per query complexity. Preprocessing enables O(1) depth lookups but LCA remains O(n). For true O(log n) per query, would need Binary Lifting LCA preprocessing."
+      "overall_change": "Part 4 methods are O(n) per call, consistent with Parts 1-2. For m queries, total is O(mn)."
     },
     "space": {
-      "additional_space": "O(n)",
-      "explanation": "depth_cache stores one entry per node (n entries). node_map stores n Node references. Total additional space is O(n) beyond the tree structure itself."
+      "additional_space": "O(h)",
+      "explanation": "Recursion stack depth is bounded by tree height. No new persistent data structures."
     }
   },
   "dry_run": {
-    "example_input": "Tree: [1,[2,[5,[9]],[6]],[3],[4,[8]]], distance(9, 8)",
+    "example_input": "distance(5, 8) on tree: 1->[2->[5,6], 3, 4->[8]]",
     "steps": [
       {
         "step": 1,
-        "action": "Precompute depths via DFS",
-        "state": "depth_cache = {1:0, 2:1, 3:1, 4:1, 5:2, 6:2, 8:2, 9:3}",
-        "explanation": "Single traversal from root populates all depths"
+        "action": "Check if p == q",
+        "state": "5 != 8, continue",
+        "explanation": "Early exit for same node"
       },
       {
         "step": 2,
-        "action": "Call distance(root, node9, node8)",
-        "state": "p=Node(9), q=Node(8)",
-        "explanation": "Starting distance calculation"
+        "action": "Find LCA(5, 8)",
+        "state": "DFS returns 1 (root)",
+        "explanation": "5 under node 2, 8 under node 4, LCA is their common ancestor"
       },
       {
         "step": 3,
-        "action": "get_depth(root, node9)",
-        "state": "depth_p = 3",
-        "explanation": "O(1) cache lookup: depth_cache[9] = 3"
+        "action": "get_depth(root, 5)",
+        "state": "DFS: 1(d=0)->2(d=1)->5(d=2), return 2",
+        "explanation": "Follow path to node 5"
       },
       {
         "step": 4,
-        "action": "get_depth(root, node8)",
-        "state": "depth_q = 2",
-        "explanation": "O(1) cache lookup: depth_cache[8] = 2"
+        "action": "get_depth(root, 8)",
+        "state": "DFS: 1->4->8(d=2), return 2",
+        "explanation": "Follow path to node 8"
       },
       {
         "step": 5,
-        "action": "lca(root, node9, node8)",
-        "state": "Traversing tree",
-        "explanation": "DFS from root: node9 found under child 2, node8 found under child 4"
+        "action": "get_depth(root, lca=1)",
+        "state": "1==target, return 0",
+        "explanation": "Root has depth 0"
       },
       {
         "step": 6,
-        "action": "LCA found",
-        "state": "lca_node = Node(1)",
-        "explanation": "Both targets in different subtrees of root, so root is LCA"
-      },
-      {
-        "step": 7,
-        "action": "get_depth(root, lca_node)",
-        "state": "depth_lca = 0",
-        "explanation": "O(1) cache lookup: depth_cache[1] = 0"
-      },
-      {
-        "step": 8,
         "action": "Apply formula",
-        "state": "dist = 3 + 2 - 2*0 = 5",
-        "explanation": "depth_p + depth_q - 2*depth_lca = 5 edges"
-      },
-      {
-        "step": 9,
-        "action": "Return result",
-        "state": "return 5",
-        "explanation": "Path: 9\u21925\u21922\u21921\u21924\u21928 = 5 edges \u2713"
+        "state": "2 + 2 - 2*0 = 4",
+        "explanation": "depth_p + depth_q - 2*depth_lca"
       }
     ],
-    "final_output": "5"
+    "final_output": "4 (path: 5\u21922\u21921\u21924\u21928)"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "distance(p, p) should return 0 for any node p",
-      "distance(root, any_child) should equal depth of that child",
-      "distance(p, q) == distance(q, p) - must be symmetric"
+      "distance(node, node) should be 0",
+      "distance(root, leaf) should equal depth(leaf)"
     ],
     "likely_bugs": [
-      "Forgetting to multiply LCA depth by 2 in formula",
-      "Off-by-one: returning depth as node count instead of edge count",
-      "Cache not cleared when tree changes",
-      "Comparing nodes by value instead of reference (or vice versa)",
-      "Not handling the case where p or q is the LCA itself"
+      "Off-by-one in depth (root should be 0)",
+      "Returning node count instead of edge count",
+      "Not handling LCA properly when one node is ancestor"
     ],
     "recommended_logs_or_asserts": [
-      "assert depth_lca <= min(depth_p, depth_q), 'LCA cannot be deeper than either node'",
-      "print(f'depth_p={depth_p}, depth_q={depth_q}, lca={lca_node.val}, depth_lca={depth_lca}')",
-      "assert result >= 0, 'Distance cannot be negative'"
+      "assert depth >= 0",
+      "print LCA value before computing distance",
+      "verify depth_lca <= min(depth_p, depth_q)"
     ],
-    "how_to_localize": "1) Print all three depths and LCA node. 2) Manually trace the expected path on paper. 3) Count edges on the path. 4) Verify formula calculation. 5) If LCA is wrong, debug LCA method separately with same inputs."
+    "how_to_localize": "1. Print depths of p, q, and LCA. 2. Manually verify formula. 3. Check if LCA is correct using Part 1 tests."
   },
   "edge_cases": [
     {
-      "case": "Same node (p == q)",
+      "case": "p == q (same node)",
       "handling": "Return 0 immediately",
-      "gotcha": "Don't forget this check - it saves unnecessary computation"
+      "gotcha": "Don't call LCA unnecessarily"
     },
     {
-      "case": "One node is ancestor of other",
-      "handling": "Formula still works - LCA equals the ancestor node",
-      "gotcha": "Don't assume LCA is always above both nodes"
+      "case": "p is ancestor of q",
+      "handling": "LCA = p, formula gives depth(q) - depth(p)",
+      "gotcha": "LCA can be one of the input nodes"
     },
     {
-      "case": "Null inputs",
-      "handling": "Return -1 for any null root, p, or q",
-      "gotcha": "Check all three parameters, not just root"
+      "case": "p and q are siblings",
+      "handling": "LCA = parent, distance = 2",
+      "gotcha": "Common case, verify formula works"
     },
     {
-      "case": "Node not in tree",
-      "handling": "get_depth returns -1, distance propagates -1",
-      "gotcha": "Validate existence before applying formula"
-    },
-    {
-      "case": "Single node tree",
-      "handling": "Only valid query is distance(root, root) = 0",
-      "gotcha": "Ensure root-only tree doesn't cause issues"
-    },
-    {
-      "case": "Linear tree (linked list shape)",
-      "handling": "Works correctly, but O(n) depth for LCA",
-      "gotcha": "Worst case complexity is hit, but algorithm is correct"
+      "case": "p or q is root",
+      "handling": "depth(root) = 0, formula handles naturally",
+      "gotcha": "Root as LCA means formula simplifies"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic - siblings",
-      "input": "tree=[1,[2,[5],[6]],[3],[4,[8]]], p=5, q=6",
+      "name": "Different subtrees",
+      "input": "distance(5, 8)",
+      "expected": "4",
+      "explanation": "Path crosses root: 5\u21922\u21921\u21924\u21928"
+    },
+    {
+      "name": "Siblings",
+      "input": "distance(5, 6)",
       "expected": "2",
-      "explanation": "Path: 5 \u2192 2 \u2192 6 = 2 edges, LCA=2"
-    },
-    {
-      "name": "Cross subtrees",
-      "input": "tree=[1,[2,[5],[6]],[3],[4,[8]]], p=5, q=8",
-      "expected": "4",
-      "explanation": "Path: 5 \u2192 2 \u2192 1 \u2192 4 \u2192 8 = 4 edges, LCA=1"
-    },
-    {
-      "name": "Deep to shallow",
-      "input": "tree=[1,[2,[5,[9]],[6]],[3],[4,[8]]], p=9, q=3",
-      "expected": "4",
-      "explanation": "Path: 9 \u2192 5 \u2192 2 \u2192 1 \u2192 3 = 4 edges, LCA=1"
-    },
-    {
-      "name": "Same node",
-      "input": "tree=[1,[2],[3]], p=2, q=2",
-      "expected": "0",
-      "explanation": "Same node has distance 0"
-    },
-    {
-      "name": "Root to leaf",
-      "input": "tree=[1,[2,[5,[9]],[6]],[3],[4,[8]]], p=1, q=9",
-      "expected": "3",
-      "explanation": "Path: 1 \u2192 2 \u2192 5 \u2192 9 = 3 edges, LCA=1"
+      "explanation": "Path through parent: 5\u21922\u21926"
     },
     {
       "name": "Ancestor-descendant",
-      "input": "tree=[1,[2,[5,[9]],[6]],[3],[4,[8]]], p=2, q=9",
-      "expected": "2",
-      "explanation": "Path: 2 \u2192 5 \u2192 9 = 2 edges, LCA=2"
+      "input": "distance(2, 5)",
+      "expected": "1",
+      "explanation": "Direct parent-child: 2\u21925"
+    },
+    {
+      "name": "Same node",
+      "input": "distance(5, 5)",
+      "expected": "0",
+      "explanation": "No edges to traverse"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Forgetting to multiply LCA depth by 2",
-      "why_wrong": "The formula requires subtracting the LCA depth twice (once for each path)",
-      "correct_approach": "Use depth_p + depth_q - 2 * depth_lca, not depth_p + depth_q - depth_lca",
-      "code_example_wrong": "return depth_p + depth_q - depth_lca  # Wrong!",
-      "code_example_correct": "return depth_p + depth_q - 2 * depth_lca  # Correct"
+      "mistake": "Computing depth as node count instead of edge count",
+      "why_wrong": "Root should have depth 0, not 1",
+      "correct_approach": "Start DFS with depth=0 at root",
+      "code_example_wrong": "// dfs(root, target, 1) - wrong!",
+      "code_example_correct": "// dfs(root, target, 0) - correct"
     },
     {
-      "mistake": "Not handling when p or q is the LCA",
-      "why_wrong": "When one node is ancestor of other, that node IS the LCA",
-      "correct_approach": "The formula handles this automatically - just ensure LCA logic returns correct node",
-      "code_example_wrong": "if root == p or root == q: return None  # Wrong - should return root",
-      "code_example_correct": "if root == p or root == q: return root  # It's the LCA!"
+      "mistake": "Not using LCA, just computing depths",
+      "why_wrong": "depth(p) + depth(q) alone overcounts the shared path",
+      "correct_approach": "Must subtract 2*depth(LCA) to remove double-counted portion",
+      "code_example_wrong": "return depth_p + depth_q;",
+      "code_example_correct": "return depth_p + depth_q - 2 * depth_lca;"
     },
     {
-      "mistake": "Computing depth by counting nodes instead of edges",
-      "why_wrong": "Depth is number of edges from root, not number of nodes",
-      "correct_approach": "Root has depth 0, its children have depth 1",
-      "code_example_wrong": "dfs(root, 1)  # Starting with depth 1",
-      "code_example_correct": "dfs(root, 0)  # Root has depth 0"
-    },
-    {
-      "mistake": "Not invalidating cache when tree structure changes",
-      "why_wrong": "Cached depths become stale if tree is modified",
-      "correct_approach": "Clear cache or set preprocessed=False when tree changes",
-      "code_example_wrong": "# Modify tree without clearing cache",
-      "code_example_correct": "self._depth_cache.clear(); self._preprocessed = False"
+      "mistake": "Rewriting LCA logic instead of reusing Part 1",
+      "why_wrong": "Duplicates code, risks bugs, wastes time",
+      "correct_approach": "Call self.lowest_common_ancestor(root, p, q)",
+      "code_example_wrong": "// 20 lines of custom LCA...",
+      "code_example_correct": "lca = self.lowest_common_ancestor(root, p, q)"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by stating the distance formula clearly. Explain WHY it works (path through LCA decomposes into two segments). Then discuss the implementation: first get depths, then LCA, then apply formula. Mention preprocessing optimization for multiple queries.",
+    "how_to_present": "Start by stating the distance formula and WHY it works. Then explain you'll add two methods: get_depth helper and distance that combines everything.",
     "what_to_mention": [
-      "The mathematical insight behind the formula",
-      "Time-space tradeoff: O(n) space for O(1) depth queries",
-      "That LCA is the bottleneck for single queries",
-      "Binary Lifting as advanced optimization for multiple queries"
+      "The formula is a classic tree technique",
+      "Time is O(n) per query, could optimize with preprocessing for multiple queries",
+      "Reusing Part 1 LCA implementation"
     ],
-    "time_allocation": "2 min understanding, 3 min explaining approach, 5 min coding, 2 min testing",
+    "time_allocation": "2 min understand formula, 3 min implement get_depth, 3 min implement distance, 2 min test",
     "if_stuck": [
-      "Draw the tree and manually trace a path between two nodes",
-      "Count edges on that path, then see how it relates to depths",
-      "Ask: 'Can I assume I have an LCA function from Part 1?'"
+      "Draw the tree and trace the path manually",
+      "Remember: LCA is where paths from p and q first meet",
+      "Formula subtracts the shared prefix twice"
     ]
   },
-  "connection_to_next_part": "Part 4's depth computation and caching infrastructure sets up nicely for Part 5 which might involve path queries, binary lifting for O(log n) LCA, or handling tree modifications. The modular design (separate getDepth, lca, distance methods) makes extensions straightforward.",
+  "connection_to_next_part": "Part 5 could add preprocessing for multiple queries using Binary Lifting or Euler Tour + RMQ, reducing per-query time to O(log n).",
   "communication_script": {
-    "transition_from_previous": "Great, Part 3 gave us LCA with parent pointers. For Part 4, I need to calculate the **distance** between two nodes. The key insight is that distance can be computed using depths and LCA, without finding the actual path.",
-    "explaining_changes": "The formula is `dist(p,q) = depth(p) + depth(q) - 2*depth(LCA)`. This works because the path from p to q must go through their LCA. I'll add a getDepth helper and a preprocessing method for efficiency with multiple queries.",
+    "transition_from_previous": "Great, Part 3 gave us O(h) LCA with parent pointers. For Part 4, I need to calculate the actual distance between nodes. Let me explain my approach...",
+    "explaining_changes": "The key insight is the distance formula: depth(p) + depth(q) - 2*depth(LCA). I'll add a get_depth helper and a distance method that uses our existing LCA.",
     "while_extending_code": [
-      "I'm adding a depth_cache dictionary to store precomputed depths...",
-      "The getDepth method checks cache first for O(1) lookup, falls back to DFS...",
-      "The distance method combines all pieces: get both depths, find LCA, apply formula..."
+      "Adding get_depth using DFS to find node depth...",
+      "Now implementing distance using the formula and reusing Part 1's LCA..."
     ],
-    "after_completing": "Distance calculation is working. Single query is O(n) dominated by LCA. With preprocessing, depths are O(1), but LCA remains O(n). For truly optimized multiple queries, we'd need Binary Lifting for O(log n) LCA. Ready for Part 5?"
+    "after_completing": "This handles Part 4. Single queries are O(n). For multiple queries, we could precompute depths or use Binary Lifting for O(log n) per query."
   },
   "time_milestones": {
-    "time_budget": "10-15 minutes for this part",
-    "by_2_min": "Understand the distance formula, recognize need for getDepth helper",
-    "by_5_min": "Explain approach, start coding getDepth and precompute methods",
-    "by_10_min": "Complete distance method, test with an example",
-    "warning_signs": "If still deriving the formula at 5 min, just state it and move on. If code isn't compiling at 10 min, focus on logic over syntax."
+    "time_budget": "8-12 minutes for this part",
+    "by_2_min": "Understand distance formula, identify we need get_depth helper",
+    "by_5_min": "get_depth implemented and tested",
+    "by_10_min": "distance implemented, all tests passing",
+    "warning_signs": "If formula unclear at 3 min, draw tree and trace manually"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If your LCA from Part 1 has bugs, fix them first. Say: 'Let me verify my LCA is working correctly before building distance on top.'",
-    "if_new_requirement_unclear": "Ask: 'Just to confirm - distance means number of edges, not number of nodes on the path, correct?'",
-    "if_running_behind": "Skip preprocessing optimization. Implement basic getDepth with DFS and distance with formula. Mention caching verbally: 'For multiple queries, I'd precompute depths.'"
+    "if_part_builds_wrong": "If Part 1 LCA has bugs, fix those first. Distance depends on correct LCA.",
+    "if_new_requirement_unclear": "Ask: 'Is distance measured in edges or nodes?' (Answer: edges)",
+    "if_running_behind": "Skip optimization discussion, focus on getting basic distance working"
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing the depth-based formula",
-      "Proactively implementing preprocessing without being asked",
-      "Mentioning Binary Lifting as further optimization",
-      "Discussing cache invalidation for dynamic trees",
-      "Clean code that builds on Part 1 without rewriting"
+      "Immediately recognizing the distance formula pattern",
+      "Mentioning Binary Lifting for O(log n) queries",
+      "Noting space-time tradeoff with depth precomputation",
+      "Cleanly reusing existing LCA implementation"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Tree Path Decomposition via LCA",
+    "pattern": "Tree Distance via LCA",
     "indicators": [
-      "Finding distance or path between two nodes",
-      "Query involves relationship between arbitrary node pairs",
-      "Tree structure (unique path between nodes)"
+      "Finding path length between tree nodes",
+      "Nodes not necessarily on same path from root",
+      "Tree structure (not graph)"
     ],
     "similar_problems": [
-      "LC 236 - LCA of Binary Tree",
-      "LC 1483 - Kth Ancestor of a Tree Node (Binary Lifting)",
       "LC 1740 - Find Distance in a Binary Tree",
-      "CSES Tree Distances problems"
+      "LC 236 - LCA of Binary Tree",
+      "Tree queries in competitive programming"
     ],
-    "template": "```python\\n# Template for tree distance via LCA\\ndef distance(root, p, q):\\n    depth_p = get_depth(root, p)\\n    depth_q = get_depth(root, q)\\n    lca_node = lca(root, p, q)\\n    depth_lca = get_depth(root, lca_node)\\n    return depth_p + depth_q - 2 * depth_lca\\n```"
+    "template": "distance(p, q) = depth(p) + depth(q) - 2*depth(LCA(p,q))"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'distance between nodes in a tree', I immediately think LCA-based decomposition",
-      "why": "Because the unique path between two nodes must pass through their LCA"
+      "thought": "Path between p and q must go through their LCA",
+      "why": "In a tree, there's exactly one path between any two nodes"
     },
     {
       "step": 2,
-      "thought": "The key constraint is edges = depth_p - depth_lca + depth_q - depth_lca",
-      "why": "This decomposes the total distance into two upward paths to LCA"
+      "thought": "The path can be split: p\u2192LCA and LCA\u2192q",
+      "why": "LCA is the turning point"
     },
     {
       "step": 3,
-      "thought": "For multiple queries, I should precompute depths",
-      "why": "Depths don't change, so O(n) preprocessing gives O(1) lookups"
+      "thought": "Each segment length is depth difference from LCA",
+      "why": "depth(x) - depth(LCA) = edges from LCA to x"
     },
     {
       "step": 4,
-      "thought": "LCA remains the bottleneck",
-      "why": "Even with cached depths, LCA is still O(n) per query without advanced preprocessing"
+      "thought": "Formula emerges: (d_p - d_lca) + (d_q - d_lca)",
+      "why": "Sum of both path segments"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Do you know the standard distance formula for trees?",
-      "Can you extend existing code cleanly without rewriting?",
-      "Do you think about optimization (caching for multiple queries)?",
-      "Is your code organized and testable?"
+      "Can you derive/apply the distance formula?",
+      "Do you reuse existing code appropriately?",
+      "Clean implementation of helper function"
     ],
     "bonus_points": [
-      "Mentioning Binary Lifting for O(log n) LCA",
-      "Discussing cache invalidation for mutable trees",
-      "Writing clean, production-quality code",
-      "Providing thorough test cases"
+      "Mentioning O(1) query optimization",
+      "Discussing multiple query scenarios",
+      "Recognizing this as a classic technique"
     ],
     "red_flags": [
-      "Not knowing the distance formula",
-      "Rewriting LCA from scratch instead of reusing Part 1",
-      "Forgetting edge cases like same node",
-      "Not considering efficiency for multiple queries"
+      "Not knowing the formula",
+      "Implementing BFS for path finding instead",
+      "Duplicating LCA code"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI for boilerplate like tree building helpers",
-      "Let it suggest test cases",
-      "Ask it to help format output for debugging"
+      "Let AI help with get_depth DFS boilerplate",
+      "Verify formula syntax"
     ],
     "what_not_to_do": [
-      "Don't let AI derive the distance formula - show you know it",
-      "Don't accept LCA code without understanding it",
-      "Verify the formula is applied correctly"
+      "Don't let AI overcomplicate with unnecessary optimization",
+      "Verify AI uses existing LCA method"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Going silent while coding for too long",
-      "Not asking about edge cases (what if node doesn't exist?)",
-      "Rushing without explaining the formula first"
+      "Not explaining why the formula works",
+      "Rushing without drawing examples"
     ],
     "technical": [
-      "Writing distance without implementing/using getDepth helper",
-      "Forgetting the factor of 2 in the formula",
-      "Not handling the p == q case"
+      "Wrong depth calculation (off-by-one)",
+      "Not handling p==q edge case"
     ],
     "communication": [
-      "Not explaining why the formula works",
-      "Skipping the preprocessing optimization discussion",
-      "Not testing with a concrete example"
+      "Not mentioning reuse of Part 1",
+      "Forgetting to test with examples"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does getDepth return correct depth (root = 0)?",
-      "Does distance handle p == q case (return 0)?",
-      "Is the formula correctly applied with 2 * depth_lca?",
-      "Did I trace through an example to verify?"
+      "Does distance(5, 5) return 0?",
+      "Does get_depth(root, root) return 0?",
+      "Is the formula correctly implemented?",
+      "Did I trace through one example?"
     ],
     "quick_code_review": [
-      "Type hints on all new methods",
-      "Docstrings explaining parameters and return values",
-      "Consistent naming with Part 1-3",
-      "No hardcoded values"
+      "Type hints on new methods",
+      "Docstrings explain purpose",
+      "No code duplication with Part 1"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Logging for distance queries to track usage patterns",
-      "Metrics for cache hit/miss ratio",
-      "Input validation with descriptive error messages",
-      "Thread-safety for concurrent queries"
+      "Caching depths for repeated queries",
+      "Input validation for null nodes",
+      "Metrics on query latency"
     ],
-    "why_not_in_interview": "Focus on algorithm correctness and complexity. Production concerns are mentioned verbally but not coded in interview setting.",
-    "how_to_mention": "Say: 'In production, I'd add logging here to monitor query patterns and cache effectiveness. I'd also add thread-safety if this serves concurrent requests.'"
+    "why_not_in_interview": "Core algorithm is the focus; mention these verbally",
+    "how_to_mention": "In production, I'd precompute depths during tree construction for O(1) depth lookups."
   },
-  "generated_at": "2026-01-18T18:37:56.282846",
+  "generated_at": "2026-01-19T05:04:29.981352",
   "_meta": {
     "problem_id": "lca_nary_tree",
     "part_number": 4,

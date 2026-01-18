@@ -4,595 +4,405 @@
   "builds_on": "Part 2",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "Part 3 adds an analytics capability to find the **maximum number of concurrent active drivers** within a sliding 24-hour window. This requires storing delivery intervals (not just costs) and implementing the **line sweep algorithm** to find peak concurrency. Unlike previous parts that focused on aggregating costs, this part requires temporal analysis of overlapping intervals.",
+    "what_changes": "Part 3 adds analytics capability to find the maximum number of drivers delivering simultaneously within a sliding 24-hour window. This requires tracking delivery intervals (not just costs) and implementing a line sweep algorithm to find maximum overlap.",
     "new_requirements": [
-      "Track delivery time intervals (start_time, end_time) for each delivery",
-      "Implement getMaxActiveDriversInLast24Hours(currentTime) method",
-      "Handle 24-hour sliding window calculation (86400 seconds)",
-      "Clip deliveries that partially overlap with the query window",
-      "Achieve O(n log n) time complexity for the analytics query"
+      "Track all deliveries with their start/end times for analytics",
+      "Implement get_max_active_drivers_in_last_24_hours(currentTime) method",
+      "Handle 24-hour sliding window (86400 seconds)",
+      "Clip deliveries to window boundaries for accurate overlap calculation"
     ],
     "new_constraints": [
-      "Must consider only deliveries where overlap falls within [currentTime - 86400, currentTime]",
-      "Deliveries may partially overlap with the 24-hour window and need clipping",
-      "Same-time events must be handled correctly (ends before starts)"
+      "Must efficiently find overlapping intervals within a time window",
+      "O(n log n) complexity for the analytics query",
+      "Must handle deliveries that partially overlap with the window"
     ],
-    "key_insight": "This is the classic **Line Sweep Algorithm** pattern (same as LC 253: Meeting Rooms II). Convert each interval into two events: +1 at start (driver becomes active) and -1 at end (driver becomes inactive). Sort events by time, sweep through maintaining a running count, and track the maximum. The crucial detail is sorting same-time events so **ends come before starts** to avoid false overlaps at boundaries."
+    "key_insight": "This is a classic Line Sweep / Meeting Rooms II problem! Convert each delivery interval into two events (+1 at start, -1 at end), sort by time, and sweep through tracking the running count of active drivers. The maximum running count is our answer."
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "Find max concurrent drivers in 24-hour window",
-        "how_met": "Line sweep algorithm in get_max_active_drivers_in_last_24_hours() method",
+        "how_met": "Line sweep algorithm with event sorting",
         "gotchas": [
-          "Forgetting to clip deliveries to window",
+          "Forgetting to clip intervals to window",
           "Wrong event ordering at same timestamp"
         ]
       },
       {
-        "requirement": "Store delivery intervals",
-        "how_met": "Added Delivery dataclass and self._deliveries list",
+        "requirement": "Track delivery intervals for analytics",
+        "how_met": "New _deliveries list stores (driver_id, start_time, end_time) tuples",
         "gotchas": [
-          "Only storing costs without intervals won't work for this part"
+          "Adding to list but forgetting to use it"
         ]
       },
       {
-        "requirement": "Handle partial window overlap",
-        "how_met": "Clip start/end times using max(start, window_start) and min(end, window_end)",
+        "requirement": "Handle deliveries partially in window",
+        "how_met": "Clip start/end times to window boundaries using max/min",
         "gotchas": [
-          "Deliveries entirely outside window must be filtered out first"
+          "Off-by-one errors at boundaries"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "getMaxActiveDriversInLast24Hours",
+        "operation": "get_max_active_drivers_in_last_24_hours",
         "target": "O(n log n)",
         "achieved": "O(n log n)",
-        "why": "Sorting n events takes O(n log n), sweep is O(n)"
+        "why": "Dominated by sorting events; n = deliveries in window"
+      },
+      {
+        "operation": "add_delivery",
+        "target": "O(log n)",
+        "achieved": "O(log n)",
+        "why": "Still O(log n) for heap push; list append is O(1) amortized"
       }
     ],
     "non_goals": [
-      "Real-time sliding window (we compute on-demand)",
-      "Persisting analytics results",
-      "Per-driver analytics",
-      "Time-series storage for historical queries"
+      "Real-time streaming max (would need segment tree)",
+      "Historical max over arbitrary ranges",
+      "Per-driver analytics"
     ]
   },
   "assumptions": [
-    "A driver delivering from time X to Y is 'active' in the interval [X, Y) - start inclusive, end exclusive",
-    "If D1 ends at exactly time T and D2 starts at exactly time T, they are NOT simultaneously active",
-    "All timestamps are valid (start_time < end_time for each delivery)",
-    "currentTime parameter is a valid epoch timestamp",
-    "24 hours = 86400 seconds exactly (no leap second handling)"
+    "A driver cannot have two overlapping deliveries (physically impossible)",
+    "Each delivery interval represents one active driver",
+    "Window is half-open: [currentTime - 86400, currentTime)",
+    "Deliveries ending exactly at window_start are excluded (already complete)",
+    "Deliveries starting exactly at window_end are excluded (not yet started)"
   ],
   "tradeoffs": [
     {
-      "decision": "On-demand computation vs. maintaining real-time data structure",
-      "chosen": "On-demand computation with line sweep",
-      "why": "Simpler implementation, O(n log n) is acceptable for reasonable n, no extra memory overhead",
-      "alternative": "TreeMap/Segment Tree with persistent state",
-      "when_to_switch": "If queries are very frequent and data changes rarely, pre-compute; if n becomes huge (millions), consider segment tree"
+      "decision": "List vs TreeMap for storing deliveries",
+      "chosen": "List",
+      "why": "Simple O(1) append; we need full scan anyway for the analytics query",
+      "alternative": "TreeMap by start_time",
+      "when_to_switch": "If we need range queries by start time"
     },
     {
-      "decision": "Store Delivery objects vs. just intervals",
-      "chosen": "Delivery dataclass with driver_id, start, end",
-      "why": "Enables future analytics (per-driver queries, debugging) without performance cost",
-      "alternative": "Simple tuples (start, end)",
-      "when_to_switch": "If memory is extremely constrained, use tuples"
+      "decision": "On-demand computation vs maintained state",
+      "chosen": "On-demand line sweep",
+      "why": "Simple to implement; analytics queries likely infrequent",
+      "alternative": "Segment tree with lazy propagation",
+      "when_to_switch": "If analytics queries are very frequent and need sub-linear time"
     },
     {
-      "decision": "List of events vs. TreeMap",
-      "chosen": "List with sorting",
-      "why": "Cleaner code, same asymptotic complexity, easier to understand",
-      "alternative": "TreeMap<Time, Integer> accumulating deltas",
-      "when_to_switch": "If doing range queries frequently, TreeMap gives more flexibility"
+      "decision": "Store full delivery info vs just intervals",
+      "chosen": "Store (driver_id, start, end)",
+      "why": "driver_id useful for future per-driver analytics even if not used now",
+      "alternative": "Just (start, end)",
+      "when_to_switch": "If memory is extremely constrained"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
       "Public method signatures from Parts 1-2",
+      "SECONDS_PER_HOUR constant",
       "Cost calculation formula",
-      "Decimal precision for money",
-      "Delivery storage format (can add fields)"
+      "Payment tracking invariants"
     ],
     "what_to_change": [
-      "Added Delivery dataclass",
-      "Added self._deliveries list",
-      "New analytics method"
+      "Added _deliveries list for interval tracking",
+      "New SECONDS_IN_24_HOURS constant",
+      "add_delivery appends to _deliveries"
     ],
-    "interfaces_and_boundaries": "Analytics methods are separate from core cost tracking. Future analytics (Part 4: per-driver hours, peak times) can follow same pattern of iterating over self._deliveries with different aggregation logic.",
+    "interfaces_and_boundaries": "Analytics methods read from _deliveries but don't modify it. Payment methods use _unpaid heap. Cost methods use _total_cost/_paid_cost. Clean separation allows Part 4 to add more analytics without affecting payments.",
     "invariants": [
-      "self._deliveries contains all deliveries ever added (in order)",
-      "Each delivery has valid driver_id that was in self._drivers at add time",
-      "Cost calculations remain unchanged from Parts 1-2"
+      "total_cost == sum of ALL delivery costs (unchanged)",
+      "paid_cost <= total_cost (unchanged)",
+      "_deliveries contains all deliveries ever added",
+      "len(_deliveries) == number of add_delivery calls"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\n[BEFORE - Part 2]\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502     DeliveryCostTracker              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 _drivers: {1: $10, 2: $15}           \u2502\n\u2502 _total_cost: $125.00                 \u2502\n\u2502 _settled_amount: $50.00              \u2502\n\u2502                                      \u2502\n\u2502 \u274c No delivery interval storage      \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n[AFTER - Part 3]\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502     DeliveryCostTracker              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 _drivers: {1: $10, 2: $15, 3: $10}   \u2502\n\u2502 _total_cost: $125.00                 \u2502\n\u2502 _settled_amount: $50.00              \u2502\n\u2502                                      \u2502\n\u2502 \u2705 _deliveries: [                    \u2502\n\u2502      Delivery(1, 0, 3000),           \u2502\n\u2502      Delivery(2, 1000, 2500),        \u2502\n\u2502      Delivery(3, 1500, 4000)         \u2502\n\u2502    ]                                 \u2502\n\u2502                                      \u2502\n\u2502 \u2705 New: getMaxActiveDriversInLast24H \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551             LINE SWEEP ALGORITHM - STEP BY STEP                  \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                                  \u2551\n\u2551  STEP 1: Collect deliveries in 24h window                        \u2551\n\u2551  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2551\n\u2551  \u2502  Window: [currentTime-86400, currentTime]                  \u2502  \u2551\n\u2551  \u2502                                                            \u2502  \u2551\n\u2551  \u2502  D1: [0, 3000]     \u2713 in window                             \u2502  \u2551\n\u2551  \u2502  D2: [1000, 2500]  \u2713 in window                             \u2502  \u2551\n\u2551  \u2502  D3: [1500, 4000]  \u2713 in window                             \u2502  \u2551\n\u2551  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2551\n\u2551                                                                  \u2551\n\u2551  STEP 2: Create events (+1 for start, -1 for end)                \u2551\n\u2551  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2551\n\u2551  \u2502  Events = [                                                \u2502  \u2551\n\u2551  \u2502    (0, +1),     # D1 starts                                \u2502  \u2551\n\u2551  \u2502    (1000, +1),  # D2 starts                                \u2502  \u2551\n\u2551  \u2502    (1500, +1),  # D3 starts                                \u2502  \u2551\n\u2551  \u2502    (2500, -1),  # D2 ends                                  \u2502  \u2551\n\u2551  \u2502    (3000, -1),  # D1 ends                                  \u2502  \u2551\n\u2551  \u2502    (4000, -1)   # D3 ends                                  \u2502  \u2551\n\u2551  \u2502  ]                                                         \u2502  \u2551\n\u2551  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2551\n\u2551                                                                  \u2551\n\u2551  STEP 3: Sort events (time, then -1 before +1)                   \u2551\n\u2551  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2551\n\u2551  \u2502  Sorted = [(0,+1), (1000,+1), (1500,+1),                   \u2502  \u2551\n\u2551  \u2502            (2500,-1), (3000,-1), (4000,-1)]                \u2502  \u2551\n\u2551  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2551\n\u2551                                                                  \u2551\n\u2551  STEP 4: Sweep and track maximum                                 \u2551\n\u2551  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2551\n\u2551  \u2502  Time \u2502 Event \u2502 Active \u2502  Max  \u2502 Visual                    \u2502  \u2551\n\u2551  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502  \u2551\n\u2551  \u2502    0  \u2502  +1   \u2502   1    \u2502   1   \u2502 \u2588                         \u2502  \u2551\n\u2551  \u2502 1000  \u2502  +1   \u2502   2    \u2502   2   \u2502 \u2588\u2588                        \u2502  \u2551\n\u2551  \u2502 1500  \u2502  +1   \u2502   3    \u2502   3\u2605  \u2502 \u2588\u2588\u2588  \u2190 MAXIMUM            \u2502  \u2551\n\u2551  \u2502 2500  \u2502  -1   \u2502   2    \u2502   3   \u2502 \u2588\u2588                        \u2502  \u2551\n\u2551  \u2502 3000  \u2502  -1   \u2502   1    \u2502   3   \u2502 \u2588                         \u2502  \u2551\n\u2551  \u2502 4000  \u2502  -1   \u2502   0    \u2502   3   \u2502                           \u2502  \u2551\n\u2551  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2551\n\u2551                                                                  \u2551\n\u2551  RESULT: Maximum concurrent = 3                                  \u2551\n\u2551                                                                  \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d\n```"
+    "before_after": "```\nBEFORE (Part 2):                    AFTER (Part 3):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510          \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 _drivers: {id: rate}  \u2502          \u2502 _drivers: {id: rate}  \u2502\n\u2502 _total_cost: Decimal  \u2502          \u2502 _total_cost: Decimal  \u2502\n\u2502 _paid_cost: Decimal   \u2502          \u2502 _paid_cost: Decimal   \u2502\n\u2502 _unpaid: heap[(t,c)]  \u2502          \u2502 _unpaid: heap[(t,c)]  \u2502\n\u2502                       \u2502          \u2502 _deliveries: [(d,s,e)]\u2502 \u2190 NEW!\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518          \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    LINE SWEEP ALGORITHM                       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                               \u2502\n\u2502  Step 1: Filter deliveries overlapping [T-86400, T]          \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u2502\n\u2502  \u2502    D1: [0, 3000]        \u2713 overlaps                 \u2502      \u2502\n\u2502  \u2502    D2: [1000, 2500]     \u2713 overlaps                 \u2502      \u2502\n\u2502  \u2502    D3: [1500, 4000]     \u2713 overlaps                 \u2502      \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502\n\u2502                                                               \u2502\n\u2502  Step 2: Create events (clip if needed)                      \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u2502\n\u2502  \u2502  (0, +1)  (1000, +1)  (1500, +1)                   \u2502      \u2502\n\u2502  \u2502  (2500, -1)  (3000, -1)  (4000, -1)               \u2502      \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502\n\u2502                                                               \u2502\n\u2502  Step 3: Sort by (time, delta) \u2192 ends before starts          \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u2502\n\u2502  \u2502  (0,+1) (1000,+1) (1500,+1) (2500,-1) (3000,-1)   \u2502      \u2502\n\u2502  \u2502  (4000,-1)                                         \u2502      \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502\n\u2502                                                               \u2502\n\u2502  Step 4: Sweep and track max                                 \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u2502\n\u2502  \u2502  t=0:    active=1, max=1                           \u2502      \u2502\n\u2502  \u2502  t=1000: active=2, max=2                           \u2502      \u2502\n\u2502  \u2502  t=1500: active=3, max=3  \u2605 MAXIMUM               \u2502      \u2502\n\u2502  \u2502  t=2500: active=2                                  \u2502      \u2502\n\u2502  \u2502  t=3000: active=1                                  \u2502      \u2502\n\u2502  \u2502  t=4000: active=0                                  \u2502      \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502\n\u2502                                                               \u2502\n\u2502  Return: 3                                                   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
   },
   "approaches": [
     {
-      "name": "Naive: Check Every Second",
-      "description": "For each second in the 24-hour window, count how many deliveries are active",
-      "time_complexity": "O(86400 * n) = O(n)",
+      "name": "Naive: Check every second",
+      "description": "For each second in the 24-hour window, count how many deliveries are active at that moment.",
+      "time_complexity": "O(86400 * n)",
       "space_complexity": "O(1)",
-      "why_not_optimal": "Checking 86,400 time points is wasteful. Active count only changes at delivery start/end times, not every second. For large windows or many deliveries, this is impractical."
+      "why_not_optimal": "86400 seconds * n deliveries = billions of checks for large n. Way too slow."
     },
     {
-      "name": "Naive: Check All Pairs",
-      "description": "For each pair of deliveries, check if they overlap. Build a graph, find max clique.",
-      "time_complexity": "O(n\u00b2) for pairs, max clique is NP-hard",
-      "space_complexity": "O(n\u00b2)",
-      "why_not_optimal": "Interval overlap max is NOT the same as max clique in general graphs. Also, O(n\u00b2) is too slow for large n."
+      "name": "Better: Check only at event times",
+      "description": "The count only changes at start/end times. Check at each unique delivery boundary.",
+      "time_complexity": "O(n\u00b2)",
+      "space_complexity": "O(n)",
+      "why_not_optimal": "For each of 2n events, we scan all n deliveries to count actives. Still quadratic."
     },
     {
-      "name": "Optimal: Line Sweep Algorithm",
-      "description": "Convert intervals to events (+1 start, -1 end), sort by time, sweep through tracking running count",
-      "time_complexity": "O(n log n) - dominated by sorting",
-      "space_complexity": "O(n) - for events list",
-      "key_insight": "The count only changes at event points. By sorting events and sweeping, we process each delivery exactly twice (start and end). The maximum running count during the sweep is our answer."
+      "name": "Optimal: Line Sweep with Events",
+      "description": "Create +1 events at starts and -1 events at ends. Sort events by time. Sweep through maintaining running count. Track maximum.",
+      "time_complexity": "O(n log n)",
+      "space_complexity": "O(n)",
+      "key_insight": "By sorting events, we process them in order and maintain a running count. Each event is processed once. The sort dominates at O(n log n)."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Line Sweep Algorithm\n\nThe **line sweep** (or **sweep line**) algorithm is a classic technique for interval problems. The key insight is that the number of active drivers only changes at **discrete event points** (delivery start/end times), not continuously.\n\n### Algorithm Steps:\n\n1. **Filter deliveries** to the 24-hour window `[currentTime - 86400, currentTime]`\n2. **Clip intervals** that partially overlap the window to stay within bounds\n3. **Create events**: For each delivery, create two events:\n   - `(start_time, +1)` - driver becomes active\n   - `(end_time, -1)` - driver becomes inactive\n4. **Sort events** by time. **Critical**: At the same time, process `-1` (end) before `+1` (start) to avoid counting a departing driver and arriving driver as concurrent.\n5. **Sweep through**: Maintain `current_active` count, update `max_active` at each step\n6. **Return** `max_active`\n\n### Why Ends Before Starts?\n\nIf Driver A ends at time T and Driver B starts at time T, are they concurrent? By convention, **no** - A has just finished when B starts. Processing `-1` before `+1` at the same timestamp handles this correctly.\n\n### Complexity:\n- **Time**: O(n log n) for sorting + O(n) for sweep = **O(n log n)**\n- **Space**: O(n) for events list",
+    "explanation_md": "## Line Sweep Algorithm\n\n**Core Idea**: Instead of checking activity at every moment, we only care about **moments when something changes** - delivery starts and ends.\n\n**Algorithm**:\n1. **Filter**: Keep only deliveries overlapping with 24-hour window\n2. **Clip**: Adjust start/end times to window boundaries\n3. **Create Events**: `(time, +1)` for start, `(time, -1)` for end\n4. **Sort**: By time, with **ends before starts** at same timestamp\n5. **Sweep**: Track running count, record maximum\n\n**Why ends before starts?** If D1 ends at t=100 and D2 starts at t=100, they don't overlap at that instant. Processing end first gives correct count.\n\n**Window Clipping**: A delivery from t=0 to t=5000 with window [1000, 3000] becomes [1000, 3000] for counting purposes.",
     "data_structures": [
       {
-        "structure": "List[Delivery]",
-        "purpose": "Store all delivery intervals for analytics queries"
+        "structure": "List _deliveries",
+        "purpose": "Store all deliveries (driver_id, start_time, end_time) for analytics queries"
       },
       {
-        "structure": "List[Tuple[int, int]]",
-        "purpose": "Events list (time, delta) for line sweep - created on-demand"
+        "structure": "List events",
+        "purpose": "Temporary list of (time, delta) events for line sweep, created per query"
       }
     ],
     "algorithm_steps": [
       "Step 1: Calculate window bounds: window_start = currentTime - 86400, window_end = currentTime",
-      "Step 2: Iterate through all stored deliveries",
-      "Step 3: Filter out deliveries entirely outside the window (end <= window_start or start >= window_end)",
-      "Step 4: Clip remaining deliveries: clipped_start = max(start, window_start), clipped_end = min(end, window_end)",
-      "Step 5: Create two events per delivery: (clipped_start, +1) and (clipped_end, -1)",
-      "Step 6: Sort events by (time, delta) - this naturally puts -1 before +1 at same time",
-      "Step 7: Initialize current_active = 0, max_active = 0",
-      "Step 8: For each event (time, delta): current_active += delta; max_active = max(max_active, current_active)",
-      "Step 9: Return max_active"
+      "Step 2: Iterate through _deliveries, skip those not overlapping window",
+      "Step 3: For overlapping deliveries, clip to window and create two events: (clipped_start, +1), (clipped_end, -1)",
+      "Step 4: Sort events by (time, delta) - this puts -1 before +1 at same time",
+      "Step 5: Initialize current_active = 0, max_active = 0",
+      "Step 6: For each event: current_active += delta, max_active = max(max_active, current_active)",
+      "Step 7: Return max_active"
     ]
   },
   "solution_python_lines": [
-    "from decimal import Decimal, ROUND_HALF_UP",
+    "\"\"\"",
+    "Delivery Cost Tracking System - Part 3: Maximum Active Drivers Analytics",
+    "Key insight: Line sweep algorithm for finding max overlapping intervals.",
+    "\"\"\"",
+    "from decimal import Decimal",
     "from typing import Dict, List, Tuple",
-    "from dataclasses import dataclass",
-    "",
-    "",
-    "@dataclass",
-    "class Delivery:",
-    "    \"\"\"Represents a single delivery with time bounds.\"\"\"",
-    "    driver_id: int",
-    "    start_time: int",
-    "    end_time: int",
+    "import heapq",
     "",
     "",
     "class DeliveryCostTracker:",
-    "    \"\"\"",
-    "    Delivery cost tracking system with payment settlement and analytics.",
+    "    \"\"\"Tracks delivery costs with payment settlement and driver analytics.\"\"\"",
     "    ",
-    "    Supports:",
-    "    - Part 1: Driver management and delivery cost tracking",
-    "    - Part 2: Payment settlement with outstanding balance",
-    "    - Part 3: Maximum concurrent drivers analytics (line sweep)",
-    "    \"\"\"",
-    "    ",
-    "    SECONDS_IN_HOUR = 3600",
+    "    SECONDS_PER_HOUR = Decimal('3600')",
     "    SECONDS_IN_24_HOURS = 86400",
     "    ",
-    "    def __init__(self) -> None:",
-    "        \"\"\"Initialize the delivery cost tracker.\"\"\"",
-    "        # Part 1: Core tracking",
+    "    def __init__(self):",
     "        self._drivers: Dict[int, Decimal] = {}",
     "        self._total_cost: Decimal = Decimal('0')",
-    "        ",
-    "        # Part 2: Settlement tracking",
-    "        self._settled_amount: Decimal = Decimal('0')",
-    "        ",
-    "        # Part 3: Delivery intervals for analytics",
-    "        self._deliveries: List[Delivery] = []",
+    "        self._paid_cost: Decimal = Decimal('0')",
+    "        self._unpaid: List[Tuple[int, Decimal]] = []  # min-heap: (end_time, cost)",
+    "        # Part 3: Store deliveries for analytics",
+    "        self._deliveries: List[Tuple[int, int, int]] = []  # (driver_id, start, end)",
     "    ",
-    "    def add_driver(self, driver_id: int, hourly_rate: float) -> None:",
-    "        \"\"\"",
-    "        Register a new driver with their hourly rate.",
-    "        ",
-    "        Args:",
-    "            driver_id: Unique identifier for the driver",
-    "            hourly_rate: Pay rate in dollars per hour",
-    "        \"\"\"",
-    "        self._drivers[driver_id] = Decimal(str(hourly_rate))",
+    "    def add_driver(self, driver_id: int, hourly_rate: Decimal) -> None:",
+    "        \"\"\"Register a driver with their hourly rate. O(1)\"\"\"",
+    "        self._drivers[driver_id] = hourly_rate",
     "    ",
     "    def add_delivery(self, driver_id: int, start_time: int, end_time: int) -> None:",
-    "        \"\"\"",
-    "        Record a completed delivery and calculate its cost.",
-    "        ",
-    "        Args:",
-    "            driver_id: The driver who made the delivery",
-    "            start_time: Delivery start in epoch seconds",
-    "            end_time: Delivery end in epoch seconds",
-    "        \"\"\"",
+    "        \"\"\"Record a delivery. O(log n) for heap push.\"\"\"",
     "        if driver_id not in self._drivers:",
-    "            return  # Unknown driver, ignore",
+    "            raise ValueError(f\"Driver {driver_id} not registered\")",
     "        ",
-    "        # Calculate and accumulate cost",
-    "        hourly_rate = self._drivers[driver_id]",
-    "        duration_hours = Decimal(str(end_time - start_time)) / Decimal(str(self.SECONDS_IN_HOUR))",
-    "        cost = hourly_rate * duration_hours",
+    "        rate = self._drivers[driver_id]",
+    "        duration = Decimal(end_time - start_time)",
+    "        cost = rate * duration / self.SECONDS_PER_HOUR",
+    "        ",
     "        self._total_cost += cost",
-    "        ",
-    "        # Store delivery interval for Part 3 analytics",
-    "        self._deliveries.append(Delivery(driver_id, start_time, end_time))",
+    "        heapq.heappush(self._unpaid, (end_time, cost))",
+    "        self._deliveries.append((driver_id, start_time, end_time))  # Part 3",
     "    ",
-    "    def get_total_cost(self) -> float:",
-    "        \"\"\"",
-    "        Get the total accumulated delivery cost.",
-    "        ",
-    "        Returns:",
-    "            Total cost rounded to 2 decimal places",
-    "        \"\"\"",
-    "        return float(self._total_cost.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+    "    def get_total_cost(self) -> Decimal:",
+    "        \"\"\"Return total cost of all deliveries. O(1)\"\"\"",
+    "        return self._total_cost",
     "    ",
-    "    def settle_payment(self, amount: float) -> float:",
-    "        \"\"\"",
-    "        Settle a payment toward the outstanding balance.",
-    "        ",
-    "        Args:",
-    "            amount: Amount to pay",
-    "        ",
-    "        Returns:",
-    "            Actual amount applied (may be less if overpaying)",
-    "        \"\"\"",
-    "        amount_decimal = Decimal(str(amount))",
-    "        outstanding = self._total_cost - self._settled_amount",
-    "        ",
-    "        if amount_decimal >= outstanding:",
-    "            # Overpayment - only apply what's owed",
-    "            self._settled_amount = self._total_cost",
-    "            return float(outstanding.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
-    "        else:",
-    "            # Partial payment",
-    "            self._settled_amount += amount_decimal",
-    "            return amount",
+    "    def pay_up_to_time(self, up_to_time: int) -> None:",
+    "        \"\"\"Pay all deliveries ending at or before up_to_time. O(k log n)\"\"\"",
+    "        while self._unpaid and self._unpaid[0][0] <= up_to_time:",
+    "            _, cost = heapq.heappop(self._unpaid)",
+    "            self._paid_cost += cost",
     "    ",
-    "    def get_outstanding_balance(self) -> float:",
-    "        \"\"\"",
-    "        Get the remaining unpaid balance.",
-    "        ",
-    "        Returns:",
-    "            Outstanding balance rounded to 2 decimal places",
-    "        \"\"\"",
-    "        outstanding = self._total_cost - self._settled_amount",
-    "        return float(outstanding.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+    "    def get_cost_to_be_paid(self) -> Decimal:",
+    "        \"\"\"Return cost of unpaid deliveries. O(1)\"\"\"",
+    "        return self._total_cost - self._paid_cost",
     "    ",
     "    def get_max_active_drivers_in_last_24_hours(self, current_time: int) -> int:",
     "        \"\"\"",
-    "        Find the maximum number of drivers simultaneously delivering",
-    "        at any point within the last 24 hours.",
-    "        ",
-    "        Uses the Line Sweep Algorithm:",
-    "        1. Create events: +1 at start, -1 at end for each delivery",
-    "        2. Sort events by time (ends before starts at same time)",
-    "        3. Sweep through tracking running count",
-    "        4. Return maximum count observed",
-    "        ",
-    "        Args:",
-    "            current_time: Current timestamp in epoch seconds",
-    "        ",
-    "        Returns:",
-    "            Maximum number of concurrent active drivers",
-    "        ",
-    "        Time Complexity: O(n log n) where n = deliveries in window",
-    "        Space Complexity: O(n) for events list",
+    "        Find max concurrent drivers in last 24 hours using line sweep.",
+    "        O(n log n) where n = deliveries overlapping with window.",
     "        \"\"\"",
     "        window_start = current_time - self.SECONDS_IN_24_HOURS",
     "        window_end = current_time",
     "        ",
-    "        # Build events list: (time, delta)",
-    "        # delta = +1 for delivery start, -1 for delivery end",
-    "        events: List[Tuple[int, int]] = []",
-    "        ",
-    "        for delivery in self._deliveries:",
-    "            # Skip deliveries entirely outside the window",
-    "            if delivery.end_time <= window_start or delivery.start_time >= window_end:",
+    "        # Create events: (time, delta) where +1=start, -1=end",
+    "        events = []",
+    "        for _, start, end in self._deliveries:",
+    "            # Skip if no overlap with window",
+    "            if end <= window_start or start >= window_end:",
     "                continue",
-    "            ",
-    "            # Clip delivery times to the window boundaries",
-    "            clipped_start = max(delivery.start_time, window_start)",
-    "            clipped_end = min(delivery.end_time, window_end)",
-    "            ",
-    "            # Add start and end events",
-    "            events.append((clipped_start, 1))   # Start: driver becomes active",
-    "            events.append((clipped_end, -1))    # End: driver becomes inactive",
+    "            # Clip to window boundaries",
+    "            clipped_start = max(start, window_start)",
+    "            clipped_end = min(end, window_end)",
+    "            events.append((clipped_start, 1))   # +1 at start",
+    "            events.append((clipped_end, -1))    # -1 at end",
     "        ",
-    "        # Handle empty case",
     "        if not events:",
     "            return 0",
     "        ",
-    "        # Sort by time, then by delta (so -1 comes before +1 at same time)",
-    "        # This ensures we don't count adjacent intervals as overlapping",
-    "        events.sort(key=lambda e: (e[0], e[1]))",
+    "        # Sort by time, then by delta (ends before starts at same time)",
+    "        events.sort(key=lambda x: (x[0], x[1]))",
     "        ",
-    "        # Sweep through events tracking active count",
     "        max_active = 0",
     "        current_active = 0",
-    "        ",
-    "        for time, delta in events:",
+    "        for _, delta in events:",
     "            current_active += delta",
     "            max_active = max(max_active, current_active)",
     "        ",
     "        return max_active",
     "",
     "",
-    "def main() -> None:",
-    "    \"\"\"Demonstrate Part 3 functionality with test cases.\"\"\"",
-    "    print(\"=\" * 70)",
-    "    print(\"PART 3: Maximum Active Drivers Analytics\")",
-    "    print(\"=\" * 70)",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"PART 3: MAXIMUM ACTIVE DRIVERS ANALYTICS\")",
+    "    print(\"=\" * 60)",
     "    ",
-    "    # Test Case 1: Three overlapping drivers",
-    "    print(\"\\n--- Test Case 1: Overlapping Deliveries ---\")",
-    "    tracker = DeliveryCostTracker()",
+    "    # Example 1: Three overlapping drivers",
+    "    t = DeliveryCostTracker()",
+    "    t.add_driver(1, Decimal('10'))",
+    "    t.add_driver(2, Decimal('10'))",
+    "    t.add_driver(3, Decimal('10'))",
+    "    t.add_delivery(1, 0, 3000)      # D1: 0-3000",
+    "    t.add_delivery(2, 1000, 2500)   # D2: 1000-2500",
+    "    t.add_delivery(3, 1500, 4000)   # D3: 1500-4000",
+    "    result = t.get_max_active_drivers_in_last_24_hours(86400)",
+    "    print(f\"Max active (3 overlapping): {result}  (expected: 3)\")",
     "    ",
-    "    tracker.add_driver(1, 10.0)",
-    "    tracker.add_driver(2, 10.0)",
-    "    tracker.add_driver(3, 10.0)",
+    "    # Example 2: Non-overlapping deliveries",
+    "    print(\"\\n\" + \"-\" * 40)",
+    "    t2 = DeliveryCostTracker()",
+    "    t2.add_driver(1, Decimal('10'))",
+    "    t2.add_driver(2, Decimal('10'))",
+    "    t2.add_delivery(1, 0, 1000)     # D1: 0-1000",
+    "    t2.add_delivery(2, 2000, 3000)  # D2: 2000-3000 (no overlap)",
+    "    result2 = t2.get_max_active_drivers_in_last_24_hours(86400)",
+    "    print(f\"Max active (no overlap): {result2}  (expected: 1)\")",
     "    ",
-    "    tracker.add_delivery(1, 0, 3000)      # D1: 0 to 3000",
-    "    tracker.add_delivery(2, 1000, 2500)   # D2: 1000 to 2500",
-    "    tracker.add_delivery(3, 1500, 4000)   # D3: 1500 to 4000",
+    "    # Example 3: Partial window overlap",
+    "    print(\"\\n\" + \"-\" * 40)",
+    "    t3 = DeliveryCostTracker()",
+    "    t3.add_driver(1, Decimal('10'))",
+    "    t3.add_delivery(1, 86000, 87000)  # Starts before window, ends inside",
+    "    result3 = t3.get_max_active_drivers_in_last_24_hours(86500)",
+    "    print(f\"Max active (partial overlap): {result3}  (expected: 1)\")",
     "    ",
-    "    print(\"Timeline visualization:\")",
-    "    print(\"  D1: [0 ==================== 3000]\")",
-    "    print(\"  D2:      [1000 ====== 2500]\")",
-    "    print(\"  D3:           [1500 =========== 4000]\")",
-    "    print(\"  Peak overlap: t=1500 to t=2500 (3 drivers)\")",
+    "    # Example 4: No deliveries in window",
+    "    print(\"\\n\" + \"-\" * 40)",
+    "    t4 = DeliveryCostTracker()",
+    "    t4.add_driver(1, Decimal('10'))",
+    "    t4.add_delivery(1, 0, 1000)  # Old delivery",
+    "    result4 = t4.get_max_active_drivers_in_last_24_hours(100000)",
+    "    print(f\"Max active (outside window): {result4}  (expected: 0)\")",
     "    ",
-    "    result = tracker.get_max_active_drivers_in_last_24_hours(86400)",
-    "    print(f\"\\nMax active drivers in last 24h: {result}\")",
-    "    print(f\"Expected: 3 {'\u2713' if result == 3 else '\u2717'}\")",
+    "    # Verify Part 2 still works",
+    "    print(\"\\n\" + \"-\" * 40)",
+    "    print(\"Verifying Part 2 compatibility...\")",
+    "    print(f\"Total cost: ${t.get_total_cost():.2f}\")",
+    "    t.pay_up_to_time(3000)",
+    "    print(f\"After pay(3000): ${t.get_cost_to_be_paid():.2f} unpaid\")",
     "    ",
-    "    # Test Case 2: Non-overlapping deliveries",
-    "    print(\"\\n--- Test Case 2: Non-Overlapping Deliveries ---\")",
-    "    tracker2 = DeliveryCostTracker()",
-    "    ",
-    "    tracker2.add_driver(1, 10.0)",
-    "    tracker2.add_driver(2, 10.0)",
-    "    ",
-    "    tracker2.add_delivery(1, 0, 1000)     # D1: 0 to 1000",
-    "    tracker2.add_delivery(2, 2000, 3000)  # D2: 2000 to 3000",
-    "    ",
-    "    print(\"Timeline visualization:\")",
-    "    print(\"  D1: [0 ==== 1000]\")",
-    "    print(\"  D2:                [2000 ==== 3000]\")",
-    "    print(\"  No overlap\")",
-    "    ",
-    "    result2 = tracker2.get_max_active_drivers_in_last_24_hours(86400)",
-    "    print(f\"\\nMax active drivers in last 24h: {result2}\")",
-    "    print(f\"Expected: 1 {'\u2713' if result2 == 1 else '\u2717'}\")",
-    "    ",
-    "    # Test Case 3: Adjacent deliveries (same endpoint)",
-    "    print(\"\\n--- Test Case 3: Adjacent Deliveries (Touch at Boundary) ---\")",
-    "    tracker3 = DeliveryCostTracker()",
-    "    ",
-    "    tracker3.add_driver(1, 10.0)",
-    "    tracker3.add_driver(2, 10.0)",
-    "    ",
-    "    tracker3.add_delivery(1, 0, 1000)     # D1 ends at 1000",
-    "    tracker3.add_delivery(2, 1000, 2000)  # D2 starts at 1000",
-    "    ",
-    "    print(\"Timeline visualization:\")",
-    "    print(\"  D1: [0 ==== 1000]\")",
-    "    print(\"  D2:            [1000 ==== 2000]\")",
-    "    print(\"  Touch at t=1000 but NOT concurrent\")",
-    "    ",
-    "    result3 = tracker3.get_max_active_drivers_in_last_24_hours(86400)",
-    "    print(f\"\\nMax active drivers in last 24h: {result3}\")",
-    "    print(f\"Expected: 1 (not concurrent) {'\u2713' if result3 == 1 else '\u2717'}\")",
-    "    ",
-    "    # Test Case 4: No deliveries",
-    "    print(\"\\n--- Test Case 4: No Deliveries ---\")",
-    "    tracker4 = DeliveryCostTracker()",
-    "    tracker4.add_driver(1, 10.0)",
-    "    ",
-    "    result4 = tracker4.get_max_active_drivers_in_last_24_hours(86400)",
-    "    print(f\"Max active drivers: {result4}\")",
-    "    print(f\"Expected: 0 {'\u2713' if result4 == 0 else '\u2717'}\")",
-    "    ",
-    "    # Test Case 5: Deliveries outside 24h window",
-    "    print(\"\\n--- Test Case 5: Deliveries Outside Window ---\")",
-    "    tracker5 = DeliveryCostTracker()",
-    "    tracker5.add_driver(1, 10.0)",
-    "    tracker5.add_delivery(1, 0, 1000)  # Very old delivery",
-    "    ",
-    "    # Query at time 100000 (delivery was way before 24h ago)",
-    "    result5 = tracker5.get_max_active_drivers_in_last_24_hours(100000)",
-    "    print(f\"Delivery at [0, 1000], query at t=100000\")",
-    "    print(f\"24h window: [{100000 - 86400}, 100000] = [13600, 100000]\")",
-    "    print(f\"Delivery [0, 1000] is before window start 13600\")",
-    "    print(f\"Max active drivers: {result5}\")",
-    "    print(f\"Expected: 0 {'\u2713' if result5 == 0 else '\u2717'}\")",
-    "    ",
-    "    # Test Case 6: Partial overlap with window",
-    "    print(\"\\n--- Test Case 6: Partial Window Overlap ---\")",
-    "    tracker6 = DeliveryCostTracker()",
-    "    tracker6.add_driver(1, 10.0)",
-    "    tracker6.add_driver(2, 10.0)",
-    "    ",
-    "    # Window will be [0, 86400]",
-    "    # D1 starts before window, ends inside",
-    "    tracker6.add_delivery(1, -1000, 5000)  # Clipped to [0, 5000]",
-    "    # D2 starts inside window, ends after window",
-    "    tracker6.add_delivery(2, 3000, 90000)  # Clipped to [3000, 86400]",
-    "    ",
-    "    result6 = tracker6.get_max_active_drivers_in_last_24_hours(86400)",
-    "    print(f\"D1: [-1000, 5000] -> clipped to [0, 5000]\")",
-    "    print(f\"D2: [3000, 90000] -> clipped to [3000, 86400]\")",
-    "    print(f\"Overlap at [3000, 5000]\")",
-    "    print(f\"Max active drivers: {result6}\")",
-    "    print(f\"Expected: 2 {'\u2713' if result6 == 2 else '\u2717'}\")",
-    "    ",
-    "    # Summary",
-    "    print(\"\\n\" + \"=\" * 70)",
-    "    print(\"ALL TESTS COMPLETED\")",
-    "    print(\"=\" * 70)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"All Part 3 tests passed! \u2713\")",
+    "    print(\"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.math.BigDecimal;",
-    "import java.math.RoundingMode;",
     "import java.util.*;",
     "",
     "/**",
-    " * Represents a single delivery with time bounds.",
-    " */",
-    "class Delivery {",
-    "    final int driverId;",
-    "    final long startTime;",
-    "    final long endTime;",
-    "    ",
-    "    Delivery(int driverId, long startTime, long endTime) {",
-    "        this.driverId = driverId;",
-    "        this.startTime = startTime;",
-    "        this.endTime = endTime;",
-    "    }",
-    "}",
-    "",
-    "/**",
-    " * Delivery cost tracking system with payment settlement and analytics.",
-    " * ",
-    " * Supports:",
-    " * - Part 1: Driver management and delivery cost tracking",
-    " * - Part 2: Payment settlement with outstanding balance",
-    " * - Part 3: Maximum concurrent drivers analytics (line sweep)",
+    " * Delivery Cost Tracking System - Part 3: Maximum Active Drivers Analytics",
+    " * Uses line sweep algorithm for O(n log n) max concurrent drivers.",
     " */",
     "public class DeliveryCostTracker {",
-    "    private static final long SECONDS_IN_HOUR = 3600L;",
+    "    ",
+    "    private static final BigDecimal SECONDS_PER_HOUR = new BigDecimal(\"3600\");",
     "    private static final long SECONDS_IN_24_HOURS = 86400L;",
     "    ",
-    "    // Part 1: Core tracking",
     "    private final Map<Integer, BigDecimal> drivers;",
     "    private BigDecimal totalCost;",
-    "    ",
-    "    // Part 2: Settlement tracking",
-    "    private BigDecimal settledAmount;",
-    "    ",
-    "    // Part 3: Delivery intervals for analytics",
-    "    private final List<Delivery> deliveries;",
+    "    private BigDecimal paidCost;",
+    "    private final TreeMap<Long, List<BigDecimal>> unpaid;",
+    "    // Part 3: Store deliveries for analytics",
+    "    private final List<long[]> deliveries; // [driverId, startTime, endTime]",
     "    ",
     "    public DeliveryCostTracker() {",
     "        this.drivers = new HashMap<>();",
     "        this.totalCost = BigDecimal.ZERO;",
-    "        this.settledAmount = BigDecimal.ZERO;",
+    "        this.paidCost = BigDecimal.ZERO;",
+    "        this.unpaid = new TreeMap<>();",
     "        this.deliveries = new ArrayList<>();",
     "    }",
     "    ",
-    "    /**",
-    "     * Register a new driver with their hourly rate.",
-    "     */",
-    "    public void addDriver(int driverId, double hourlyRate) {",
-    "        drivers.put(driverId, BigDecimal.valueOf(hourlyRate));",
+    "    public void addDriver(int driverId, BigDecimal hourlyRate) {",
+    "        drivers.put(driverId, hourlyRate);",
     "    }",
     "    ",
-    "    /**",
-    "     * Record a completed delivery and calculate its cost.",
-    "     */",
     "    public void addDelivery(int driverId, long startTime, long endTime) {",
-    "        if (!drivers.containsKey(driverId)) {",
-    "            return; // Unknown driver",
+    "        BigDecimal rate = drivers.get(driverId);",
+    "        if (rate == null) {",
+    "            throw new IllegalArgumentException(\"Driver \" + driverId + \" not registered\");",
     "        }",
     "        ",
-    "        BigDecimal hourlyRate = drivers.get(driverId);",
-    "        BigDecimal durationHours = BigDecimal.valueOf(endTime - startTime)",
-    "            .divide(BigDecimal.valueOf(SECONDS_IN_HOUR), 10, RoundingMode.HALF_UP);",
-    "        BigDecimal cost = hourlyRate.multiply(durationHours);",
+    "        BigDecimal duration = new BigDecimal(endTime - startTime);",
+    "        BigDecimal cost = rate.multiply(duration).divide(SECONDS_PER_HOUR, 10, BigDecimal.ROUND_HALF_UP);",
     "        totalCost = totalCost.add(cost);",
-    "        ",
-    "        // Store delivery for Part 3 analytics",
-    "        deliveries.add(new Delivery(driverId, startTime, endTime));",
+    "        unpaid.computeIfAbsent(endTime, k -> new ArrayList<>()).add(cost);",
+    "        deliveries.add(new long[]{driverId, startTime, endTime}); // Part 3",
     "    }",
     "    ",
-    "    /**",
-    "     * Get the total accumulated delivery cost.",
-    "     */",
-    "    public double getTotalCost() {",
-    "        return totalCost.setScale(2, RoundingMode.HALF_UP).doubleValue();",
+    "    public BigDecimal getTotalCost() {",
+    "        return totalCost;",
     "    }",
     "    ",
-    "    /**",
-    "     * Settle a payment toward the outstanding balance.",
-    "     */",
-    "    public double settlePayment(double amount) {",
-    "        BigDecimal amountDecimal = BigDecimal.valueOf(amount);",
-    "        BigDecimal outstanding = totalCost.subtract(settledAmount);",
-    "        ",
-    "        if (amountDecimal.compareTo(outstanding) >= 0) {",
-    "            settledAmount = totalCost;",
-    "            return outstanding.setScale(2, RoundingMode.HALF_UP).doubleValue();",
-    "        } else {",
-    "            settledAmount = settledAmount.add(amountDecimal);",
-    "            return amount;",
+    "    public void payUpToTime(long upToTime) {",
+    "        NavigableMap<Long, List<BigDecimal>> toPay = unpaid.headMap(upToTime, true);",
+    "        for (List<BigDecimal> costs : toPay.values()) {",
+    "            for (BigDecimal cost : costs) {",
+    "                paidCost = paidCost.add(cost);",
+    "            }",
     "        }",
+    "        toPay.clear();",
     "    }",
     "    ",
-    "    /**",
-    "     * Get the remaining unpaid balance.",
-    "     */",
-    "    public double getOutstandingBalance() {",
-    "        return totalCost.subtract(settledAmount)",
-    "            .setScale(2, RoundingMode.HALF_UP).doubleValue();",
+    "    public BigDecimal getCostToBePaid() {",
+    "        return totalCost.subtract(paidCost);",
     "    }",
     "    ",
-    "    /**",
-    "     * Find the maximum number of drivers simultaneously delivering",
-    "     * at any point within the last 24 hours.",
-    "     * ",
-    "     * Uses Line Sweep Algorithm: O(n log n) time, O(n) space.",
-    "     */",
+    "    /** Find max concurrent drivers in last 24 hours. O(n log n) line sweep. */",
     "    public int getMaxActiveDriversInLast24Hours(long currentTime) {",
     "        long windowStart = currentTime - SECONDS_IN_24_HOURS;",
     "        long windowEnd = currentTime;",
     "        ",
-    "        // Build events list: [time, delta]",
-    "        // delta = +1 for start, -1 for end",
+    "        // Create events: [time, delta]",
     "        List<long[]> events = new ArrayList<>();",
-    "        ",
-    "        for (Delivery delivery : deliveries) {",
-    "            // Skip deliveries entirely outside window",
-    "            if (delivery.endTime <= windowStart || delivery.startTime >= windowEnd) {",
+    "        for (long[] delivery : deliveries) {",
+    "            long start = delivery[1];",
+    "            long end = delivery[2];",
+    "            ",
+    "            // Skip if no overlap with window",
+    "            if (end <= windowStart || start >= windowEnd) {",
     "                continue;",
     "            }",
     "            ",
-    "            // Clip to window boundaries",
-    "            long clippedStart = Math.max(delivery.startTime, windowStart);",
-    "            long clippedEnd = Math.min(delivery.endTime, windowEnd);",
-    "            ",
-    "            events.add(new long[]{clippedStart, 1});  // Start event",
-    "            events.add(new long[]{clippedEnd, -1});   // End event",
+    "            // Clip to window",
+    "            long clippedStart = Math.max(start, windowStart);",
+    "            long clippedEnd = Math.min(end, windowEnd);",
+    "            events.add(new long[]{clippedStart, 1});",
+    "            events.add(new long[]{clippedEnd, -1});",
     "        }",
     "        ",
     "        if (events.isEmpty()) {",
     "            return 0;",
     "        }",
     "        ",
-    "        // Sort by time, then by delta (-1 before +1 at same time)",
+    "        // Sort by time, then by delta (end before start at same time)",
     "        events.sort((a, b) -> {",
     "            if (a[0] != b[0]) return Long.compare(a[0], b[0]);",
-    "            return Long.compare(a[1], b[1]); // -1 < 1",
+    "            return Long.compare(a[1], b[1]);",
     "        });",
     "        ",
-    "        // Sweep through tracking active count",
     "        int maxActive = 0;",
     "        int currentActive = 0;",
-    "        ",
     "        for (long[] event : events) {",
     "            currentActive += (int) event[1];",
     "            maxActive = Math.max(maxActive, currentActive);",
@@ -602,455 +412,404 @@
     "    }",
     "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(70));",
-    "        System.out.println(\"PART 3: Maximum Active Drivers Analytics\");",
-    "        System.out.println(\"=\".repeat(70));",
+    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"PART 3: MAXIMUM ACTIVE DRIVERS ANALYTICS\");",
+    "        System.out.println(\"============================================================\");",
     "        ",
-    "        // Test Case 1: Overlapping deliveries",
-    "        System.out.println(\"\\n--- Test Case 1: Overlapping Deliveries ---\");",
-    "        DeliveryCostTracker tracker = new DeliveryCostTracker();",
+    "        // Example 1: Three overlapping drivers",
+    "        DeliveryCostTracker t = new DeliveryCostTracker();",
+    "        t.addDriver(1, new BigDecimal(\"10\"));",
+    "        t.addDriver(2, new BigDecimal(\"10\"));",
+    "        t.addDriver(3, new BigDecimal(\"10\"));",
+    "        t.addDelivery(1, 0, 3000);",
+    "        t.addDelivery(2, 1000, 2500);",
+    "        t.addDelivery(3, 1500, 4000);",
+    "        System.out.println(\"Max active (3 overlapping): \" + ",
+    "            t.getMaxActiveDriversInLast24Hours(86400) + \" (expected: 3)\");",
     "        ",
-    "        tracker.addDriver(1, 10.0);",
-    "        tracker.addDriver(2, 10.0);",
-    "        tracker.addDriver(3, 10.0);",
+    "        // Example 2: Non-overlapping",
+    "        System.out.println(\"\\n----------------------------------------\");",
+    "        DeliveryCostTracker t2 = new DeliveryCostTracker();",
+    "        t2.addDriver(1, new BigDecimal(\"10\"));",
+    "        t2.addDriver(2, new BigDecimal(\"10\"));",
+    "        t2.addDelivery(1, 0, 1000);",
+    "        t2.addDelivery(2, 2000, 3000);",
+    "        System.out.println(\"Max active (no overlap): \" + ",
+    "            t2.getMaxActiveDriversInLast24Hours(86400) + \" (expected: 1)\");",
     "        ",
-    "        tracker.addDelivery(1, 0, 3000);",
-    "        tracker.addDelivery(2, 1000, 2500);",
-    "        tracker.addDelivery(3, 1500, 4000);",
+    "        // Verify Part 2 still works",
+    "        System.out.println(\"\\n----------------------------------------\");",
+    "        System.out.println(\"Total cost: $\" + t.getTotalCost());",
+    "        t.payUpToTime(3000);",
+    "        System.out.println(\"After pay(3000): $\" + t.getCostToBePaid() + \" unpaid\");",
     "        ",
-    "        int result = tracker.getMaxActiveDriversInLast24Hours(86400);",
-    "        System.out.println(\"Max active drivers: \" + result);",
-    "        System.out.println(\"Expected: 3 \" + (result == 3 ? \"\u2713\" : \"\u2717\"));",
-    "        ",
-    "        // Test Case 2: Non-overlapping",
-    "        System.out.println(\"\\n--- Test Case 2: Non-Overlapping ---\");",
-    "        DeliveryCostTracker tracker2 = new DeliveryCostTracker();",
-    "        tracker2.addDriver(1, 10.0);",
-    "        tracker2.addDriver(2, 10.0);",
-    "        tracker2.addDelivery(1, 0, 1000);",
-    "        tracker2.addDelivery(2, 2000, 3000);",
-    "        ",
-    "        int result2 = tracker2.getMaxActiveDriversInLast24Hours(86400);",
-    "        System.out.println(\"Max active drivers: \" + result2);",
-    "        System.out.println(\"Expected: 1 \" + (result2 == 1 ? \"\u2713\" : \"\u2717\"));",
-    "        ",
-    "        // Test Case 3: Adjacent (touch at boundary)",
-    "        System.out.println(\"\\n--- Test Case 3: Adjacent Deliveries ---\");",
-    "        DeliveryCostTracker tracker3 = new DeliveryCostTracker();",
-    "        tracker3.addDriver(1, 10.0);",
-    "        tracker3.addDriver(2, 10.0);",
-    "        tracker3.addDelivery(1, 0, 1000);",
-    "        tracker3.addDelivery(2, 1000, 2000);",
-    "        ",
-    "        int result3 = tracker3.getMaxActiveDriversInLast24Hours(86400);",
-    "        System.out.println(\"Max active drivers: \" + result3);",
-    "        System.out.println(\"Expected: 1 \" + (result3 == 1 ? \"\u2713\" : \"\u2717\"));",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(70));",
-    "        System.out.println(\"ALL TESTS COMPLETED\");",
-    "        System.out.println(\"=\".repeat(70));",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"All Part 3 tests passed!\");",
+    "        System.out.println(\"============================================================\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-11",
-      "explanation": "**Imports and Delivery class**: Import Decimal for precise money, define Delivery dataclass to store interval data (driver_id, start_time, end_time)."
+      "lines": "1-8",
+      "explanation": "Imports and class setup - same as Part 2 with added typing support"
     },
     {
-      "lines": "14-36",
-      "explanation": "**Class setup and __init__**: Constants for time conversions. Initialize drivers dict, total cost, settled amount (Parts 1-2), plus new `_deliveries` list for Part 3."
+      "lines": "14-21",
+      "explanation": "Constructor now includes _deliveries list to store all delivery intervals for analytics"
     },
     {
-      "lines": "38-66",
-      "explanation": "**add_driver and add_delivery**: Same as Parts 1-2, but add_delivery now also appends a Delivery object to `_deliveries` list for analytics."
+      "lines": "27-38",
+      "explanation": "add_delivery extended to append (driver_id, start_time, end_time) tuple to _deliveries list"
     },
     {
-      "lines": "68-94",
-      "explanation": "**get_total_cost, settle_payment, get_outstanding_balance**: Unchanged from Part 2. Decimal precision and settlement logic."
-    },
-    {
-      "lines": "96-147",
-      "explanation": "**get_max_active_drivers_in_last_24_hours**: The new Part 3 method. Line sweep algorithm implementation:\n- Calculate 24h window bounds\n- Filter and clip deliveries to window\n- Create events: (start, +1) and (end, -1)\n- Sort by time (ends before starts at same time)\n- Sweep through maintaining and tracking max active count"
-    },
-    {
-      "lines": "150-220",
-      "explanation": "**main() function**: Comprehensive test cases covering overlapping, non-overlapping, adjacent, empty, outside window, and partial overlap scenarios."
+      "lines": "52-78",
+      "explanation": "NEW: get_max_active_drivers_in_last_24_hours implements line sweep - filter to window, create events, sort, sweep and track max"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "getMaxActiveDriversInLast24Hours": {
+        "get_max_active_drivers_in_last_24_hours": {
           "complexity": "O(n log n)",
-          "explanation": "Where n = number of deliveries in the window. Creating events is O(n), sorting is O(n log n), sweep is O(n). Dominated by sorting."
+          "explanation": "Where n = deliveries overlapping with window. Filter is O(n), creating events is O(n), sort is O(n log n), sweep is O(n). Sort dominates."
         }
       },
-      "overall_change": "Part 1-2 operations remain O(1). Part 3 adds an O(n log n) analytics query that doesn't affect other operations."
+      "modified_methods": {
+        "add_delivery": {
+          "complexity": "O(log n)",
+          "explanation": "Unchanged from Part 2 - heap push is O(log n), list append is O(1) amortized"
+        }
+      },
+      "overall_change": "New analytics query is O(n log n) per call. add_delivery unchanged at O(log n)."
     },
     "space": {
-      "additional_space": "O(n) permanent + O(n) temporary",
-      "explanation": "Permanent: self._deliveries stores all deliveries (grows with add_delivery calls). Temporary: events list created for each query (not persisted)."
+      "additional_space": "O(n) where n = total deliveries",
+      "explanation": "_deliveries list stores all delivery tuples. Additionally, each analytics query creates O(k) events temporarily where k = deliveries in window."
     }
   },
   "dry_run": {
-    "example_input": "Drivers: 1,2,3 (rate $10). Deliveries: D1[0,3000], D2[1000,2500], D3[1500,4000]. Query at t=86400.",
+    "example_input": "Drivers: 1,2,3. Deliveries: D1[0,3000], D2[1000,2500], D3[1500,4000]. Query at currentTime=86400.",
     "steps": [
       {
         "step": 1,
         "action": "Calculate window",
-        "state": "window_start=0, window_end=86400",
-        "explanation": "24h window: [86400-86400, 86400] = [0, 86400]"
+        "state": "window = [0, 86400]",
+        "explanation": "86400 - 86400 = 0, so window covers everything"
       },
       {
         "step": 2,
-        "action": "Process D1[0,3000]",
-        "state": "events=[(0,+1), (3000,-1)]",
-        "explanation": "D1 is within window, no clipping needed. Add start/end events."
+        "action": "Filter deliveries",
+        "state": "All 3 overlap",
+        "explanation": "D1[0,3000], D2[1000,2500], D3[1500,4000] all within window"
       },
       {
         "step": 3,
-        "action": "Process D2[1000,2500]",
-        "state": "events=[(0,+1), (3000,-1), (1000,+1), (2500,-1)]",
-        "explanation": "D2 is within window. Add its events."
+        "action": "Create events",
+        "state": "[(0,+1), (3000,-1), (1000,+1), (2500,-1), (1500,+1), (4000,-1)]",
+        "explanation": "Each delivery creates start and end event"
       },
       {
         "step": 4,
-        "action": "Process D3[1500,4000]",
-        "state": "events=[(0,+1), (3000,-1), (1000,+1), (2500,-1), (1500,+1), (4000,-1)]",
-        "explanation": "D3 is within window. Add its events."
+        "action": "Sort events",
+        "state": "[(0,+1), (1000,+1), (1500,+1), (2500,-1), (3000,-1), (4000,-1)]",
+        "explanation": "Sort by (time, delta) puts them in chronological order"
       },
       {
         "step": 5,
-        "action": "Sort events",
-        "state": "sorted=[(0,+1), (1000,+1), (1500,+1), (2500,-1), (3000,-1), (4000,-1)]",
-        "explanation": "Sort by (time, delta). No same-time conflicts in this example."
+        "action": "Sweep: t=0",
+        "state": "current=1, max=1",
+        "explanation": "D1 starts"
       },
       {
         "step": 6,
-        "action": "Sweep: (0,+1)",
-        "state": "current=1, max=1",
-        "explanation": "D1 starts. 1 active driver."
+        "action": "Sweep: t=1000",
+        "state": "current=2, max=2",
+        "explanation": "D2 starts"
       },
       {
         "step": 7,
-        "action": "Sweep: (1000,+1)",
-        "state": "current=2, max=2",
-        "explanation": "D2 starts. 2 active drivers."
+        "action": "Sweep: t=1500",
+        "state": "current=3, max=3",
+        "explanation": "D3 starts - MAXIMUM REACHED"
       },
       {
         "step": 8,
-        "action": "Sweep: (1500,+1)",
-        "state": "current=3, max=3 \u2605",
-        "explanation": "D3 starts. 3 active drivers - NEW MAXIMUM!"
+        "action": "Sweep: t=2500",
+        "state": "current=2, max=3",
+        "explanation": "D2 ends"
       },
       {
         "step": 9,
-        "action": "Sweep: (2500,-1)",
-        "state": "current=2, max=3",
-        "explanation": "D2 ends. Back to 2 active."
+        "action": "Sweep: t=3000",
+        "state": "current=1, max=3",
+        "explanation": "D1 ends"
       },
       {
         "step": 10,
-        "action": "Sweep: (3000,-1)",
-        "state": "current=1, max=3",
-        "explanation": "D1 ends. 1 active."
-      },
-      {
-        "step": 11,
-        "action": "Sweep: (4000,-1)",
+        "action": "Sweep: t=4000",
         "state": "current=0, max=3",
-        "explanation": "D3 ends. 0 active."
+        "explanation": "D3 ends"
       }
     ],
-    "final_output": "3 (maximum concurrent drivers)"
+    "final_output": "3"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single delivery \u2192 should return 1",
-      "Empty tracker \u2192 should return 0",
-      "Two adjacent deliveries [0,1000], [1000,2000] \u2192 should return 1 (not 2)"
+      "Empty deliveries list \u2192 return 0",
+      "Single delivery in window \u2192 return 1",
+      "Two non-overlapping \u2192 return 1"
     ],
     "likely_bugs": [
-      "Wrong event ordering: starts before ends at same time causes off-by-one",
-      "Forgetting to clip intervals to window \u2192 wrong count for partial overlaps",
-      "Using <= or >= wrong in window filtering \u2192 missing or extra deliveries",
-      "Not handling empty deliveries list \u2192 index error or wrong return"
+      "Forgetting to clip to window boundaries",
+      "Wrong sort order (starts before ends at same time)",
+      "Off-by-one in window comparison (< vs <=)"
     ],
     "recommended_logs_or_asserts": [
-      "print(f'Window: [{window_start}, {window_end}]')",
-      "print(f'Events before sort: {events}')",
-      "print(f'Events after sort: {events}')",
-      "assert current_active >= 0, 'Active count went negative!'"
+      "Print events list after sorting",
+      "Print current_active after each event",
+      "Assert current_active >= 0 after sweep"
     ],
-    "how_to_localize": "1. Print the events list after creation to verify correct filtering/clipping. 2. Print sorted events to verify order. 3. Print current_active after each event to trace the sweep. 4. Check if max is updated at the right time."
+    "how_to_localize": "1. Print window bounds. 2. Print which deliveries pass filter. 3. Print sorted events. 4. Print running count at each step."
   },
   "edge_cases": [
     {
       "case": "No deliveries",
-      "handling": "Return 0 early if events list is empty",
-      "gotcha": "Don't try to process empty list"
+      "handling": "Return 0 (events list empty)",
+      "gotcha": "Don't process empty list"
     },
     {
-      "case": "All deliveries outside 24h window",
-      "handling": "Filtering removes them all, events list empty, return 0",
-      "gotcha": "Window is [currentTime-86400, currentTime], both bounds matter"
+      "case": "All deliveries outside window",
+      "handling": "Filter removes all, return 0",
+      "gotcha": "Check both boundaries correctly"
     },
     {
-      "case": "Adjacent intervals (D1 ends when D2 starts)",
-      "handling": "Sort puts -1 before +1 at same time, so count goes down then up",
-      "gotcha": "Common mistake: counting them as concurrent"
+      "case": "Delivery ends exactly at window start",
+      "handling": "Skip (end <= window_start)",
+      "gotcha": "Use <= not < for end boundary"
     },
     {
-      "case": "Delivery partially overlaps window start",
-      "handling": "Clip start_time to window_start",
-      "gotcha": "Use max(delivery.start, window_start)"
+      "case": "Delivery starts exactly at window end",
+      "handling": "Skip (start >= window_end)",
+      "gotcha": "Use >= not > for start boundary"
     },
     {
-      "case": "Delivery partially overlaps window end",
-      "handling": "Clip end_time to window_end",
-      "gotcha": "Use min(delivery.end, window_end)"
+      "case": "Same start and end times for different deliveries",
+      "handling": "Sort puts ends before starts, so transitioning drivers count correctly",
+      "gotcha": "Sorting by (time, delta) handles this"
     },
     {
-      "case": "Single driver with multiple deliveries",
-      "handling": "Each delivery is counted separately (same driver can overlap with self)",
-      "gotcha": "Problem says 'drivers', but we count delivery intervals"
+      "case": "Delivery spans entire window",
+      "handling": "Clip to window, counts for full duration",
+      "gotcha": "max/min clipping handles this"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic overlapping - 3 drivers",
-      "input": "Drivers 1,2,3 @ $10. Deliveries: [0,3000], [1000,2500], [1500,4000]. Query at 86400.",
+      "name": "Three overlapping drivers - peak at middle",
+      "input": "D1[0,3000], D2[1000,2500], D3[1500,4000], query at 86400",
       "expected": "3",
-      "explanation": "All three overlap in interval [1500, 2500]"
+      "explanation": "All three overlap at t=1500 to t=2500"
     },
     {
-      "name": "Non-overlapping",
-      "input": "Drivers 1,2. Deliveries: [0,1000], [2000,3000]. Query at 86400.",
+      "name": "Non-overlapping deliveries",
+      "input": "D1[0,1000], D2[2000,3000], query at 86400",
       "expected": "1",
-      "explanation": "No overlap, max is 1 at any time"
+      "explanation": "D1 ends before D2 starts, never more than 1 active"
     },
     {
-      "name": "Adjacent (boundary touch)",
-      "input": "Drivers 1,2. Deliveries: [0,1000], [1000,2000]. Query at 86400.",
+      "name": "Partial window overlap",
+      "input": "D1[80000,90000], query at 86500",
       "expected": "1",
-      "explanation": "D1 ends exactly when D2 starts - not concurrent"
+      "explanation": "Window is [100, 86500], delivery [80000,90000] clipped to [80000, 86500]"
     },
     {
-      "name": "Empty",
-      "input": "No deliveries. Query at 86400.",
+      "name": "All deliveries before window",
+      "input": "D1[0,1000], query at 100000",
       "expected": "0",
-      "explanation": "No deliveries means no active drivers"
-    },
-    {
-      "name": "Outside window",
-      "input": "Delivery [0,1000]. Query at 100000.",
-      "expected": "0",
-      "explanation": "Window is [13600, 100000], delivery ends at 1000 which is before window"
-    },
-    {
-      "name": "Partial overlap with window",
-      "input": "Deliveries: [-1000,5000], [3000,90000]. Query at 86400.",
-      "expected": "2",
-      "explanation": "Clipped to [0,5000] and [3000,86400], overlap in [3000,5000]"
+      "explanation": "Window is [13600, 100000], D1 ends at 1000 which is before window"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Processing starts before ends at same timestamp",
-      "why_wrong": "If D1 ends at t=1000 and D2 starts at t=1000, processing start first gives count=2 briefly, which is wrong",
-      "correct_approach": "Sort by (time, delta) where delta=-1 for end, +1 for start. Since -1 < 1, ends sort before starts.",
-      "code_example_wrong": "events.sort(key=lambda e: e[0])  # Only by time",
-      "code_example_correct": "events.sort(key=lambda e: (e[0], e[1]))  # By time, then delta"
-    },
-    {
       "mistake": "Not clipping intervals to window",
-      "why_wrong": "A delivery from t=-1000 to t=5000 with window [0, 86400] should only contribute active time from 0 to 5000",
-      "correct_approach": "Clip: clipped_start = max(start, window_start), clipped_end = min(end, window_end)",
-      "code_example_wrong": "events.append((delivery.start_time, 1))",
-      "code_example_correct": "clipped_start = max(delivery.start_time, window_start)\\nevents.append((clipped_start, 1))"
+      "why_wrong": "A delivery from t=0 to t=100000 would count as active for entire window, but we should only consider the portion within window",
+      "correct_approach": "Use max(start, window_start) and min(end, window_end)",
+      "code_example_wrong": "events.append((start, 1))",
+      "code_example_correct": "clipped_start = max(start, window_start)\\nevents.append((clipped_start, 1))"
     },
     {
-      "mistake": "Wrong window boundary conditions for filtering",
-      "why_wrong": "Using < instead of <= (or vice versa) can include/exclude edge deliveries incorrectly",
-      "correct_approach": "delivery.end_time <= window_start means entirely before (exclude). delivery.start_time >= window_end means entirely after (exclude).",
-      "code_example_wrong": "if delivery.end_time < window_start:  # Misses case where end == window_start",
-      "code_example_correct": "if delivery.end_time <= window_start:  # Correct: delivery ends at or before window starts"
+      "mistake": "Wrong event ordering at same timestamp",
+      "why_wrong": "If end and start happen at same time, putting start first overcounts overlap",
+      "correct_approach": "Sort by (time, delta) so -1 comes before +1",
+      "code_example_wrong": "events.sort(key=lambda x: x[0])",
+      "code_example_correct": "events.sort(key=lambda x: (x[0], x[1]))"
     },
     {
-      "mistake": "Forgetting to handle empty case",
-      "why_wrong": "If no deliveries exist or none in window, events list is empty. Trying to sort/process empty list may error or give wrong result.",
-      "correct_approach": "Check if events list is empty and return 0 early.",
-      "code_example_wrong": "events.sort(...)  # Proceeds without check",
-      "code_example_correct": "if not events:\\n    return 0\\nevents.sort(...)"
+      "mistake": "Using wrong comparison for window boundaries",
+      "why_wrong": "end <= window_start means delivery ends at or before window starts (no overlap). start >= window_end means delivery starts at or after window ends (no overlap)",
+      "correct_approach": "Strict inequality on one side, inclusive on other",
+      "code_example_wrong": "if end < window_start or start > window_end:",
+      "code_example_correct": "if end <= window_start or start >= window_end:"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by recognizing this as the classic 'Meeting Rooms II' pattern. Say: 'This is an interval overlap problem, perfect for line sweep. I'll convert each delivery to start/end events, sort them, and sweep through tracking the count.' Draw the timeline diagram to illustrate.",
+    "how_to_present": "Start by recognizing this as Meeting Rooms II / interval overlap problem. Explain line sweep concept with +1/-1 events before coding. Draw a timeline showing how count changes.",
     "what_to_mention": [
-      "Recognize the pattern: 'This is like LC 253 Meeting Rooms II'",
-      "Explain the insight: 'Count only changes at event points'",
-      "Handle edge case: 'At same time, process ends before starts'",
-      "State complexity: 'O(n log n) for sort, O(n) for sweep'",
-      "Mention window clipping: 'Deliveries may partially overlap the 24h window'"
+      "This is O(n log n) dominated by sorting",
+      "Line sweep is a classic technique for interval problems",
+      "Clipping to window is important for correctness",
+      "Event ordering at same timestamp matters"
     ],
-    "time_allocation": "2 min to recognize pattern and explain approach, 6-8 min to implement, 2 min to test/verify",
+    "time_allocation": "2 min recognize pattern, 3 min explain approach, 5 min implement, 2 min test",
     "if_stuck": [
-      "Think about when the active count changes - only at delivery start/end times",
-      "How do you count overlapping intervals? Create events!",
-      "What if two events happen at the same time? Order matters.",
-      "What about deliveries partially in the window? Clip them."
+      "Think: when does the count change?",
+      "Only at start and end of intervals",
+      "What if we sorted all those moments?",
+      "How do we handle same-time events?"
     ]
   },
-  "connection_to_next_part": "Part 3's delivery storage enables future analytics like: Part 4 could ask for 'busiest hour of the day', 'average delivery duration', or 'per-driver utilization'. The line sweep technique can be adapted for time-bucketed analytics or sliding window queries with different granularity.",
+  "connection_to_next_part": "Part 4 might add per-driver analytics (cost per driver, busiest driver) or real-time streaming max. The _deliveries list is ready to support per-driver queries by filtering on driver_id. For streaming, we might need a segment tree or different approach.",
   "communication_script": {
-    "transition_from_previous": "Great, Part 2 is working with settlement tracking. For Part 3, I need to add analytics to find the maximum concurrent active drivers in a 24-hour window. This is a classic interval overlap problem!",
-    "explaining_changes": "The key change is I need to **store delivery intervals**, not just costs. I'll add a Delivery class and a list to track them. The new method uses the **line sweep algorithm** - I convert intervals to events, sort them, and sweep through.",
+    "transition_from_previous": "Great, Part 2's payment tracking is working. For Part 3, I need to find the maximum number of concurrent active drivers in a 24-hour window. This is essentially the Meeting Rooms II problem!",
+    "explaining_changes": "The key change is adding a _deliveries list to store all delivery intervals. The line sweep algorithm creates +1 events at starts and -1 at ends, sorts them, and sweeps through tracking the running count.",
     "while_extending_code": [
-      "First, I'll add a Delivery dataclass to store driver_id, start_time, end_time...",
-      "In add_delivery, I'll append to the deliveries list after calculating cost...",
-      "For the new method, I filter to the 24h window, clip intervals, create events...",
-      "The sorting key (time, delta) ensures ends come before starts at the same time..."
+      "I'm adding _deliveries to store intervals for analytics...",
+      "In add_delivery, I append the interval tuple...",
+      "The new method filters to window, creates events, sorts by (time, delta), and sweeps..."
     ],
-    "after_completing": "This handles Part 3. The analytics query is O(n log n) due to sorting. Parts 1-2 operations are unchanged at O(1). The deliveries list grows with each add_delivery but that's necessary for analytics. Ready for Part 4?"
+    "after_completing": "This handles Part 3 with O(n log n) for the analytics query. The existing O(log n) operations are unchanged. Ready for Part 4!"
   },
   "time_milestones": {
     "time_budget": "8-12 minutes for this part",
-    "by_2_min": "Recognize line sweep pattern, explain the approach, identify data structure changes (need to store intervals)",
-    "by_5_min": "Add Delivery class, modify add_delivery to store intervals, start implementing the new method",
-    "by_10_min": "Implementation complete, run through one test case to verify correctness",
-    "warning_signs": "If still thinking about approach at 4 min, simplify: just focus on the core algorithm. If implementation isn't started by 6 min, ask for a hint on event representation."
+    "by_2_min": "Recognize as interval overlap / Meeting Rooms II problem. Identify need to store intervals.",
+    "by_5_min": "Explain line sweep approach. Start modifying add_delivery and adding new method.",
+    "by_10_min": "Implementation done. Testing with the overlapping example.",
+    "warning_signs": "If still explaining approach at 5 min, start coding. If stuck on event ordering, ask for hint."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If Part 2 has bugs affecting delivery storage, fix those first. Say: 'I notice an issue with how I'm storing data - let me fix that before adding the analytics.'",
-    "if_new_requirement_unclear": "Ask: 'For the 24-hour window, if a delivery starts before the window and ends inside, should I count it as active from the window start or ignore it?' (Answer: clip it to window)",
-    "if_running_behind": "Skip the clipping logic initially - assume all deliveries are within the window. Mention: 'In production I'd add window clipping, but let me get the core algorithm working first.'"
+    "if_part_builds_wrong": "Part 3 is largely independent. If heap from Part 2 has issues, the analytics still works since it uses _deliveries not _unpaid.",
+    "if_new_requirement_unclear": "Ask: 'For the 24-hour window, is it [T-86400, T] inclusive on both ends, or half-open?' Usually half-open [start, end).",
+    "if_running_behind": "Skip clipping optimization first - it's correct without clipping, just slightly inefficient. Add clipping after core works."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing: 'This is Meeting Rooms II / line sweep'",
-      "Explaining why ends-before-starts ordering matters",
-      "Mentioning interval clipping for partial window overlap",
-      "Discussing O(n log n) vs O(n\u00b2) approaches proactively",
-      "Noting that the same technique works for other interval analytics"
+      "Immediately recognizing Meeting Rooms II pattern",
+      "Explaining why sort order matters for same-timestamp events",
+      "Mentioning the clipping requirement for window boundaries",
+      "Discussing O(n log n) vs O(n\u00b2) approaches",
+      "Proactively mentioning segment tree for real-time queries"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Line Sweep / Event-Based Processing",
+    "pattern": "Line Sweep / Event-based Interval Processing",
     "indicators": [
-      "Question asks about 'maximum concurrent/overlapping' anything",
-      "Time intervals are involved",
-      "Need to find peak usage/capacity",
-      "Keywords: 'simultaneously', 'at any point', 'overlapping'"
+      "Find maximum overlap/concurrent count",
+      "Interval data",
+      "Questions about 'at any point in time'"
     ],
     "similar_problems": [
-      "LC 253 - Meeting Rooms II (minimum conference rooms)",
+      "LC 253 - Meeting Rooms II",
       "LC 56 - Merge Intervals",
-      "LC 252 - Meeting Rooms (can one person attend all?)",
-      "LC 1094 - Car Pooling",
-      "LC 731 - My Calendar II"
+      "LC 252 - Meeting Rooms",
+      "LC 759 - Employee Free Time",
+      "Skyline Problem"
     ],
-    "template": "```python\\n# Line Sweep Template\\nevents = []\\nfor interval in intervals:\\n    events.append((interval.start, +1))  # Start\\n    events.append((interval.end, -1))    # End\\n\\nevents.sort(key=lambda e: (e[0], e[1]))  # Time, then delta\\n\\nmax_count = current = 0\\nfor time, delta in events:\\n    current += delta\\n    max_count = max(max_count, current)\\nreturn max_count\\n```"
+    "template": "```python\\n# Line Sweep Template\\nevents = []\\nfor start, end in intervals:\\n    events.append((start, +1))  # or START constant\\n    events.append((end, -1))    # or END constant\\nevents.sort(key=lambda x: (x[0], x[1]))  # time, then type\\ncount = max_count = 0\\nfor _, delta in events:\\n    count += delta\\n    max_count = max(max_count, count)\\nreturn max_count\\n```"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'maximum concurrent' with time intervals...",
-      "why": "This is the classic signal for line sweep. I don't need to check every moment, just the moments when something changes."
+      "thought": "When I see 'maximum concurrent' or 'maximum overlap', I immediately think of Meeting Rooms II and line sweep.",
+      "why": "This is a classic pattern - converting interval queries to event processing."
     },
     {
       "step": 2,
-      "thought": "The count only changes at interval boundaries (starts/ends)...",
-      "why": "This means I only need O(n) events for n intervals, not O(time_range) samples."
+      "thought": "I need to track intervals, not just costs. Part 2 only stored end_time for payment.",
+      "why": "Analytics needs start_time too, so I need to add storage."
     },
     {
       "step": 3,
-      "thought": "What about ties? If one ends and another starts at the same time...",
-      "why": "Convention says they're not concurrent. So process ends before starts at same timestamp."
+      "thought": "The 24-hour window means I need to filter AND clip intervals.",
+      "why": "Some deliveries might partially overlap with the window."
     },
     {
       "step": 4,
-      "thought": "The 24-hour window adds a filtering/clipping step...",
-      "why": "I need to ignore irrelevant deliveries and adjust partial overlaps to stay within bounds."
+      "thought": "Event ordering at same timestamp: ends before starts.",
+      "why": "If D1 ends at t=100 and D2 starts at t=100, they shouldn't count as overlapping at that instant."
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you recognize the line sweep pattern?",
-      "Do you handle the edge case of same-time events correctly?",
-      "Can you extend existing code cleanly without breaking Parts 1-2?",
-      "Do you think about the window boundary conditions?"
+      "Do you recognize line sweep pattern?",
+      "Can you extend Part 2 cleanly?",
+      "Do you handle window boundaries correctly?",
+      "Can you explain the algorithm clearly?"
     ],
     "bonus_points": [
-      "Mentioning Meeting Rooms II by name shows pattern recognition",
-      "Drawing the timeline diagram shows clear communication",
-      "Discussing why O(n log n) is optimal shows algorithmic depth",
-      "Handling partial window overlap shows attention to detail"
+      "Mentioning the sort order for same-timestamp events",
+      "Discussing clipping",
+      "Comparing to naive O(n\u00b2)",
+      "Noting this is similar to Meeting Rooms II"
     ],
     "red_flags": [
-      "Trying O(n\u00b2) pair comparison approach",
-      "Not storing delivery intervals (only costs)",
-      "Wrong ordering of same-time events",
-      "Forgetting empty case handling"
+      "Rewriting from scratch instead of extending",
+      "Not recognizing the pattern after hints",
+      "Incorrect window boundary handling",
+      "O(n\u00b2) approach without acknowledging inefficiency"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI to generate the sorting lambda syntax if unsure",
-      "Let AI help with the Delivery dataclass boilerplate",
-      "Ask AI to verify edge case handling"
+      "Use AI to generate the event creation loop",
+      "Let it help with sort key syntax"
     ],
     "what_not_to_do": [
-      "Don't let AI choose the algorithm - you should recognize line sweep",
-      "Verify the event ordering logic - AI might get it backwards",
-      "Don't blindly accept window filtering logic - trace through manually"
+      "Don't accept without understanding why -1 comes before +1",
+      "Verify the window filtering logic yourself"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Staying silent while thinking - explain 'I'm thinking about whether ends should come before starts...'",
-      "Not drawing a diagram - this problem begs for visual explanation",
-      "Rushing to code before explaining the approach"
+      "Taking too long to recognize the pattern",
+      "Not asking about window boundary semantics"
     ],
     "technical": [
-      "Using a nested loop O(n\u00b2) approach instead of line sweep",
-      "Forgetting to store delivery intervals in add_delivery",
-      "Wrong sort order for same-time events",
-      "Not considering window clipping"
+      "Forgetting to store intervals in Part 3 addition",
+      "Wrong event ordering",
+      "Not clipping to window"
     ],
     "communication": [
-      "Not mentioning the pattern name (line sweep / Meeting Rooms II)",
-      "Not stating the complexity (O(n log n))",
-      "Not explaining why the sort order matters"
+      "Not explaining line sweep before coding",
+      "Not mentioning the complexity improvement over naive"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "\u2705 New method returns correct value for overlapping example (3)",
-      "\u2705 Non-overlapping case returns 1",
-      "\u2705 Adjacent intervals (same endpoint) return 1, not 2",
-      "\u2705 Empty case returns 0",
-      "\u2705 Parts 1-2 functionality still works"
+      "Does line sweep sort events correctly (ends before starts)?",
+      "Is window filtering correct (end <= start, start >= end)?",
+      "Is clipping applied (max/min)?",
+      "Does empty input return 0?",
+      "Are Parts 1-2 still working?"
     ],
     "quick_code_review": [
-      "Delivery class is properly defined",
-      "_deliveries list is initialized in __init__",
+      "_deliveries list added to __init__",
       "add_delivery appends to _deliveries",
-      "Events sorted by (time, delta)",
-      "Empty events list handled before sorting"
+      "New method has correct signature from problem",
+      "SECONDS_IN_24_HOURS = 86400"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Logging: Track when analytics queries are made and their performance",
-      "Caching: If the same window is queried repeatedly, cache the result",
-      "Pagination: For very large delivery lists, consider chunked processing",
-      "Index: If queries are frequent, maintain a sorted data structure (TreeMap) for faster access"
+      "Index on time for faster filtering",
+      "Caching recent analytics results",
+      "Background computation for large datasets",
+      "Metrics on query latency"
     ],
-    "why_not_in_interview": "Focus on the core algorithm. These optimizations are mentioned but not implemented to save time.",
-    "how_to_mention": "Say: 'In production, I'd add caching for repeated queries and consider a TreeMap if we need range queries frequently.'"
+    "why_not_in_interview": "Focus on the algorithm; these are operational concerns",
+    "how_to_mention": "Say: 'In production, I'd add caching since this analytics query might be called frequently for dashboards.'"
   },
-  "generated_at": "2026-01-18T18:18:29.078545",
+  "generated_at": "2026-01-19T04:39:56.406749",
   "_meta": {
     "problem_id": "delivery_cost_tracking",
     "part_number": 3,

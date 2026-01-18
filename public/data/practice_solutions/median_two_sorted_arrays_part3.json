@@ -4,175 +4,203 @@
   "builds_on": "Part 2",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "Instead of finding the k-th element in exactly 2 sorted arrays, we now need to find the **median** across **k sorted arrays**. The partition-based binary search approach from Part 2 becomes impractical because partitioning k arrays simultaneously has exponential complexity. We need a fundamentally different strategy: either (1) K-way merge using a min-heap, or (2) Binary search on the answer value space.",
+    "what_changes": "We extend from 2 sorted arrays to K sorted arrays. The partition-based binary search from Part 1 doesn't generalize well to K arrays, so we need a fundamentally different approach: K-way merge using a min heap.",
     "new_requirements": [
-      "Handle arbitrary number (k) of sorted arrays instead of just 2",
-      "Return the median (not k-th element) - requires handling odd/even total count",
-      "Must efficiently merge or query across all k arrays simultaneously"
+      "Handle arbitrary number K of sorted arrays",
+      "Find median of all elements combined efficiently",
+      "Handle empty arrays within the input"
     ],
     "new_constraints": [
-      "Any of the k arrays may be empty",
-      "k can be large, making O(k^2) approaches infeasible",
-      "Total elements N can be very large"
+      "K can be large (potentially hundreds of arrays)",
+      "Total elements N across all arrays can be large",
+      "Individual arrays can be empty"
     ],
-    "key_insight": "The **min-heap** approach gives us the next smallest element in O(log k) time, allowing us to efficiently find the median position. Alternatively, **binary search on value** lets us count elements \u2264 a threshold across all arrays in O(k log m) time, enabling O(k log(max-min) log m) solution."
+    "key_insight": "Use a min heap to perform K-way merge, extracting elements in sorted order. We only need to extract N/2 + 1 elements to find the median - we don't need to merge everything."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Handle k sorted arrays",
-        "how_met": "Min-heap tracks (value, array_idx, elem_idx) tuples for efficient k-way merge",
+        "requirement": "Find median of K sorted arrays",
+        "how_met": "K-way merge with min heap extracts elements in sorted order until median position",
         "gotchas": [
-          "Empty arrays must be filtered out before adding to heap"
+          "Must handle both odd and even total counts differently"
         ]
       },
       {
-        "requirement": "Return correct median",
-        "how_met": "Extract total//2 + 1 elements, handle odd/even cases separately",
+        "requirement": "Handle empty arrays",
+        "how_met": "Filter out empty arrays before processing, check for all-empty edge case",
         "gotchas": [
-          "Off-by-one errors in counting positions",
-          "Even case needs TWO middle elements"
+          "Null arrays in Java need separate check from length-0 arrays"
         ]
       },
       {
-        "requirement": "Efficient time complexity",
-        "how_met": "O(N log k) using heap, where N is total elements",
+        "requirement": "Efficient for large K",
+        "how_met": "Min heap maintains O(log K) per extraction, not O(K)",
         "gotchas": [
-          "Don't merge all arrays first (O(N log N))",
-          "Each heap operation is O(log k), not O(1)"
+          "Don't use linear scan to find minimum each time"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "findMedianOfKArrays (heap)",
-        "target": "O(N log k)",
-        "achieved": "O((N/2) log k)",
-        "why": "Extract ~N/2 elements, each extraction/insertion is O(log k)"
-      },
-      {
-        "operation": "findMedianOfKArrays (binary search)",
-        "target": "O(k log(range) log(maxLen))",
-        "achieved": "O(k log(max-min) log m)",
-        "why": "Binary search on value range, count via binary search in each array"
+        "operation": "findMedianOfKArrays",
+        "target": "O(N log K)",
+        "achieved": "O(N log K)",
+        "why": "Extract N/2 elements, each extraction is O(log K) for heap operations"
       }
     ],
     "non_goals": [
-      "Modifying the input arrays",
-      "Supporting streaming/dynamic updates",
-      "Handling unsorted arrays"
+      "Handling streaming/online additions",
+      "Modifying the original arrays"
     ]
   },
   "assumptions": [
-    "Arrays contain integers (for binary search on value approach)",
-    "Arrays are already sorted in ascending order",
-    "At least one array is non-empty (otherwise return 0.0)",
-    "No duplicate handling required beyond standard sorted array behavior"
+    "Each individual array is already sorted in non-decreasing order",
+    "Arrays contain integers (matching Part 1 and Part 2)",
+    "At least one array is non-empty (or return 0.0 for edge case)",
+    "No duplicate handling needed beyond standard median calculation"
   ],
   "tradeoffs": [
     {
-      "decision": "Min-Heap vs Binary Search on Value",
-      "chosen": "Min-Heap (primary solution)",
-      "why": "Simpler to implement correctly, works with any comparable values, handles all edge cases naturally",
-      "alternative": "Binary Search on Value",
-      "when_to_switch": "When arrays are very large but value range is small, or when we need to answer multiple median queries on same arrays"
+      "decision": "Heap approach vs Binary search on value",
+      "chosen": "Heap approach",
+      "why": "More intuitive, handles duplicates naturally, exact O(N log K) vs potentially O(K * N * log(range)) for binary search on value",
+      "alternative": "Binary search on answer value",
+      "when_to_switch": "If arrays are very long but total distinct values small, or if memory is extremely constrained"
     },
     {
       "decision": "Early termination vs Full merge",
-      "chosen": "Early termination at median position",
-      "why": "Only extract N/2 elements instead of N, cutting time in half",
-      "alternative": "Full merge then index",
-      "when_to_switch": "Never - full merge wastes time and space"
+      "chosen": "Early termination at N/2+1",
+      "why": "Only need median position, not full sorted array",
+      "alternative": "Merge all then index",
+      "when_to_switch": "If you need multiple queries on the same data"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Method signature: findMedianOfKArrays(int[][] arrays)",
-      "Return type: double for median",
-      "Handling of empty arrays"
+      "findMedianSortedArrays signature and behavior",
+      "findKthElement signature and behavior"
     ],
     "what_to_change": [
-      "Introduced heap data structure for k-way merge",
-      "New helper methods for counting elements"
+      "Add findMedianOfKArrays as new independent method"
     ],
-    "interfaces_and_boundaries": "The solution is self-contained. For Part 4 (if adding streaming updates), we'd need to change from one-time computation to maintaining a data structure",
+    "interfaces_and_boundaries": "K-array method is self-contained; could internally use findKthElement if we generalized it to K arrays, but heap approach is cleaner",
     "invariants": [
-      "Heap always contains at most k elements (one per array)",
-      "Elements extracted from heap are in sorted order",
-      "Count of extracted elements always matches expected position"
+      "Heap always contains at most K elements (one per non-exhausted array)",
+      "Each extraction gives the next smallest element globally",
+      "prev and curr track the two most recent extractions for even-count median"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 2): Two Arrays Only\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nnums1: [1, 3, 5, 7]\nnums2: [2, 4, 6, 8]\n        \u2193\n   Binary search on partition\n        \u2193\n   O(log(min(m,n)))\n\nAFTER (Part 3): K Arrays\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\narr0: [1, 5, 9]    \u2500\u2500\u2510\narr1: [2, 6, 10]   \u2500\u2500\u253c\u2500\u2500\u25b6 Min-Heap \u2500\u2500\u25b6 Extract median\narr2: [3, 7, 11]   \u2500\u2500\u2518    (size k)\n\nHeap maintains smallest from each array\nExtract N/2 + 1 times to find median\n```",
-    "algorithm_flow": "```\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551           K-WAY MERGE USING MIN-HEAP                         \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Arrays:  [1,5,9]  [2,6,10]  [3,7,11]                       \u2551\n\u2551              \u2502         \u2502          \u2502                          \u2551\n\u2551              \u25bc         \u25bc          \u25bc                          \u2551\n\u2551         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                      \u2551\n\u2551  Init:  \u2502   Min-Heap: [1, 2, 3]       \u2502 (first elements)    \u2551\n\u2551         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                      \u2551\n\u2551                                                              \u2551\n\u2551  Extract 1: pop 1, push 5 \u2192 Heap: [2, 3, 5]                 \u2551\n\u2551  Extract 2: pop 2, push 6 \u2192 Heap: [3, 5, 6]                 \u2551\n\u2551  Extract 3: pop 3, push 7 \u2192 Heap: [5, 6, 7]                 \u2551\n\u2551  Extract 4: pop 5, push 9 \u2192 Heap: [6, 7, 9]                 \u2551\n\u2551  Extract 5: pop 6 \u2190 This is median! (9 elements, pos 4)     \u2551\n\u2551                                                              \u2551\n\u2551  Total=9 (odd) \u2192 Median = 6                                  \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d\n```"
+    "before_after": "```\nBEFORE (Part 2): Only handle 2 arrays\n  nums1: [1, 3, 5]    nums2: [2, 4, 6]\n  Use binary elimination: O(log k)\n\nAFTER (Part 3): Handle K arrays\n  arr0: [1, 5, 9]\n  arr1: [2, 6, 10]\n  arr2: [3, 7, 11]\n  Use min heap for K-way merge: O(N log K)\n```",
+    "algorithm_flow": "```\nK-Way Merge with Min Heap:\n\nStep 0: Initialize heap with first element of each array\n        Heap: [(1,arr0), (2,arr1), (3,arr2)]\n\nStep 1: Extract min=1 from arr0, push arr0[1]=5\n        Heap: [(2,arr1), (3,arr2), (5,arr0)]\n        Extracted: [1]\n\nStep 2: Extract min=2 from arr1, push arr1[1]=6\n        Heap: [(3,arr2), (5,arr0), (6,arr1)]\n        Extracted: [1, 2]\n\nStep 3: Extract min=3 from arr2, push arr2[1]=7\n        Heap: [(5,arr0), (6,arr1), (7,arr2)]\n        Extracted: [1, 2, 3]\n\n... continue until position N/2 + 1 ...\n\nStep 5: curr=6, total=9 (odd) \u2192 return 6.0\n```"
   },
   "approaches": [
     {
-      "name": "Naive: Merge All Then Sort",
-      "description": "Concatenate all arrays into one, sort, find median",
-      "time_complexity": "O(N log N)",
+      "name": "Naive Extension - Merge All Then Find Median",
+      "description": "Merge all K arrays into one sorted array, then find median by indexing",
+      "time_complexity": "O(N log N) or O(N * K)",
       "space_complexity": "O(N)",
-      "why_not_optimal": "Doesn't leverage that arrays are already sorted. Wasteful when k is small."
+      "why_not_optimal": "Wastes time sorting/merging elements beyond median position. Also uses O(N) extra space to store merged array."
     },
     {
-      "name": "K-way Merge with Min-Heap (Optimal for General Case)",
-      "description": "Use min-heap to efficiently find the next smallest element across all k arrays. Extract elements until reaching median position.",
-      "time_complexity": "O(N/2 * log k) \u2248 O(N log k)",
-      "space_complexity": "O(k)",
-      "key_insight": "Min-heap always gives us the globally smallest remaining element in O(log k) time"
+      "name": "Optimal Approach - K-Way Merge with Min Heap",
+      "description": "Use min heap to track smallest current element across all arrays. Extract N/2 + 1 elements to find median without full merge.",
+      "time_complexity": "O(N log K)",
+      "space_complexity": "O(K)",
+      "key_insight": "Heap maintains the 'frontier' of K arrays. Each extraction gives next smallest element globally. Stop at median position."
     },
     {
-      "name": "Binary Search on Value Space",
-      "description": "Binary search on possible median values. For each candidate, count elements \u2264 candidate using binary search in each array.",
-      "time_complexity": "O(k * log(max-min) * log(maxArrayLen))",
+      "name": "Alternative - Binary Search on Value",
+      "description": "Binary search on answer value, counting elements <= mid in each array",
+      "time_complexity": "O(K * log(N) * log(max-min))",
       "space_complexity": "O(1)",
-      "key_insight": "Good when value range is small but total elements are huge"
+      "key_insight": "Elegant but tricky edge cases for finding exact median value when it must exist in the arrays"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: K-way Merge with Min-Heap\n\n### Core Idea\nWe maintain a **min-heap** of size at most k, where each entry represents the \"frontier\" of one array - the smallest element not yet extracted.\n\n### Algorithm\n1. **Initialize**: Push the first element of each non-empty array into the heap as `(value, array_index, element_index)`\n2. **Extract**: Pop the minimum element from heap. This is the next element in the merged sorted order.\n3. **Replenish**: Push the next element from the same array (if exists) into the heap\n4. **Repeat**: Continue until we've extracted `total // 2 + 1` elements\n5. **Return**: For odd total, return the last extracted element. For even total, return average of last two.\n\n### Why This Works\n- The heap invariant guarantees we always extract the **globally smallest** remaining element\n- Each array contributes at most one element to the heap at any time \u2192 O(k) space\n- Each extraction and insertion is O(log k)\n- We only extract ~N/2 elements, not all N\n\n### Complexity\n- **Time**: O((N/2) \u00d7 log k) = O(N log k)\n- **Space**: O(k) for the heap",
+    "explanation_md": "## K-Way Merge with Min Heap\n\nThe key insight is that we don't need to fully merge all arrays - we only need to find the **median position**.\n\n### Algorithm:\n1. **Initialize heap** with `(value, array_index, element_index)` for first element of each non-empty array\n2. **Extract minimum** repeatedly - each extraction gives the next smallest element globally\n3. **Track two values** (`prev` and `curr`) for handling even-length median\n4. **Stop early** at position `N/2 + 1` - we have enough info for median\n5. **Return** `curr` for odd total, `(prev + curr) / 2` for even total\n\n### Why O(N log K):\n- We extract at most `N/2 + 1` elements\n- Each heap operation (pop + push) is `O(log K)` where K = number of arrays\n- Total: `O(N * log K)`",
     "data_structures": [
       {
-        "structure": "Min-Heap / Priority Queue",
-        "purpose": "Efficiently track the smallest element across k arrays, enabling O(log k) extraction of global minimum"
+        "structure": "Min Heap / Priority Queue",
+        "purpose": "Efficiently track and extract the minimum across K frontiers in O(log K)"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Filter out empty arrays and calculate total element count",
-      "Step 2: Initialize min-heap with (value, array_idx, elem_idx) for first element of each array",
-      "Step 3: Loop total//2 + 1 times, extracting minimum and pushing next from same array",
-      "Step 4: Track previous and current values during extraction",
-      "Step 5: Return curr_val for odd total, (prev_val + curr_val)/2 for even total"
+      "Step 1: Filter out empty arrays and calculate total element count N",
+      "Step 2: Initialize min heap with (value, array_idx, element_idx) for first element of each array",
+      "Step 3: Loop N/2 + 1 times, each iteration: extract min, update prev/curr, push next element from same array",
+      "Step 4: After loop, return curr if odd total, else (prev + curr) / 2"
     ]
   },
   "solution_python_lines": [
     "import heapq",
-    "from typing import List, Tuple",
+    "from typing import List",
     "",
-    "",
-    "class MedianOfKSortedArrays:",
-    "    \"\"\"",
-    "    Part 3: Find the median of K sorted arrays.",
+    "class Solution:",
+    "    def findMedianSortedArrays(self, nums1: List[int], nums2: List[int]) -> float:",
+    "        \"\"\"Part 1: Median of two sorted arrays using binary search partitioning.\"\"\"",
+    "        if len(nums1) > len(nums2):",
+    "            nums1, nums2 = nums2, nums1",
+    "        ",
+    "        m, n = len(nums1), len(nums2)",
+    "        left, right = 0, m",
+    "        half = (m + n + 1) // 2",
+    "        ",
+    "        while left <= right:",
+    "            i = (left + right) // 2",
+    "            j = half - i",
+    "            ",
+    "            maxLeft1 = float('-inf') if i == 0 else nums1[i - 1]",
+    "            minRight1 = float('inf') if i == m else nums1[i]",
+    "            maxLeft2 = float('-inf') if j == 0 else nums2[j - 1]",
+    "            minRight2 = float('inf') if j == n else nums2[j]",
+    "            ",
+    "            if maxLeft1 <= minRight2 and maxLeft2 <= minRight1:",
+    "                if (m + n) % 2 == 1:",
+    "                    return float(max(maxLeft1, maxLeft2))",
+    "                else:",
+    "                    return (max(maxLeft1, maxLeft2) + min(minRight1, minRight2)) / 2",
+    "            elif maxLeft1 > minRight2:",
+    "                right = i - 1",
+    "            else:",
+    "                left = i + 1",
+    "        return 0.0",
     "    ",
-    "    Two approaches implemented:",
-    "    1. K-way merge using Min-Heap: O(N log k) time, O(k) space",
-    "    2. Binary search on value: O(k log(range) log(maxLen)) time, O(1) space",
-    "    \"\"\"",
+    "    def findKthElement(self, nums1: List[int], nums2: List[int], k: int) -> int:",
+    "        \"\"\"Part 2: Find k-th smallest element using binary elimination.\"\"\"",
+    "        idx1, idx2 = 0, 0",
+    "        m, n = len(nums1), len(nums2)",
+    "        ",
+    "        while True:",
+    "            if idx1 == m:",
+    "                return nums2[idx2 + k - 1]",
+    "            if idx2 == n:",
+    "                return nums1[idx1 + k - 1]",
+    "            if k == 1:",
+    "                return min(nums1[idx1], nums2[idx2])",
+    "            ",
+    "            half = k // 2",
+    "            newIdx1 = min(idx1 + half, m) - 1",
+    "            newIdx2 = min(idx2 + half, n) - 1",
+    "            ",
+    "            if nums1[newIdx1] <= nums2[newIdx2]:",
+    "                k -= (newIdx1 - idx1 + 1)",
+    "                idx1 = newIdx1 + 1",
+    "            else:",
+    "                k -= (newIdx2 - idx2 + 1)",
+    "                idx2 = newIdx2 + 1",
     "    ",
     "    def findMedianOfKArrays(self, arrays: List[List[int]]) -> float:",
     "        \"\"\"",
-    "        Find median using k-way merge with min-heap.",
+    "        Part 3: Find median of K sorted arrays using K-way merge with min heap.",
+    "        Time: O(N log K) where N = total elements, K = number of arrays",
+    "        Space: O(K) for the heap",
     "        ",
-    "        Args:",
-    "            arrays: List of k sorted arrays",
-    "            ",
-    "        Returns:",
-    "            Median value as float",
-    "            ",
-    "        Time Complexity: O(N log k) where N is total elements",
-    "        Space Complexity: O(k) for the heap",
+    "        Key insight: Extract elements in sorted order using min heap.",
+    "        Stop at median position - no need for full merge.",
     "        \"\"\"",
-    "        # Filter out empty arrays",
+    "        # Filter empty arrays and count total elements",
     "        arrays = [arr for arr in arrays if arr]",
     "        if not arrays:",
     "            return 0.0",
@@ -181,698 +209,538 @@
     "        if total == 0:",
     "            return 0.0",
     "        ",
-    "        # Min-heap: (value, array_index, element_index)",
-    "        heap: List[Tuple[int, int, int]] = []",
+    "        # Initialize heap: (value, array_index, element_index)",
+    "        heap = []",
     "        for i, arr in enumerate(arrays):",
     "            heapq.heappush(heap, (arr[0], i, 0))",
     "        ",
-    "        prev_val: int = 0",
-    "        curr_val: int = 0",
-    "        ",
-    "        # Extract total // 2 + 1 elements to reach median",
-    "        for count in range(total // 2 + 1):",
-    "            prev_val = curr_val",
-    "            curr_val, arr_idx, elem_idx = heapq.heappop(heap)",
+    "        # Extract elements until median position",
+    "        prev, curr = 0, 0",
+    "        for _ in range(total // 2 + 1):",
+    "            prev = curr",
+    "            val, arr_idx, elem_idx = heapq.heappop(heap)",
+    "            curr = val",
     "            ",
-    "            # Push next element from same array if available",
+    "            # Push next element from same array if exists",
     "            if elem_idx + 1 < len(arrays[arr_idx]):",
     "                next_val = arrays[arr_idx][elem_idx + 1]",
     "                heapq.heappush(heap, (next_val, arr_idx, elem_idx + 1))",
     "        ",
     "        # Return median based on odd/even total",
     "        if total % 2 == 1:",
-    "            return float(curr_val)",
+    "            return float(curr)",
     "        else:",
-    "            return (prev_val + curr_val) / 2.0",
-    "    ",
-    "    def findMedianOfKArrays_binarySearch(self, arrays: List[List[int]]) -> float:",
-    "        \"\"\"",
-    "        Alternative approach: Binary search on value space.",
-    "        ",
-    "        Useful when value range is small but total elements are huge.",
-    "        ",
-    "        Time Complexity: O(k * log(max-min) * log(maxLen))",
-    "        Space Complexity: O(1)",
-    "        \"\"\"",
-    "        import bisect",
-    "        ",
-    "        arrays = [arr for arr in arrays if arr]",
-    "        if not arrays:",
-    "            return 0.0",
-    "        ",
-    "        total = sum(len(arr) for arr in arrays)",
-    "        if total == 0:",
-    "            return 0.0",
-    "        ",
-    "        # Find min and max values across all arrays",
-    "        min_val = min(arr[0] for arr in arrays)",
-    "        max_val = max(arr[-1] for arr in arrays)",
-    "        ",
-    "        def count_less_equal(val: int) -> int:",
-    "            \"\"\"Count elements <= val across all arrays using binary search.\"\"\"",
-    "            count = 0",
-    "            for arr in arrays:",
-    "                count += bisect.bisect_right(arr, val)",
-    "            return count",
-    "        ",
-    "        def find_kth(k: int) -> int:",
-    "            \"\"\"Find k-th smallest element (1-indexed) using binary search.\"\"\"",
-    "            lo, hi = min_val, max_val",
-    "            while lo < hi:",
-    "                mid = lo + (hi - lo) // 2",
-    "                if count_less_equal(mid) < k:",
-    "                    lo = mid + 1",
-    "                else:",
-    "                    hi = mid",
-    "            return lo",
-    "        ",
-    "        # Find median position(s)",
-    "        if total % 2 == 1:",
-    "            return float(find_kth(total // 2 + 1))",
-    "        else:",
-    "            left = find_kth(total // 2)",
-    "            right = find_kth(total // 2 + 1)",
-    "            return (left + right) / 2.0",
+    "            return (prev + curr) / 2.0",
     "",
     "",
-    "def main():",
-    "    \"\"\"Test the MedianOfKSortedArrays solution.\"\"\"",
-    "    solution = MedianOfKSortedArrays()",
+    "if __name__ == '__main__':",
+    "    sol = Solution()",
     "    ",
     "    print(\"=\" * 60)",
-    "    print(\"Part 3: Median of K Sorted Arrays\")",
+    "    print(\"PART 3: Median of K Sorted Arrays\")",
     "    print(\"=\" * 60)",
     "    ",
-    "    # Test Case 1: Odd total elements",
+    "    # Test 1: Basic odd total",
     "    arrays1 = [[1, 5, 9], [2, 6, 10], [3, 7, 11]]",
-    "    print(\"\\nTest 1: Odd total elements\")",
-    "    print(f\"Arrays: {arrays1}\")",
-    "    print(f\"Merged sorted: [1, 2, 3, 5, 6, 7, 9, 10, 11]\")",
-    "    result1 = solution.findMedianOfKArrays(arrays1)",
-    "    print(f\"Median (heap): {result1}\")",
-    "    result1_bs = solution.findMedianOfKArrays_binarySearch(arrays1)",
-    "    print(f\"Median (binary search): {result1_bs}\")",
-    "    assert result1 == 6.0, f\"Expected 6.0, got {result1}\"",
-    "    print(\"\u2713 Passed\")",
+    "    print(f\"\\nTest 1: {arrays1}\")",
+    "    print(f\"Merged: [1,2,3,5,6,7,9,10,11], median position 5\")",
+    "    print(f\"Result: {sol.findMedianOfKArrays(arrays1)}\")",
+    "    print(\"Expected: 6.0\")",
     "    ",
-    "    # Test Case 2: Even total elements",
+    "    # Test 2: Even total",
     "    arrays2 = [[1, 2], [3, 4], [5, 6], [7, 8]]",
-    "    print(\"\\nTest 2: Even total elements\")",
-    "    print(f\"Arrays: {arrays2}\")",
-    "    print(f\"Merged sorted: [1, 2, 3, 4, 5, 6, 7, 8]\")",
-    "    result2 = solution.findMedianOfKArrays(arrays2)",
-    "    print(f\"Median (heap): {result2}\")",
-    "    result2_bs = solution.findMedianOfKArrays_binarySearch(arrays2)",
-    "    print(f\"Median (binary search): {result2_bs}\")",
-    "    assert result2 == 4.5, f\"Expected 4.5, got {result2}\"",
-    "    print(\"\u2713 Passed\")",
+    "    print(f\"\\nTest 2: {arrays2}\")",
+    "    print(f\"Merged: [1,2,3,4,5,6,7,8], median = (4+5)/2\")",
+    "    print(f\"Result: {sol.findMedianOfKArrays(arrays2)}\")",
+    "    print(\"Expected: 4.5\")",
     "    ",
-    "    # Test Case 3: Arrays with different sizes",
-    "    arrays3 = [[1, 2, 3], [4], [5, 6]]",
-    "    print(\"\\nTest 3: Different sized arrays\")",
-    "    print(f\"Arrays: {arrays3}\")",
-    "    print(f\"Merged sorted: [1, 2, 3, 4, 5, 6]\")",
-    "    result3 = solution.findMedianOfKArrays(arrays3)",
-    "    print(f\"Median: {result3}\")",
-    "    assert result3 == 3.5, f\"Expected 3.5, got {result3}\"",
-    "    print(\"\u2713 Passed\")",
+    "    # Test 3: Single array",
+    "    arrays3 = [[1, 2, 3, 4, 5]]",
+    "    print(f\"\\nTest 3: {arrays3}\")",
+    "    print(f\"Result: {sol.findMedianOfKArrays(arrays3)}\")",
+    "    print(\"Expected: 3.0\")",
     "    ",
-    "    # Test Case 4: Single array",
-    "    arrays4 = [[1, 2, 3, 4, 5]]",
-    "    print(\"\\nTest 4: Single array\")",
-    "    print(f\"Arrays: {arrays4}\")",
-    "    result4 = solution.findMedianOfKArrays(arrays4)",
-    "    print(f\"Median: {result4}\")",
-    "    assert result4 == 3.0, f\"Expected 3.0, got {result4}\"",
-    "    print(\"\u2713 Passed\")",
+    "    # Test 4: Arrays with empty",
+    "    arrays4 = [[1, 3], [], [2, 4]]",
+    "    print(f\"\\nTest 4: {arrays4}\")",
+    "    print(f\"Result: {sol.findMedianOfKArrays(arrays4)}\")",
+    "    print(\"Expected: 2.5\")",
     "    ",
-    "    # Test Case 5: Empty arrays mixed in",
-    "    arrays5 = [[], [1, 3], [], [2, 4], []]",
-    "    print(\"\\nTest 5: Empty arrays mixed in\")",
-    "    print(f\"Arrays: {arrays5}\")",
-    "    result5 = solution.findMedianOfKArrays(arrays5)",
-    "    print(f\"Median: {result5}\")",
-    "    assert result5 == 2.5, f\"Expected 2.5, got {result5}\"",
-    "    print(\"\u2713 Passed\")",
-    "    ",
-    "    # Test Case 6: Single element per array",
-    "    arrays6 = [[5], [1], [3], [7], [9]]",
-    "    print(\"\\nTest 6: Single element per array\")",
-    "    print(f\"Arrays: {arrays6}\")",
-    "    print(f\"Merged sorted: [1, 3, 5, 7, 9]\")",
-    "    result6 = solution.findMedianOfKArrays(arrays6)",
-    "    print(f\"Median: {result6}\")",
-    "    assert result6 == 5.0, f\"Expected 5.0, got {result6}\"",
-    "    print(\"\u2713 Passed\")",
-    "    ",
+    "    # Test 5: Verify Part 1 still works",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All tests passed! \u2713\")",
+    "    print(\"Verification: Part 1 & 2 still work\")",
     "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(f\"Part 1 - Median of [1,3] and [2]: {sol.findMedianSortedArrays([1,3], [2])}\")",
+    "    print(f\"Part 2 - 4th element of [1,3,5] and [2,4,6]: {sol.findKthElement([1,3,5], [2,4,6], 4)}\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Part 3: Find the median of K sorted arrays.",
-    " * ",
-    " * Two approaches implemented:",
-    " * 1. K-way merge using Min-Heap: O(N log k) time, O(k) space",
-    " * 2. Binary search on value: O(k log(range) log(maxLen)) time, O(1) space",
-    " */",
-    "public class MedianOfKSortedArrays {",
+    "public class Solution {",
+    "    /**",
+    "     * Part 1: Median of two sorted arrays using binary search partitioning.",
+    "     */",
+    "    public double findMedianSortedArrays(int[] nums1, int[] nums2) {",
+    "        if (nums1.length > nums2.length) {",
+    "            int[] temp = nums1; nums1 = nums2; nums2 = temp;",
+    "        }",
+    "        ",
+    "        int m = nums1.length, n = nums2.length;",
+    "        int left = 0, right = m;",
+    "        int half = (m + n + 1) / 2;",
+    "        ",
+    "        while (left <= right) {",
+    "            int i = (left + right) / 2;",
+    "            int j = half - i;",
+    "            ",
+    "            int maxLeft1 = (i == 0) ? Integer.MIN_VALUE : nums1[i - 1];",
+    "            int minRight1 = (i == m) ? Integer.MAX_VALUE : nums1[i];",
+    "            int maxLeft2 = (j == 0) ? Integer.MIN_VALUE : nums2[j - 1];",
+    "            int minRight2 = (j == n) ? Integer.MAX_VALUE : nums2[j];",
+    "            ",
+    "            if (maxLeft1 <= minRight2 && maxLeft2 <= minRight1) {",
+    "                if ((m + n) % 2 == 1) {",
+    "                    return Math.max(maxLeft1, maxLeft2);",
+    "                } else {",
+    "                    return (Math.max(maxLeft1, maxLeft2) + Math.min(minRight1, minRight2)) / 2.0;",
+    "                }",
+    "            } else if (maxLeft1 > minRight2) {",
+    "                right = i - 1;",
+    "            } else {",
+    "                left = i + 1;",
+    "            }",
+    "        }",
+    "        return 0.0;",
+    "    }",
     "    ",
     "    /**",
-    "     * Find median using k-way merge with min-heap.",
+    "     * Part 2: Find k-th smallest element using binary elimination.",
+    "     */",
+    "    public int findKthElement(int[] nums1, int[] nums2, int k) {",
+    "        int idx1 = 0, idx2 = 0;",
+    "        int m = nums1.length, n = nums2.length;",
+    "        ",
+    "        while (true) {",
+    "            if (idx1 == m) return nums2[idx2 + k - 1];",
+    "            if (idx2 == n) return nums1[idx1 + k - 1];",
+    "            if (k == 1) return Math.min(nums1[idx1], nums2[idx2]);",
+    "            ",
+    "            int half = k / 2;",
+    "            int newIdx1 = Math.min(idx1 + half, m) - 1;",
+    "            int newIdx2 = Math.min(idx2 + half, n) - 1;",
+    "            ",
+    "            if (nums1[newIdx1] <= nums2[newIdx2]) {",
+    "                k -= (newIdx1 - idx1 + 1);",
+    "                idx1 = newIdx1 + 1;",
+    "            } else {",
+    "                k -= (newIdx2 - idx2 + 1);",
+    "                idx2 = newIdx2 + 1;",
+    "            }",
+    "        }",
+    "    }",
+    "    ",
+    "    /**",
+    "     * Part 3: Find median of K sorted arrays using K-way merge with min heap.",
+    "     * Time: O(N log K), Space: O(K)",
     "     * ",
-    "     * @param arrays List of k sorted arrays",
-    "     * @return Median value as double",
-    "     * ",
-    "     * Time Complexity: O(N log k) where N is total elements",
-    "     * Space Complexity: O(k) for the heap",
+    "     * Key insight: Use heap to extract elements in sorted order.",
+    "     * Stop at median position - no need for full merge.",
     "     */",
     "    public double findMedianOfKArrays(int[][] arrays) {",
-    "        // Filter out null and empty arrays",
-    "        List<int[]> nonEmpty = new ArrayList<>();",
+    "        // Min heap: {value, array_index, element_index}",
+    "        PriorityQueue<int[]> heap = new PriorityQueue<>((a, b) -> a[0] - b[0]);",
     "        int total = 0;",
-    "        for (int[] arr : arrays) {",
-    "            if (arr != null && arr.length > 0) {",
-    "                nonEmpty.add(arr);",
-    "                total += arr.length;",
+    "        ",
+    "        // Initialize heap with first element of each non-empty array",
+    "        for (int i = 0; i < arrays.length; i++) {",
+    "            if (arrays[i] != null && arrays[i].length > 0) {",
+    "                heap.offer(new int[]{arrays[i][0], i, 0});",
+    "                total += arrays[i].length;",
     "            }",
     "        }",
     "        ",
     "        if (total == 0) return 0.0;",
     "        ",
-    "        // Min-heap: [value, array_index, element_index]",
-    "        PriorityQueue<int[]> heap = new PriorityQueue<>(",
-    "            (a, b) -> Integer.compare(a[0], b[0])",
-    "        );",
-    "        ",
-    "        // Initialize heap with first element of each array",
-    "        for (int i = 0; i < nonEmpty.size(); i++) {",
-    "            heap.offer(new int[]{nonEmpty.get(i)[0], i, 0});",
-    "        }",
-    "        ",
-    "        int prevVal = 0;",
-    "        int currVal = 0;",
-    "        ",
-    "        // Extract total/2 + 1 elements to reach median",
-    "        for (int count = 0; count <= total / 2; count++) {",
-    "            prevVal = currVal;",
-    "            int[] top = heap.poll();",
-    "            currVal = top[0];",
-    "            int arrIdx = top[1];",
-    "            int elemIdx = top[2];",
+    "        // Extract elements until median position",
+    "        int prev = 0, curr = 0;",
+    "        for (int i = 0; i <= total / 2; i++) {",
+    "            prev = curr;",
+    "            int[] entry = heap.poll();",
+    "            curr = entry[0];",
+    "            int arrIdx = entry[1];",
+    "            int elemIdx = entry[2];",
     "            ",
-    "            // Push next element from same array if available",
-    "            if (elemIdx + 1 < nonEmpty.get(arrIdx).length) {",
-    "                int nextVal = nonEmpty.get(arrIdx)[elemIdx + 1];",
-    "                heap.offer(new int[]{nextVal, arrIdx, elemIdx + 1});",
+    "            // Push next element from same array if exists",
+    "            if (elemIdx + 1 < arrays[arrIdx].length) {",
+    "                heap.offer(new int[]{arrays[arrIdx][elemIdx + 1], arrIdx, elemIdx + 1});",
     "            }",
     "        }",
     "        ",
     "        // Return median based on odd/even total",
     "        if (total % 2 == 1) {",
-    "            return (double) currVal;",
+    "            return (double) curr;",
     "        } else {",
-    "            return (prevVal + currVal) / 2.0;",
+    "            return (prev + curr) / 2.0;",
     "        }",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Alternative approach: Binary search on value space.",
-    "     * Useful when value range is small but total elements are huge.",
-    "     */",
-    "    public double findMedianOfKArrays_binarySearch(int[][] arrays) {",
-    "        List<int[]> nonEmpty = new ArrayList<>();",
-    "        int total = 0;",
-    "        int minVal = Integer.MAX_VALUE;",
-    "        int maxVal = Integer.MIN_VALUE;",
-    "        ",
-    "        for (int[] arr : arrays) {",
-    "            if (arr != null && arr.length > 0) {",
-    "                nonEmpty.add(arr);",
-    "                total += arr.length;",
-    "                minVal = Math.min(minVal, arr[0]);",
-    "                maxVal = Math.max(maxVal, arr[arr.length - 1]);",
-    "            }",
-    "        }",
-    "        ",
-    "        if (total == 0) return 0.0;",
-    "        ",
-    "        final List<int[]> finalArrays = nonEmpty;",
-    "        ",
-    "        if (total % 2 == 1) {",
-    "            return (double) findKth(finalArrays, minVal, maxVal, total / 2 + 1);",
-    "        } else {",
-    "            int left = findKth(finalArrays, minVal, maxVal, total / 2);",
-    "            int right = findKth(finalArrays, minVal, maxVal, total / 2 + 1);",
-    "            return (left + right) / 2.0;",
-    "        }",
-    "    }",
-    "    ",
-    "    private int findKth(List<int[]> arrays, int lo, int hi, int k) {",
-    "        while (lo < hi) {",
-    "            int mid = lo + (hi - lo) / 2;",
-    "            if (countLessEqual(arrays, mid) < k) {",
-    "                lo = mid + 1;",
-    "            } else {",
-    "                hi = mid;",
-    "            }",
-    "        }",
-    "        return lo;",
-    "    }",
-    "    ",
-    "    private int countLessEqual(List<int[]> arrays, int val) {",
-    "        int count = 0;",
-    "        for (int[] arr : arrays) {",
-    "            count += upperBound(arr, val);",
-    "        }",
-    "        return count;",
-    "    }",
-    "    ",
-    "    private int upperBound(int[] arr, int val) {",
-    "        int lo = 0, hi = arr.length;",
-    "        while (lo < hi) {",
-    "            int mid = lo + (hi - lo) / 2;",
-    "            if (arr[mid] <= val) {",
-    "                lo = mid + 1;",
-    "            } else {",
-    "                hi = mid;",
-    "            }",
-    "        }",
-    "        return lo;",
     "    }",
     "    ",
     "    public static void main(String[] args) {",
-    "        MedianOfKSortedArrays solution = new MedianOfKSortedArrays();",
+    "        Solution sol = new Solution();",
     "        ",
-    "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"Part 3: Median of K Sorted Arrays\");",
-    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"============ PART 3: Median of K Arrays ============\");",
     "        ",
-    "        // Test Case 1: Odd total elements",
+    "        // Test 1: Basic odd total",
     "        int[][] arrays1 = {{1, 5, 9}, {2, 6, 10}, {3, 7, 11}};",
-    "        System.out.println(\"\\nTest 1: Odd total elements\");",
-    "        System.out.println(\"Arrays: [[1,5,9], [2,6,10], [3,7,11]]\");",
-    "        System.out.println(\"Merged sorted: [1,2,3,5,6,7,9,10,11]\");",
-    "        double result1 = solution.findMedianOfKArrays(arrays1);",
-    "        System.out.println(\"Median (heap): \" + result1);",
-    "        assert result1 == 6.0 : \"Expected 6.0, got \" + result1;",
-    "        System.out.println(\"\u2713 Passed\");",
+    "        System.out.println(\"\\nTest 1: [[1,5,9], [2,6,10], [3,7,11]]\");",
+    "        System.out.println(\"Result: \" + sol.findMedianOfKArrays(arrays1));",
+    "        System.out.println(\"Expected: 6.0\");",
     "        ",
-    "        // Test Case 2: Even total elements",
+    "        // Test 2: Even total",
     "        int[][] arrays2 = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};",
-    "        System.out.println(\"\\nTest 2: Even total elements\");",
-    "        System.out.println(\"Arrays: [[1,2], [3,4], [5,6], [7,8]]\");",
-    "        double result2 = solution.findMedianOfKArrays(arrays2);",
-    "        System.out.println(\"Median (heap): \" + result2);",
-    "        assert result2 == 4.5 : \"Expected 4.5, got \" + result2;",
-    "        System.out.println(\"\u2713 Passed\");",
+    "        System.out.println(\"\\nTest 2: [[1,2], [3,4], [5,6], [7,8]]\");",
+    "        System.out.println(\"Result: \" + sol.findMedianOfKArrays(arrays2));",
+    "        System.out.println(\"Expected: 4.5\");",
     "        ",
-    "        // Test Case 3: Different sized arrays",
-    "        int[][] arrays3 = {{1, 2, 3}, {4}, {5, 6}};",
-    "        System.out.println(\"\\nTest 3: Different sized arrays\");",
-    "        double result3 = solution.findMedianOfKArrays(arrays3);",
-    "        System.out.println(\"Median: \" + result3);",
-    "        assert result3 == 3.5 : \"Expected 3.5, got \" + result3;",
-    "        System.out.println(\"\u2713 Passed\");",
+    "        // Test 3: Single array",
+    "        int[][] arrays3 = {{1, 2, 3, 4, 5}};",
+    "        System.out.println(\"\\nTest 3: Single array\");",
+    "        System.out.println(\"Result: \" + sol.findMedianOfKArrays(arrays3));",
+    "        System.out.println(\"Expected: 3.0\");",
     "        ",
-    "        System.out.println(\"\\n============================================================\");",
-    "        System.out.println(\"All tests passed! \u2713\");",
-    "        System.out.println(\"============================================================\");",
+    "        // Verify Part 1 & 2 still work",
+    "        System.out.println(\"\\n============ Verification ============\");",
+    "        System.out.println(\"Part 1: \" + sol.findMedianSortedArrays(new int[]{1,3}, new int[]{2}));",
+    "        System.out.println(\"Part 2: \" + sol.findKthElement(new int[]{1,3,5}, new int[]{2,4,6}, 4));",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-4",
-      "explanation": "Import heapq for min-heap operations and type hints for clean signatures"
+      "lines": "1-3",
+      "explanation": "Import heapq for min heap operations and List for type hints"
     },
     {
-      "lines": "14-27",
-      "explanation": "Main method signature with comprehensive docstring explaining inputs, outputs, and complexity"
+      "lines": "55-62",
+      "explanation": "Method signature and docstring explaining the K-way merge approach with complexity"
     },
     {
-      "lines": "28-34",
-      "explanation": "**Edge case handling**: Filter empty arrays and handle edge case of no elements"
+      "lines": "64-68",
+      "explanation": "Filter out empty arrays and handle edge case of no elements"
     },
     {
-      "lines": "36-39",
-      "explanation": "**Heap initialization**: Push first element of each array as (value, array_idx, elem_idx) tuple"
+      "lines": "70-73",
+      "explanation": "Initialize min heap with (value, array_idx, elem_idx) tuples for first element of each array"
     },
     {
-      "lines": "41-50",
-      "explanation": "**Core k-way merge loop**: Extract minimum, push replacement from same array. Loop runs total//2 + 1 times"
+      "lines": "75-83",
+      "explanation": "Main loop: extract minimum N/2+1 times, tracking prev and curr for even-count median. Push next element from same array after each extraction."
     },
     {
-      "lines": "52-56",
-      "explanation": "**Return median**: Handle odd/even cases differently - single value vs average of two"
-    },
-    {
-      "lines": "58-98",
-      "explanation": "**Alternative binary search approach**: Binary search on value space with count helper function"
+      "lines": "85-89",
+      "explanation": "Return curr for odd total (middle element), average of prev and curr for even total"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "findMedianOfKArrays (heap)": {
-          "complexity": "O(N log k)",
-          "explanation": "Extract ~N/2 elements from heap, each extraction/insertion is O(log k)"
-        },
-        "findMedianOfKArrays (binary search)": {
-          "complexity": "O(k \u00d7 log(max-min) \u00d7 log(maxLen))",
-          "explanation": "Binary search on value range, each iteration counts via k binary searches"
+        "findMedianOfKArrays": {
+          "complexity": "O(N log K)",
+          "explanation": "Extract N/2 + 1 elements, each extraction involves heap pop O(log K) and potentially heap push O(log K). K = number of arrays, N = total elements."
         }
       },
-      "overall_change": "Part 2 was O(log(min(m,n))) for 2 arrays. Part 3 with k arrays requires O(N log k) or O(k log(range) log(maxLen))"
+      "overall_change": "Part 1: O(log(min(m,n))), Part 2: O(log k), Part 3: O(N log K). Each part addresses different use cases."
     },
     "space": {
-      "additional_space": "O(k)",
-      "explanation": "Heap stores at most k elements (one frontier element per array)"
+      "additional_space": "O(K)",
+      "explanation": "Heap contains at most K elements (one frontier element per non-exhausted array). No additional storage for merged array."
     }
   },
   "dry_run": {
-    "example_input": "arrays = [[1, 5, 9], [2, 6, 10], [3, 7, 11]], total = 9",
+    "example_input": "arrays = [[1,5,9], [2,6,10], [3,7,11]]",
     "steps": [
       {
         "step": 1,
-        "action": "Initialize heap with first elements",
-        "state": "heap = [(1,0,0), (2,1,0), (3,2,0)]",
-        "explanation": "Each tuple is (value, array_index, element_index)"
+        "action": "Initialize",
+        "state": "total=9, heap=[(1,0,0), (2,1,0), (3,2,0)]",
+        "explanation": "First element from each array added to heap"
       },
       {
         "step": 2,
-        "action": "count=0: Extract min, push next",
-        "state": "pop (1,0,0), push (5,0,1), heap = [(2,1,0), (3,2,0), (5,0,1)], prev=0, curr=1",
-        "explanation": "Extracted 1, added next element 5 from array 0"
+        "action": "Extract i=0",
+        "state": "curr=1, heap=[(2,1,0), (3,2,0), (5,0,1)]",
+        "explanation": "Pop (1,0,0), push arr0[1]=5"
       },
       {
         "step": 3,
-        "action": "count=1: Extract min, push next",
-        "state": "pop (2,1,0), push (6,1,1), heap = [(3,2,0), (5,0,1), (6,1,1)], prev=1, curr=2",
-        "explanation": "Extracted 2, added next element 6 from array 1"
+        "action": "Extract i=1",
+        "state": "prev=1, curr=2, heap=[(3,2,0), (5,0,1), (6,1,1)]",
+        "explanation": "Pop (2,1,0), push arr1[1]=6"
       },
       {
         "step": 4,
-        "action": "count=2: Extract min, push next",
-        "state": "pop (3,2,0), push (7,2,1), heap = [(5,0,1), (6,1,1), (7,2,1)], prev=2, curr=3",
-        "explanation": "Extracted 3, added next element 7 from array 2"
+        "action": "Extract i=2",
+        "state": "prev=2, curr=3, heap=[(5,0,1), (6,1,1), (7,2,1)]",
+        "explanation": "Pop (3,2,0), push arr2[1]=7"
       },
       {
         "step": 5,
-        "action": "count=3: Extract min, push next",
-        "state": "pop (5,0,1), push (9,0,2), heap = [(6,1,1), (7,2,1), (9,0,2)], prev=3, curr=5",
-        "explanation": "Extracted 5, added next element 9 from array 0"
+        "action": "Extract i=3",
+        "state": "prev=3, curr=5, heap=[(6,1,1), (7,2,1), (9,0,2)]",
+        "explanation": "Pop (5,0,1), push arr0[2]=9"
       },
       {
         "step": 6,
-        "action": "count=4: Extract min (median position!)",
-        "state": "pop (6,1,1), push (10,1,2), prev=5, curr=6",
-        "explanation": "Extracted 6. This is position 4 (0-indexed), the median for 9 elements"
-      },
-      {
-        "step": 7,
-        "action": "Return result",
-        "state": "total=9 is odd, return curr_val=6.0",
-        "explanation": "Odd count means single middle value"
+        "action": "Extract i=4",
+        "state": "prev=5, curr=6",
+        "explanation": "Pop (6,1,1), this is the 5th element (median position for 9 elements)"
       }
     ],
-    "final_output": "6.0"
+    "final_output": "total=9 (odd), return curr=6.0"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single array [[1,2,3]] \u2192 should return 2.0",
-      "Two elements [[1], [2]] \u2192 should return 1.5",
-      "All empty [[], [], []] \u2192 should return 0.0"
+      "Single array [[1,2,3]] should return 2.0",
+      "Two equal arrays [[1],[1]] should return 1.0"
     ],
     "likely_bugs": [
       "Off-by-one in loop count (should be total//2 + 1 iterations)",
-      "Forgetting to track prev_val for even total case",
-      "Not filtering empty arrays before heap initialization",
-      "Using wrong index (array_index vs element_index) when pushing to heap"
+      "Forgetting to track prev for even total",
+      "Not filtering empty arrays"
     ],
     "recommended_logs_or_asserts": [
-      "assert len(heap) <= len(arrays), 'Heap grew too large'",
-      "print(f'Extract {count}: val={curr_val}, heap_size={len(heap)}')",
-      "assert extracted elements are in sorted order"
+      "assert total > 0 before loop",
+      "print heap state after each extraction for debugging"
     ],
-    "how_to_localize": "1. Print extraction sequence and verify it's sorted. 2. Check loop terminates at correct count. 3. Verify prev/curr tracking for even case."
+    "how_to_localize": "Trace through with 3-element example. If median position wrong, check loop count. If wrong value, check heap operations."
   },
   "edge_cases": [
     {
       "case": "All arrays empty",
-      "handling": "Return 0.0 after filtering",
-      "gotcha": "Must check AFTER filtering, not before"
+      "handling": "Filter returns empty list, return 0.0",
+      "gotcha": "Check before calculating total"
+    },
+    {
+      "case": "Single array",
+      "handling": "Heap has one element, extracts normally",
+      "gotcha": "Works correctly - no special case needed"
+    },
+    {
+      "case": "Arrays of very different sizes",
+      "handling": "Heap naturally handles - longer arrays contribute more extractions",
+      "gotcha": "Don't assume equal sizes"
     },
     {
       "case": "Single element total",
-      "handling": "Loop runs once, returns that element",
-      "gotcha": "Don't divide by 2 for single element"
+      "handling": "total=1, loop runs once, returns that element",
+      "gotcha": "total//2 + 1 = 1 iteration, correct"
     },
     {
-      "case": "Arrays with vastly different sizes",
-      "handling": "Heap naturally handles this - small arrays exhaust early",
-      "gotcha": "Check bounds before pushing next element"
-    },
-    {
-      "case": "Duplicate values across arrays",
-      "handling": "Heap handles duplicates correctly",
-      "gotcha": "Binary search approach needs careful upper_bound"
-    },
-    {
-      "case": "Very large k (many arrays)",
-      "handling": "Heap operations remain O(log k)",
-      "gotcha": "Initial heap build is O(k log k)"
+      "case": "Two elements total (even)",
+      "handling": "Extract both, return average",
+      "gotcha": "prev gets first, curr gets second"
     }
   ],
   "test_cases": [
     {
       "name": "Basic odd total",
-      "input": "[[1, 5, 9], [2, 6, 10], [3, 7, 11]]",
+      "input": "[[1,5,9], [2,6,10], [3,7,11]]",
       "expected": "6.0",
-      "explanation": "9 elements, median at position 4 (0-indexed)"
+      "explanation": "9 elements, median is 5th = 6"
     },
     {
-      "name": "Basic even total",
-      "input": "[[1, 2], [3, 4], [5, 6], [7, 8]]",
+      "name": "Even total",
+      "input": "[[1,2], [3,4], [5,6], [7,8]]",
       "expected": "4.5",
-      "explanation": "8 elements, median = (4+5)/2"
+      "explanation": "8 elements, median is (4+5)/2 = 4.5"
     },
     {
-      "name": "Mixed empty arrays",
-      "input": "[[], [1, 3], [], [2, 4], []]",
+      "name": "Single array",
+      "input": "[[1,2,3,4,5]]",
+      "expected": "3.0",
+      "explanation": "5 elements, median is 3rd = 3"
+    },
+    {
+      "name": "With empty arrays",
+      "input": "[[1,3], [], [2,4]]",
       "expected": "2.5",
-      "explanation": "Filter empties, 4 elements remain"
+      "explanation": "Empty array filtered, 4 elements, median = (2+3)/2 = 2.5"
     },
     {
-      "name": "Single large array",
-      "input": "[[1, 2, 3, 4, 5, 6, 7]]",
-      "expected": "4.0",
-      "explanation": "Single array, median is middle element"
-    },
-    {
-      "name": "Single element arrays",
-      "input": "[[5], [1], [3], [7], [9]]",
-      "expected": "5.0",
-      "explanation": "5 elements, sorted: [1,3,5,7,9], median=5"
+      "name": "Many small arrays",
+      "input": "[[1], [2], [3], [4], [5]]",
+      "expected": "3.0",
+      "explanation": "5 single-element arrays, median = 3"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Incorrect loop count for median position",
-      "why_wrong": "For n elements, median position is n//2 for odd, need both n//2-1 and n//2 for even",
-      "correct_approach": "Loop total//2 + 1 times, track both prev and curr values",
-      "code_example_wrong": "for count in range(total // 2):  # Wrong: misses the median",
-      "code_example_correct": "for count in range(total // 2 + 1):  # Correct: includes median position"
+      "mistake": "Wrong loop iteration count",
+      "why_wrong": "Using total//2 instead of total//2 + 1 misses the median element",
+      "correct_approach": "Loop total//2 + 1 times to reach the correct position for both odd and even",
+      "code_example_wrong": "for _ in range(total // 2):  # Wrong!",
+      "code_example_correct": "for _ in range(total // 2 + 1):  # Correct"
     },
     {
-      "mistake": "Not handling even total case",
-      "why_wrong": "Returns single value instead of average of two middle values",
-      "correct_approach": "Track both prev_val and curr_val, average them for even total",
-      "code_example_wrong": "return float(curr_val)  # Wrong for even total",
-      "code_example_correct": "return (prev_val + curr_val) / 2.0 if total % 2 == 0 else float(curr_val)"
+      "mistake": "Not tracking prev for even case",
+      "why_wrong": "Even median requires average of two middle elements",
+      "correct_approach": "Always update prev = curr before extracting new curr",
+      "code_example_wrong": "curr = heapq.heappop(heap)[0]",
+      "code_example_correct": "prev = curr; curr = heapq.heappop(heap)[0]"
     },
     {
-      "mistake": "Index out of bounds when pushing to heap",
-      "why_wrong": "Trying to access beyond array length",
-      "correct_approach": "Always check elem_idx + 1 < len(arr) before pushing",
-      "code_example_wrong": "heap.push((arr[elem_idx + 1], arr_idx, elem_idx + 1))  # No bounds check!",
-      "code_example_correct": "if elem_idx + 1 < len(arrays[arr_idx]): heapq.heappush(heap, ...)"
-    },
-    {
-      "mistake": "Not filtering empty arrays",
-      "why_wrong": "Empty arrays cause index errors when initializing heap",
-      "correct_approach": "Filter arrays = [arr for arr in arrays if arr] at the start",
-      "code_example_wrong": "for i, arr in enumerate(arrays): heap.push((arr[0], i, 0))",
-      "code_example_correct": "arrays = [arr for arr in arrays if arr]\\nfor i, arr in enumerate(arrays): ..."
+      "mistake": "Integer overflow in heap comparison (Java)",
+      "why_wrong": "a[0] - b[0] can overflow for extreme values",
+      "correct_approach": "Use Integer.compare() for safe comparison",
+      "code_example_wrong": "(a, b) -> a[0] - b[0]",
+      "code_example_correct": "(a, b) -> Integer.compare(a[0], b[0])"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by acknowledging that Part 2's partition approach doesn't scale to k arrays. Explain the two main approaches (heap vs binary search on value) and justify choosing heap for cleaner implementation. Walk through the algorithm step by step with a small example.",
+    "how_to_present": "Start by explaining why Part 1's partition approach doesn't extend well to K arrays, then introduce the K-way merge concept. Draw the heap state for a small example.",
     "what_to_mention": [
-      "Why partition-based approach from Part 2 doesn't work for k arrays",
-      "Time-space tradeoff between heap and binary search approaches",
-      "How heap maintains the k-way merge invariant",
-      "Early termination - only extract N/2 elements"
+      "K-way merge is a classic pattern (also used in external sorting)",
+      "Early termination optimization - we only need N/2 + 1 extractions",
+      "Space is O(K) not O(N) since we only store frontier elements"
     ],
-    "time_allocation": "2 min to explain approach, 8-10 min to implement, 2-3 min to test",
+    "time_allocation": "2 min understand + 3 min explain approach + 8 min implement + 2 min test",
     "if_stuck": [
-      "Think about how merge sort merges two arrays - extend to k arrays",
-      "What data structure gives you the minimum across k elements efficiently?",
-      "You don't need to merge ALL elements - just enough to find median"
+      "Think about merge sort - how do you merge K sorted lists?",
+      "What data structure gives you the minimum of K elements efficiently?",
+      "Do you need to fully merge or can you stop early?"
     ]
   },
-  "connection_to_next_part": "Part 4 might add streaming updates or weighted medians. The heap-based approach can be extended to support dynamic insertions by maintaining sorted lists per array, though the complexity increases. For weighted medians, we'd need to track cumulative weights in our heap tuples.",
+  "connection_to_next_part": "Part 4 might add streaming/online updates (adding new arrays or elements), which would require maintaining the heap state and tracking position differently. Could also extend to weighted median or percentile queries.",
   "communication_script": {
-    "transition_from_previous": "Great, so Part 2 gave us O(log(min(m,n))) for two arrays using partition-based binary search. For Part 3 with k arrays, that approach becomes O(k!) in the worst case because we'd need to search all partition combinations. Let me explain a more scalable approach...",
-    "explaining_changes": "The key change is moving from binary search on partitions to a k-way merge using a min-heap. The heap lets us efficiently find the globally smallest element across all k arrays in O(log k) time. We only need to extract about N/2 elements to find the median, giving us O(N log k) total.",
+    "transition_from_previous": "Great, Part 2 handles finding any k-th element in two arrays. For Part 3, we need K arrays instead of 2. The partition approach from Part 1 doesn't generalize well, so I'll use a different technique - K-way merge with a min heap.",
+    "explaining_changes": "The key insight is we can use a min heap to efficiently track the smallest element across all K arrays. By extracting elements one by one, we get them in sorted order without actually merging all arrays.",
     "while_extending_code": [
-      "I'm replacing the binary search with a min-heap initialization...",
-      "Each heap entry is a tuple: value for comparison, array index to track source, element index to find next...",
-      "The extraction loop runs until we reach the median position..."
+      "I'm adding findMedianOfKArrays as a new method - Parts 1 and 2 remain unchanged",
+      "The heap stores tuples of (value, array_index, element_index) so we know which array to pull the next element from",
+      "I'll stop at N/2 + 1 extractions since that's all we need for the median"
     ],
-    "after_completing": "This handles Part 3 with O(N log k) time and O(k) space. The heap approach is robust for any k and handles edge cases like empty arrays naturally. Ready for the next part?"
+    "after_completing": "This handles K arrays in O(N log K) time with O(K) space. The existing methods are preserved. Want me to trace through an example?"
   },
   "time_milestones": {
-    "time_budget": "15-20 minutes for this part",
-    "by_3_min": "Understand that partition approach doesn't scale, decide on heap-based k-way merge",
-    "by_8_min": "Have heap initialization and extraction loop implemented",
-    "by_12_min": "Handle odd/even median cases, filter empty arrays",
-    "by_15_min": "Test with examples, verify edge cases",
-    "warning_signs": "If still explaining approach at 5 min, start coding. If heap logic unclear at 10 min, ask for hints."
+    "time_budget": "12-15 minutes for this part",
+    "by_2_min": "Recognize that K-way merge with heap is the right approach. Understand we need N/2 + 1 extractions.",
+    "by_5_min": "Explain the heap structure (value, arr_idx, elem_idx) and the extraction loop logic. Start coding.",
+    "by_10_min": "Core implementation done. Handle edge cases (empty arrays, odd/even).",
+    "warning_signs": "If struggling with heap syntax at 7 min, ask about API. If stuck on odd/even logic, trace through 3-element example."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "Part 3 is largely independent from Part 2's implementation. If Part 2 had bugs, you can still implement the heap approach fresh.",
-    "if_new_requirement_unclear": "Ask: 'Just to confirm - all arrays are already sorted, and I need to return the median of ALL elements combined, correct?'",
-    "if_running_behind": "Focus on the heap approach only. Skip the binary search alternative. Mention edge cases verbally but prioritize working code."
+    "if_part_builds_wrong": "Part 3 is independent of Parts 1 and 2 - they're kept separate. If a bug exists in previous parts, it won't affect this implementation.",
+    "if_new_requirement_unclear": "Ask: 'For K arrays, should I assume all arrays are non-null, or handle null arrays as well? Are the arrays themselves sorted or do I need to sort them?'",
+    "if_running_behind": "Focus on getting heap-based extraction working first. Handle even/odd median logic second. Empty array filtering can be mentioned verbally if short on time."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing this as a k-way merge problem",
-      "Explaining why Part 2's approach doesn't scale (partition combinations)",
-      "Mentioning both heap and binary search on value approaches with tradeoffs",
-      "Noting early termination optimization (extract N/2, not N elements)",
-      "Discussing how this relates to external sort merge phase"
+      "Mentioning this is the same pattern used in external merge sort",
+      "Discussing the alternative binary search on value approach and its tradeoffs",
+      "Noting that we could generalize to find any k-th element across K arrays",
+      "Proactively mentioning the early termination optimization"
     ]
   },
   "pattern_recognition": {
-    "pattern": "K-way Merge using Min-Heap",
+    "pattern": "K-way Merge with Min Heap",
     "indicators": [
-      "Multiple sorted sequences that need to be combined",
-      "Need to process elements in global sorted order",
-      "Finding k-th smallest across multiple sources"
+      "Multiple sorted sequences",
+      "Need elements in global sorted order",
+      "K sources to merge"
     ],
     "similar_problems": [
       "LC 23 - Merge K Sorted Lists",
-      "LC 378 - Kth Smallest Element in a Sorted Matrix",
       "LC 373 - Find K Pairs with Smallest Sums",
-      "External Sort Merge Phase"
+      "LC 378 - Kth Smallest Element in Sorted Matrix"
     ],
-    "template": "```python\\nimport heapq\\n# Initialize heap with first element from each source\\nheap = [(source[0], source_idx, 0) for source_idx, source in enumerate(sources) if source]\\nheapq.heapify(heap)\\n\\nwhile heap:\\n    val, src_idx, elem_idx = heapq.heappop(heap)\\n    # Process val...\\n    if elem_idx + 1 < len(sources[src_idx]):\\n        heapq.heappush(heap, (sources[src_idx][elem_idx + 1], src_idx, elem_idx + 1))\\n```"
+    "template": "```python\n# K-way merge template\nheap = [(arr[0], i, 0) for i, arr in enumerate(arrays) if arr]\nheapify(heap)\nwhile heap:\n    val, arr_i, elem_i = heappop(heap)\n    process(val)\n    if elem_i + 1 < len(arrays[arr_i]):\n        heappush(heap, (arrays[arr_i][elem_i+1], arr_i, elem_i+1))\n```"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'k sorted arrays' and need global ordering, I immediately think k-way merge",
-      "why": "This is a classic pattern - merge sort's merge phase extended to k sources"
+      "thought": "When I see K sorted arrays and need combined result, I immediately think K-way merge",
+      "why": "Classic pattern - same as merging K sorted lists or external sorting"
     },
     {
       "step": 2,
-      "thought": "Part 2's partition approach requires searching O(k) dimensions simultaneously",
-      "why": "With k arrays, we'd need to try all combinations of partitions - exponential"
+      "thought": "For median specifically, I realize I don't need full merge",
+      "why": "Median only needs position N/2 (and N/2+1 for even), so early termination saves work"
     },
     {
       "step": 3,
-      "thought": "Min-heap maintains 'frontier' of each array efficiently",
-      "why": "Heap gives O(log k) for extracting global minimum across k candidates"
-    },
-    {
-      "step": 4,
-      "thought": "We only need N/2 extractions, not N",
-      "why": "Median is in the middle - no need to merge entire arrays"
+      "thought": "Min heap is the right data structure",
+      "why": "O(log K) to find and remove minimum across K frontiers, vs O(K) for linear scan"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you recognize when a simpler approach doesn't scale?",
-      "Do you know the k-way merge pattern?",
-      "Can you handle the median's odd/even cases correctly?",
-      "Is your code clean with proper edge case handling?"
+      "Do you recognize K-way merge pattern?",
+      "Can you implement heap operations correctly?",
+      "Do you handle odd/even median cases?",
+      "Is your code clean and readable?"
     ],
     "bonus_points": [
-      "Explaining the tradeoff between heap and binary search on value",
-      "Mentioning connection to external sort",
-      "Discussing what happens with very large k",
-      "Proactively handling empty arrays"
+      "Mentioning early termination",
+      "Discussing alternative approaches",
+      "Clean handling of empty arrays",
+      "Correct complexity analysis"
     ],
     "red_flags": [
-      "Trying to force the Part 2 partition approach",
-      "Forgetting to handle even total case",
-      "Not checking array bounds when pushing to heap",
-      "O(N log N) solution by merging all then sorting"
+      "Using O(K) linear scan instead of heap",
+      "Merging all elements then finding median",
+      "Forgetting prev tracking for even case",
+      "Off-by-one errors in loop count"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI to generate heap boilerplate quickly",
-      "Let AI help with Python's heapq syntax (push vs offer)",
-      "Have AI generate test cases for edge conditions"
+      "Use AI for heap syntax if unfamiliar with language",
+      "Let it help with the tuple/array structure for heap entries"
     ],
     "what_not_to_do": [
-      "Don't let AI choose between heap vs binary search without understanding tradeoffs",
-      "Verify the loop count logic manually - AI often gets off-by-one wrong",
-      "Check that tuple structure (val, arr_idx, elem_idx) is consistent"
+      "Don't let AI choose merge-all approach",
+      "Understand why we need prev and curr tracking",
+      "Verify the loop count formula yourself"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping into code without explaining why Part 2's approach doesn't work",
-      "Not drawing/tracing the heap state while explaining",
-      "Giving up when heap extraction count seems off"
+      "Immediately coding without explaining the K-way merge concept",
+      "Not drawing/tracing through an example"
     ],
     "technical": [
-      "Using O(N log N) merge-all-then-sort approach",
-      "Confusing array index with element index in heap tuples",
-      "Forgetting to handle empty arrays"
+      "Using linear scan O(K) to find minimum instead of heap",
+      "Merging all N elements when we only need N/2",
+      "Wrong loop iteration count"
     ],
     "communication": [
-      "Not explaining the heap invariant",
-      "Skipping the complexity analysis",
-      "Not mentioning why we stop at N/2 extractions"
+      "Not explaining why Part 1's approach doesn't generalize",
+      "Forgetting to mention time/space complexity of the new method"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does the loop run exactly total//2 + 1 times?",
-      "Is prev_val being tracked correctly for even case?",
-      "Are empty arrays filtered before heap initialization?",
-      "Is bounds check done before pushing to heap?",
-      "Did I trace through both odd and even examples?"
+      "Does the new method handle both odd and even total counts?",
+      "Are empty arrays filtered correctly?",
+      "Is the heap structured correctly with (value, arr_idx, elem_idx)?",
+      "Did I trace through the example to verify correctness?"
     ],
     "quick_code_review": [
-      "Imports: heapq for Python, PriorityQueue for Java",
-      "Type hints on method signatures",
-      "Consistent tuple structure: (value, array_idx, elem_idx)",
-      "Return type is float/double"
+      "Loop runs total//2 + 1 times",
+      "prev updated before curr in each iteration",
+      "Next element pushed only if index in bounds",
+      "Return float for consistency with Part 1"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Input validation for null/invalid arrays",
-      "Logging for debugging median computation",
-      "Metrics for heap size and extraction count",
-      "Support for floating-point values in arrays"
+      "Input validation for null/empty arrays",
+      "Logging for debugging large inputs",
+      "Consider streaming API for very large datasets"
     ],
-    "why_not_in_interview": "Core algorithm is the focus; these are implementation details that can be discussed verbally",
-    "how_to_mention": "Say: 'In production, I'd add input validation, logging, and potentially support for different numeric types, but let me focus on the core algorithm here.'"
+    "why_not_in_interview": "Focus on core algorithm; validation and logging are secondary concerns",
+    "how_to_mention": "Say: 'In production, I'd add validation for null arrays and possibly logging for debugging. I'd also consider a streaming API if the data is too large to fit in memory.'"
   },
-  "generated_at": "2026-01-18T18:41:33.231914",
+  "generated_at": "2026-01-19T04:56:21.237186",
   "_meta": {
     "problem_id": "median_two_sorted_arrays",
     "part_number": 3,

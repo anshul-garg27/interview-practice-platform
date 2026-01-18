@@ -4,73 +4,72 @@
   "category": "LLD/OOP Design",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "## Initial Assessment\n\nThis is a **classic OOP Design problem** that tests:\n\n1. **Data Structure Selection** - Choosing the right structures for efficient lookups and deduplication\n2. **State Management** - Maintaining consistent state across multiple operations\n3. **Custom Sorting** - Implementing multi-level comparators\n4. **Clean API Design** - Creating intuitive, well-encapsulated interfaces\n\nThe problem is straightforward but has subtle requirements that trip up candidates who rush.",
-    "pattern_recognition": "## Patterns Identified\n\n| Pattern | Why It Applies |\n|---------|----------------|\n| **HashMap for O(1) Lookup** | Need fast song retrieval by ID |\n| **Set for Deduplication** | Track unique listeners per song |\n| **OOP Encapsulation** | Song as a first-class entity |\n| **Custom Comparator** | Multi-level sort (count desc, name asc) |\n| **Auto-increment ID** | Sequential ID generation pattern |",
+    "first_impressions": "This is a **classic OOP Design + Analytics** problem. At its core, it's about tracking unique listeners per song and producing sorted reports. The 'unique listeners' requirement immediately signals **Set** data structure, while 'sorted by count then name' signals **custom comparator sorting**.",
+    "pattern_recognition": "**HashMap** for O(1) song lookup by ID + **Set** for unique listener tracking + **Custom Sorting** with multi-key comparator. This combines LC 347 (Top K Frequent) with LC 355 (Design Twitter) patterns.",
     "key_constraints": [
-      "**IDs start from 1, not 0** - Easy to miss, causes off-by-one errors",
-      "**Unique listeners only** - Same user playing same song multiple times doesn't increase count",
-      "**Tie-breaking: name ascending** - When counts equal, sort alphabetically A\u2192Z",
-      "**Songs with 0 listeners included** - Don't filter out unplayed songs",
-      "**Error handling for invalid song IDs** - Must print specific error message format"
+      "IDs start from 1 (not 0) - common interview gotcha",
+      "Same user playing same song multiple times should NOT increase count - requires Set",
+      "Tie-breaking: desc by count, then asc by name - tricky sorting logic",
+      "Songs with 0 listeners must appear in analytics - don't skip empty sets",
+      "Up to 100,000 play events - need O(1) play_song operation"
     ],
     "clarifying_questions": [
-      "**Can the same song name be added multiple times?** \u2192 Yes, each gets a unique ID (revealed in requirements)",
-      "**Are song names case-sensitive for sorting?** \u2192 Standard lexicographic (case-sensitive) assumed",
-      "**What happens if play_song is called before any songs exist?** \u2192 Error message format specified",
-      "**Should we handle concurrent access?** \u2192 Not required for interview scope",
-      "**Is there a limit on song name characters?** \u2192 1-100 chars per constraints",
-      "**Do we need to support song removal?** \u2192 Not in Part 1 requirements",
-      "**What precision for listener counts?** \u2192 Integer counts, no decimals"
+      "Should duplicate song names create separate entries? (Yes - per requirements)",
+      "What format for error messages? (Exact: 'Error: Song ID X does not exist.')",
+      "Are song names case-sensitive for sorting? (Assume yes - standard lexicographic)",
+      "Should analytics output include songs with 0 listeners? (Yes - per Example 4)",
+      "Is thread-safety required? (Assume no for interview, mention for production)",
+      "What's the expected ratio of plays to songs? (Helps optimize data structure choice)"
     ],
     "edge_cases_to_consider": [
-      "**Empty analytics** - `print_analytics()` called with no songs added",
-      "**Song with no plays** - Added but never played (0 unique listeners)",
-      "**Same user, same song, multiple times** - Count should stay at 1",
-      "**All songs tied at 0** - Should sort purely alphabetically",
-      "**Very long song names** - Up to 100 characters",
-      "**Large user IDs** - Up to 10^6 per constraints",
-      "**Invalid song ID = 0** - Since IDs start at 1"
+      "Song with 0 listeners (never played)",
+      "Same user plays same song multiple times",
+      "Invalid song_id in play_song",
+      "Multiple songs with identical listener counts (tie-breaking)",
+      "Empty system - no songs added yet",
+      "Same song name added multiple times (separate IDs)"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "Auto-incrementing IDs starting from 1",
-        "how_met": "Instance variable `next_id` initialized to 1, incremented after each `add_song`",
+        "how_met": "Instance variable `next_id` initialized to 1, incremented after each add_song()",
         "gotchas": [
-          "Don't start from 0",
-          "Don't reuse IDs even if songs could be deleted (future-proofing)"
+          "Starting from 0 instead of 1",
+          "Not incrementing atomically"
         ]
       },
       {
-        "requirement": "Track unique listeners per song",
-        "how_met": "Each Song object contains a Set<Integer> for user IDs",
+        "requirement": "Unique listeners only (no duplicate counting)",
+        "how_met": "Use Set<Integer> for listeners - Set.add() handles duplicates automatically",
         "gotchas": [
-          "Using List instead of Set would allow duplicates",
-          "Using counter instead of Set loses ability to query which users"
+          "Using List and checking manually",
+          "Counting total plays instead"
         ]
       },
       {
         "requirement": "Error handling for invalid song_id",
-        "how_met": "Check if song_id exists in HashMap before processing, print exact error format",
+        "how_met": "Check if song_id exists in songs HashMap before processing",
         "gotchas": [
-          "Wrong error message format",
-          "Forgetting to return early after error"
+          "Throwing exception instead of printing",
+          "Wrong error message format"
         ]
       },
       {
-        "requirement": "Sort by unique listeners DESC, then name ASC",
-        "how_met": "Custom comparator with two-level comparison",
+        "requirement": "Sort by count DESC, then name ASC",
+        "how_met": "Custom comparator: first compare -count (negated for desc), then name",
         "gotchas": [
-          "Sorting count ascending instead of descending",
-          "Forgetting secondary sort criterion"
+          "Sorting count ascending",
+          "Forgetting name tie-breaker"
         ]
       },
       {
         "requirement": "Include songs with 0 listeners",
-        "how_met": "Analytics iterates over ALL songs in HashMap, not just those with plays",
+        "how_met": "Iterate all songs in HashMap, empty Sets have size() = 0",
         "gotchas": [
-          "Filtering out songs where listeners.size() == 0"
+          "Filtering out empty sets",
+          "Only tracking songs with plays"
         ]
       }
     ],
@@ -89,144 +88,152 @@
       },
       {
         "operation": "print_analytics",
-        "target": "O(n log n)",
-        "achieved": "O(n log n)",
-        "why": "Sorting n songs"
+        "target": "O(S log S)",
+        "achieved": "O(S log S)",
+        "why": "S = songs, sorting dominates"
       }
     ],
     "non_goals": [
-      "Removing songs (not in requirements)",
-      "Getting play count by specific user",
-      "Time-based analytics (that's Parts 2 & 3)",
-      "Thread safety (interview scope)",
-      "Persistent storage"
+      "Persisting data across sessions",
+      "Thread-safe concurrent access",
+      "Removing songs or users",
+      "Querying specific song statistics"
     ]
   },
   "assumptions": [
-    "Song names can have spaces and special characters",
-    "User IDs are always positive integers",
-    "System is single-threaded (no concurrent access)",
-    "Output goes to stdout (print statements)",
-    "Lexicographic sorting is case-sensitive (standard string comparison)"
+    "Song names are non-null and non-empty (length 1-100 per constraints)",
+    "User IDs are positive integers (1 to 10^6 per constraints)",
+    "Operations are called sequentially (no concurrency)",
+    "Memory fits all songs and listener sets",
+    "Standard lexicographic ordering for string comparison"
   ],
   "tradeoffs": [
     {
-      "decision": "Store listeners as Set vs. just count",
-      "chosen": "Set<Integer>",
-      "why": "Enables deduplication automatically; allows future queries like 'which users played song X'",
-      "alternative": "Just store count + separate seen-tracking",
-      "when_to_switch": "Never for this problem; Set is strictly better"
+      "decision": "Store listeners as Set per song vs. global Map<(songId, userId), Boolean>",
+      "chosen": "Set per song",
+      "why": "Encapsulates data with Song object, cleaner OOP, easier to get count per song",
+      "alternative": "Global map",
+      "when_to_switch": "If need to query 'which songs did user X play?' frequently"
     },
     {
-      "decision": "Song as separate class vs. inline data structure",
+      "decision": "Sort on demand vs. maintain sorted structure",
+      "chosen": "Sort on demand in print_analytics()",
+      "why": "Simpler code, print_analytics likely called less often than play_song",
+      "alternative": "TreeSet with custom comparator",
+      "when_to_switch": "If print_analytics called after every play (real-time dashboard)"
+    },
+    {
+      "decision": "Song as separate class vs. inline data",
       "chosen": "Separate Song class",
-      "why": "Better encapsulation, cleaner code, easier to extend for follow-ups",
-      "alternative": "Map<Integer, Tuple<String, Set<Integer>>>",
-      "when_to_switch": "Only in very constrained environments or prototyping"
-    },
-    {
-      "decision": "HashMap for song storage vs. ArrayList",
-      "chosen": "HashMap<Integer, Song>",
-      "why": "O(1) lookup by ID; ArrayList would need linear search or waste space",
-      "alternative": "ArrayList with index = id - 1",
-      "when_to_switch": "If IDs were always dense and sequential (but HashMap is more flexible)"
+      "why": "Better encapsulation, easier extensibility, cleaner code",
+      "alternative": "Map<Integer, String> + Map<Integer, Set<Integer>>",
+      "when_to_switch": "Never - always prefer clean OOP in design problems"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "**Encapsulate Song state** - All song-related data in Song class",
-      "**Single Responsibility** - SongAnalytics manages collection; Song manages its own data",
-      "**Keep public API minimal** - Only expose required methods",
-      "**Prefer composition** - SongAnalytics HAS-A collection of Songs"
+      "Encapsulate song data in Song class - easy to add fields later",
+      "Keep public API minimal - only expose required methods",
+      "Store raw data (listeners) not derived (count) - supports new queries"
     ],
-    "why_this_design_scales": "The Song class can be extended with additional fields (timestamps, play events) for Parts 2 & 3 without changing the SongAnalytics API. The HashMap allows O(1) access which remains efficient as data grows.",
+    "why_this_design_scales": "The Song class can easily add: play timestamps, total plays, genre, artist. The SongAnalytics class can add: top-K queries, time-range filtering, user-specific analytics. The HashMap + Set foundation supports all these.",
     "expected_followup_hooks": [
-      "**Song class** - Will likely add List<PlayEvent> for tracking individual plays",
-      "**play_song method** - Will return something or store timestamp",
-      "**print_analytics** - May filter by time window",
-      "**HashMap structure** - Stable; won't need to change"
+      "Song class will add timestamp tracking (Part 2: Recent Plays)",
+      "May need to store play events as objects, not just user IDs",
+      "print_analytics may need filtering parameters"
     ],
     "invariants": [
-      "Song ID is immutable once assigned",
-      "next_id is always > max existing ID",
-      "listeners.size() always equals unique listener count",
-      "All songs in HashMap were added via add_song"
+      "song_id is always positive and unique",
+      "listeners Set never contains duplicates (guaranteed by Set)",
+      "All songs in HashMap appear in print_analytics output"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    SONG ANALYTICS SYSTEM                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                   \u2502\n\u2502  \u2502    add_song()    \u2502    \u2502   play_song()    \u2502                   \u2502\n\u2502  \u2502  \"Bohemian...\"   \u2502    \u2502   (id=1, user=5) \u2502                   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                   \u2502\n\u2502           \u2502                       \u2502                              \u2502\n\u2502           \u25bc                       \u25bc                              \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502\n\u2502  \u2502                     SONGS HASHMAP                           \u2502 \u2502\n\u2502  \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502 \u2502\n\u2502  \u2502  \u2502 ID  \u2502                    Song Object                  \u2502  \u2502 \u2502\n\u2502  \u2502  \u251c\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524  \u2502 \u2502\n\u2502  \u2502  \u2502  1  \u2502 name=\"Bohemian Rhapsody\", listeners={5, 12, 8} \u2502  \u2502 \u2502\n\u2502  \u2502  \u2502  2  \u2502 name=\"Hotel California\", listeners={5}         \u2502  \u2502 \u2502\n\u2502  \u2502  \u2502  3  \u2502 name=\"Stairway to Heaven\", listeners={}        \u2502  \u2502 \u2502\n\u2502  \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502 \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502\n\u2502                                                                  \u2502\n\u2502           \u2502 print_analytics()                                   \u2502\n\u2502           \u25bc                                                      \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502\n\u2502  \u2502  Output (sorted by listeners DESC, name ASC):               \u2502 \u2502\n\u2502  \u2502  \u2022 Bohemian Rhapsody (3 unique listeners)                   \u2502 \u2502\n\u2502  \u2502  \u2022 Hotel California (1 unique listeners)                    \u2502 \u2502\n\u2502  \u2502  \u2022 Stairway to Heaven (0 unique listeners)                  \u2502 \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502              DATA STRUCTURE STATE EVOLUTION                    \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                \u2502\n\u2502  Initial State:                                                \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502 next_id = 1                                              \u2502  \u2502\n\u2502  \u2502 songs = {}  (empty HashMap)                              \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                                \u2502\n\u2502  After add_song(\"Song A\"):                                     \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502 next_id = 2                                              \u2502  \u2502\n\u2502  \u2502 songs = {1: Song(\"Song A\", listeners={})}                \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                                \u2502\n\u2502  After play_song(1, 42):                                       \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502 next_id = 2                                              \u2502  \u2502\n\u2502  \u2502 songs = {1: Song(\"Song A\", listeners={42})}              \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                                \u2502\n\u2502  After play_song(1, 42) again:                                 \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502 next_id = 2                                              \u2502  \u2502\n\u2502  \u2502 songs = {1: Song(\"Song A\", listeners={42})}  \u2190 NO CHANGE\u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                                \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    SONG ANALYTICS SYSTEM                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u2502\n\u2502  \u2502   Song A     \u2502     \u2502   Song B     \u2502     \u2502   Song C     \u2502    \u2502\n\u2502  \u2502   ID: 1      \u2502     \u2502   ID: 2      \u2502     \u2502   ID: 3      \u2502    \u2502\n\u2502  \u2502 Listeners:   \u2502     \u2502 Listeners:   \u2502     \u2502 Listeners:   \u2502    \u2502\n\u2502  \u2502 {101, 102}   \u2502     \u2502 {101}        \u2502     \u2502 {103}        \u2502    \u2502\n\u2502  \u2502 Count: 2     \u2502     \u2502 Count: 1     \u2502     \u2502 Count: 1     \u2502    \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2502\n\u2502                                                                  \u2502\n\u2502  Output (sorted by count DESC, name ASC):                       \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u2502\n\u2502  \u2502 Song A (2 unique listeners)    \u2190 Highest count         \u2502    \u2502\n\u2502  \u2502 Song B (1 unique listeners)    \u2190 Tie: B < C            \u2502    \u2502\n\u2502  \u2502 Song C (1 unique listeners)    \u2190 Tie: C > B            \u2502    \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                     DATA STRUCTURES                          \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                              \u2502\n\u2502  SongAnalytics:                                              \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  next_id: int = 4 (next ID to assign)                \u2502   \u2502\n\u2502  \u2502                                                       \u2502   \u2502\n\u2502  \u2502  songs: HashMap<Integer, Song>                        \u2502   \u2502\n\u2502  \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502   \u2502\n\u2502  \u2502  \u2502 Key  \u2502 Value (Song Object)                     \u2502  \u2502   \u2502\n\u2502  \u2502  \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524  \u2502   \u2502\n\u2502  \u2502  \u2502  1   \u2502 Song(name=\"A\", listeners={101,102})     \u2502  \u2502   \u2502\n\u2502  \u2502  \u2502  2   \u2502 Song(name=\"B\", listeners={101})         \u2502  \u2502   \u2502\n\u2502  \u2502  \u2502  3   \u2502 Song(name=\"C\", listeners={103})         \u2502  \u2502   \u2502\n\u2502  \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                              \u2502\n\u2502  Song Class:                                                 \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  name: String                                         \u2502   \u2502\n\u2502  \u2502  listeners: Set<Integer>  \u2190 Auto-handles duplicates  \u2502   \u2502\n\u2502  \u2502                                                       \u2502   \u2502\n\u2502  \u2502  Methods:                                             \u2502   \u2502\n\u2502  \u2502  - add_listener(user_id): listeners.add(user_id)     \u2502   \u2502\n\u2502  \u2502  - get_count(): listeners.size()                     \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "add_song(name) - Create new song with auto-assigned ID",
-        "visualization": "```\nnext_id = 1\n\u2502\n\u25bc\nCreate Song(name=\"Song A\")\n\u2502\n\u25bc\nsongs[1] = Song(\"Song A\", {})\n\u2502\n\u25bc\nnext_id = 2  (increment)\n\u2502\n\u25bc\nReturn 1\n```",
-        "key_point": "ID is assigned BEFORE incrementing next_id"
+        "description": "Initialize SongAnalytics",
+        "visualization": "```\nnext_id = 1\nsongs = {} (empty HashMap)\n```",
+        "key_point": "ID starts from 1, not 0"
       },
       {
         "step": 2,
-        "description": "play_song(song_id, user_id) - Add user to song's listener set",
-        "visualization": "```\nplay_song(1, 42)\n\u2502\n\u25bc\nCheck: Is 1 in songs? \u2500\u2500Yes\u2500\u2500\u25b6 songs[1].listeners.add(42)\n\u2502                              \u2502\n\u2502                              \u25bc\n\u2502                        {42} (Set handles duplicates)\n\u2502\n\u2514\u2500\u2500\u2500No\u2500\u2500\u2500\u25b6 Print \"Error: Song ID 1 does not exist.\"\n```",
-        "key_point": "Set.add() is idempotent - adding same user twice has no effect"
+        "description": "add_song(\"Song A\")",
+        "visualization": "```\nCreate Song(name=\"Song A\", listeners={})\nsongs[1] = song\nnext_id = 2\nReturn: 1\n```",
+        "key_point": "Increment AFTER assignment"
       },
       {
         "step": 3,
-        "description": "print_analytics() - Sort and display all songs",
-        "visualization": "```\nCollect all songs from HashMap\n\u2502\n\u25bc\nSort with comparator:\n  1st: listener_count DESC (3 > 2 > 1 > 0)\n  2nd: name ASC (\"Apple\" < \"Zebra\")\n\u2502\n\u25bc\nFor each song in sorted order:\n  print(\"{name} ({count} unique listeners)\")\n```",
-        "key_point": "Two-level sort with OPPOSITE directions (desc then asc)"
+        "description": "play_song(1, 101)",
+        "visualization": "```\nsongs[1].listeners.add(101)\nsongs[1].listeners = {101}\n```",
+        "key_point": "Set automatically handles uniqueness"
+      },
+      {
+        "step": 4,
+        "description": "play_song(1, 101) AGAIN",
+        "visualization": "```\nsongs[1].listeners.add(101)  \u2190 No change!\nsongs[1].listeners = {101}   \u2190 Still just {101}\n```",
+        "key_point": "Duplicate user - Set ignores it"
+      },
+      {
+        "step": 5,
+        "description": "print_analytics()",
+        "visualization": "```\n1. Collect all songs from HashMap\n2. Sort by: (-count, name)\n3. Print each: \"{name} ({count} unique listeners)\"\n```",
+        "key_point": "Negate count for descending order"
       }
     ],
-    "dry_run_table": "| Step | Operation | songs HashMap | next_id | Output |\n|------|-----------|---------------|---------|--------|\n| 1 | `SongAnalytics()` | `{}` | 1 | - |\n| 2 | `add_song(\"Song A\")` | `{1: {name:\"Song A\", listeners:{}}}` | 2 | Returns `1` |\n| 3 | `add_song(\"Song B\")` | `{1: {..}, 2: {name:\"Song B\", listeners:{}}}` | 3 | Returns `2` |\n| 4 | `play_song(1, 10)` | `{1: {.., listeners:{10}}, 2: {..}}` | 3 | - |\n| 5 | `play_song(1, 20)` | `{1: {.., listeners:{10,20}}, 2: {..}}` | 3 | - |\n| 6 | `play_song(1, 10)` | `{1: {.., listeners:{10,20}}}` \u2190 **NO CHANGE** | 3 | - |\n| 7 | `play_song(2, 10)` | `{1: {.., listeners:{10,20}}, 2: {.., listeners:{10}}}` | 3 | - |\n| 8 | `play_song(99, 10)` | (unchanged) | 3 | `Error: Song ID 99 does not exist.` |\n| 9 | `print_analytics()` | (unchanged) | 3 | `Song A (2 unique listeners)`<br>`Song B (1 unique listeners)` |"
+    "dry_run_table": "| Step | Operation | songs HashMap | next_id | Output |\n|------|-----------|---------------|---------|--------|\n| 1 | SongAnalytics() | {} | 1 | - |\n| 2 | add_song(\"Song A\") | {1: Song(A, {})} | 2 | 1 |\n| 3 | add_song(\"Song B\") | {1: Song(A, {}), 2: Song(B, {})} | 3 | 2 |\n| 4 | play_song(1, 101) | {1: Song(A, {101}), 2: Song(B, {})} | 3 | - |\n| 5 | play_song(1, 102) | {1: Song(A, {101,102}), 2: Song(B, {})} | 3 | - |\n| 6 | play_song(1, 101) | {1: Song(A, {101,102}), 2: Song(B, {})} | 3 | - (no change!) |\n| 7 | play_song(2, 101) | {1: Song(A, {101,102}), 2: Song(B, {101})} | 3 | - |\n| 8 | play_song(999, 1) | unchanged | 3 | Error msg |\n| 9 | print_analytics() | unchanged | 3 | Song A (2)\\nSong B (1) |"
   },
   "thinking_process": {
     "step_by_step": [
-      "**When I see 'unique listeners'**, I immediately think **Set** - it handles deduplication automatically with O(1) add/contains",
-      "**When I see 'auto-incrementing ID'**, I think of a simple counter variable starting at 1, incremented after each assignment",
-      "**When I see 'lookup by ID'**, I think **HashMap<Integer, Song>** for O(1) retrieval",
-      "**When I see 'sorted output with tie-breaking'**, I think custom **Comparator** with two-level comparison",
-      "**The key insight**: Encapsulate song data in a Song class - this makes the code cleaner and more extensible for follow-ups",
-      "**I should use OOP design** because the problem explicitly asks for a class-based system and this is tagged as LLD/OOP"
+      "When I see 'unique listeners', I immediately think **Set** - it automatically prevents duplicates",
+      "When I see 'lookup by ID', I think **HashMap** for O(1) access",
+      "The 'auto-incrementing ID starting from 1' suggests a simple counter variable",
+      "For sorting by 'count DESC, name ASC', I'll need a **custom comparator** with two keys",
+      "The error message format is exact - I need to match it precisely",
+      "Songs with 0 listeners must appear - so I iterate ALL songs, not just played ones"
     ],
-    "key_insight": "## The Core Insight\n\nThe **popularity score = unique listeners** is the key metric. Using a **Set** per song gives us:\n\n1. **Automatic deduplication** - Set.add() is idempotent\n2. **O(1) count query** - Set.size() is O(1)\n3. **Future flexibility** - Can query which users played a song\n\nThis is much cleaner than manually checking \"has this user played this song before?\"",
-    "why_this_works": "The solution works because:\n\n1. **HashMap** provides O(1) song lookup by ID\n2. **Set** provides O(1) user tracking with automatic deduplication\n3. **Sorting** is O(n log n) which is optimal for comparison-based sorting\n4. **Encapsulation** keeps Song-related logic contained, making the code readable and maintainable"
+    "key_insight": "**The Set data structure is the hero here.** It elegantly solves the 'unique listeners only' requirement - `set.add(userId)` is idempotent. Combined with HashMap for O(1) song lookup, all operations become O(1) except print_analytics which requires sorting.",
+    "why_this_works": "HashMap gives O(1) song lookup by ID. Set gives O(1) add/contains and automatically handles duplicates. Sorting is O(S log S) where S is number of songs - acceptable since print_analytics is likely called infrequently. The design separates concerns: Song class manages its own data, SongAnalytics orchestrates the system."
   },
   "approaches": [
     {
-      "name": "Brute Force / Naive Approach",
-      "description": "Store play events as a list of (song_id, user_id) tuples. When printing analytics, iterate through all events to count unique users per song.",
-      "pseudocode": "play_song(song_id, user_id):\n  events.append((song_id, user_id))\n\nprint_analytics():\n  for each song:\n    unique_users = set()\n    for each event:\n      if event.song_id == song.id:\n        unique_users.add(event.user_id)\n    print(song.name, len(unique_users))",
-      "time_complexity": "O(E) per play, O(S * E) for print_analytics where E=events, S=songs",
-      "space_complexity": "O(E) for storing all events",
+      "name": "Brute Force: List + Manual Deduplication",
+      "description": "Store listeners in a List, check for existence before adding",
+      "pseudocode": "class Song:\n    listeners = []  # List\n\ndef play_song(song_id, user_id):\n    if user_id not in song.listeners:  # O(n) check\n        song.listeners.append(user_id)",
+      "time_complexity": "O(L) per play_song where L = listeners",
+      "space_complexity": "O(L) per song",
       "pros": [
-        "Simple to implement",
-        "Preserves full event history"
+        "Simple to understand",
+        "No Set knowledge needed"
       ],
       "cons": [
-        "Slow print_analytics",
-        "Wasteful - stores duplicate events"
+        "O(L) per play is too slow for 100,000 plays",
+        "Manual deduplication is error-prone"
       ],
-      "when_to_use": "Never for this problem - doesn't meet efficiency expectations"
+      "when_to_use": "Never in interviews - shows lack of data structure knowledge"
     },
     {
-      "name": "Optimal: Set-Based Unique Tracking",
-      "description": "Each Song maintains a Set<Integer> of user IDs. Adding a user to the set is idempotent - duplicates are automatically ignored. Print analytics sorts all songs by set size.",
-      "pseudocode": "class Song:\n  name: string\n  listeners: Set<int>\n\nplay_song(song_id, user_id):\n  songs[song_id].listeners.add(user_id)  # Set handles dedup\n\nprint_analytics():\n  sorted_songs = sort(songs.values(), \n    key=lambda s: (-s.listeners.size(), s.name))\n  for song in sorted_songs:\n    print(f\"{song.name} ({len(song.listeners)} unique listeners)\")",
-      "time_complexity": "O(1) for add_song and play_song, O(n log n) for print_analytics",
-      "space_complexity": "O(S + U) where S=songs, U=total unique (song, user) pairs",
+      "name": "Optimal: HashMap + Set",
+      "description": "Use HashMap for song lookup, Set for listener tracking per song",
+      "pseudocode": "class Song:\n    listeners = set()  # Set\n\ndef play_song(song_id, user_id):\n    song.listeners.add(user_id)  # O(1), auto-dedupes",
+      "time_complexity": "O(1) for add_song and play_song, O(S log S) for print_analytics",
+      "space_complexity": "O(S + total_unique_listeners)",
       "pros": [
         "Optimal time complexity",
-        "Clean separation of concerns",
-        "Extensible for follow-ups"
+        "Clean code",
+        "Set handles dedup automatically"
       ],
       "cons": [
-        "Slightly more code than brute force"
+        "Slightly more memory than needed (Set overhead)"
       ],
-      "key_insight": "Set.add() is idempotent - adding the same element twice has no effect, giving us automatic deduplication"
+      "key_insight": "Let the data structure do the work - Set.add() is idempotent"
     }
   ],
   "optimal_solution": {
-    "name": "OOP Design with Set-Based Unique Listener Tracking",
-    "explanation_md": "## Approach\n\nWe design two classes:\n\n### 1. Song Class\nEncapsulates all song-related data:\n- `name`: The song's display name\n- `listeners`: A `Set<Integer>` of user IDs who played this song\n\n### 2. SongAnalytics Class\nManages the song collection:\n- `songs`: `HashMap<Integer, Song>` for O(1) lookup\n- `next_id`: Counter for auto-incrementing IDs (starts at 1)\n\n### Why This Works\n\n1. **Set for Listeners**: Adding the same user multiple times to a Set is a no-op, giving us automatic deduplication\n\n2. **HashMap for Songs**: O(1) lookup when playing a song by ID\n\n3. **Custom Sorting**: Python's `sorted()` with a tuple key `(-count, name)` gives us descending count + ascending name\n\n### Complexity\n- `add_song`: O(1)\n- `play_song`: O(1) average (HashSet add)\n- `print_analytics`: O(n log n) for sorting n songs",
+    "name": "HashMap + Set with Custom Sorting",
+    "explanation_md": "## Approach\n\nThe solution uses a clean OOP design with two classes:\n\n### Song Class\nEncapsulates song data:\n- `name`: The song's display name\n- `listeners`: A **Set** of user IDs who have played this song\n\nUsing a Set is the key insight - `set.add(userId)` automatically handles duplicates. If the same user plays the same song 10 times, the Set still contains just one entry.\n\n### SongAnalytics Class\nManages the system:\n- `songs`: HashMap mapping song_id \u2192 Song object for O(1) lookup\n- `next_id`: Counter for auto-incrementing IDs (starts at 1!)\n\n### Why This Works\n1. **add_song**: O(1) - Create Song, put in HashMap, increment counter\n2. **play_song**: O(1) - HashMap lookup + Set add (both O(1))\n3. **print_analytics**: O(S log S) - Collect songs, sort, print\n\nThe sorting uses a tuple key `(-count, name)` which sorts by count descending (due to negation), then name ascending.",
     "data_structures": [
       {
         "structure": "HashMap<Integer, Song>",
@@ -234,388 +241,172 @@
       },
       {
         "structure": "Set<Integer> per Song",
-        "purpose": "Track unique listeners with automatic deduplication"
+        "purpose": "O(1) unique listener tracking, auto-deduplication"
       },
       {
         "structure": "int next_id",
-        "purpose": "Generate sequential IDs starting from 1"
+        "purpose": "Auto-incrementing ID assignment"
       }
     ],
     "algorithm_steps": [
-      "1. **add_song(name)**: Create Song object, store in HashMap with current next_id, increment next_id, return assigned ID",
-      "2. **play_song(song_id, user_id)**: Validate song_id exists in HashMap; if yes, add user_id to song's listener Set; if no, print error",
-      "3. **print_analytics()**: Collect all Song objects, sort by (-listener_count, name), print each in format"
+      "1. **__init__**: Initialize empty songs HashMap, set next_id = 1",
+      "2. **add_song**: Create Song object, store in HashMap with current next_id, increment next_id, return assigned ID",
+      "3. **play_song**: Check if song_id exists (error if not), then add user_id to song's listeners Set",
+      "4. **print_analytics**: Collect all songs, sort by (-listener_count, name), print formatted output"
     ],
-    "why_set": "A Set provides:\n- O(1) average add/contains\n- Automatic deduplication (same user added twice is no-op)\n- O(1) size() for listener count"
+    "why_set": "Set.add() is **idempotent** - adding the same element multiple times has no effect. This perfectly matches 'unique listeners only' requirement without any extra logic."
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Song Play Analytics System",
-    "",
-    "A music streaming analytics system that tracks songs and their unique listeners.",
-    "Provides sorted analytics based on popularity (unique listener count).",
-    "",
-    "Author: Interview Preparation Guide",
-    "Complexity: O(1) for add/play, O(n log n) for analytics",
-    "\"\"\"",
-    "",
-    "from typing import Dict, Set, List",
+    "from typing import Set",
     "",
     "",
     "class Song:",
-    "    \"\"\"",
-    "    Represents a song with its name and unique listeners.",
-    "    ",
-    "    Attributes:",
-    "        name: The display name of the song",
-    "        listeners: Set of user IDs who have played this song",
-    "    ",
-    "    Example:",
-    "        >>> song = Song(\"Bohemian Rhapsody\")",
-    "        >>> song.add_listener(42)",
-    "        >>> song.add_listener(42)  # Duplicate - no effect",
-    "        >>> song.get_listener_count()",
-    "        1",
-    "    \"\"\"",
+    "    \"\"\"Represents a song with unique listener tracking via Set.\"\"\"",
     "    ",
     "    def __init__(self, name: str) -> None:",
-    "        \"\"\"Initialize a song with the given name and empty listener set.\"\"\"",
-    "        self.name: str = name",
-    "        self.listeners: Set[int] = set()",
+    "        self.name = name",
+    "        self.listeners: Set[int] = set()  # Set auto-handles duplicates",
     "    ",
     "    def add_listener(self, user_id: int) -> None:",
-    "        \"\"\"",
-    "        Add a user to this song's listener set.",
-    "        ",
-    "        If the user already exists in the set, this is a no-op.",
-    "        This provides automatic deduplication.",
-    "        ",
-    "        Args:",
-    "            user_id: The ID of the user playing this song",
-    "        \"\"\"",
+    "        \"\"\"Add listener - Set.add() is idempotent.\"\"\"",
     "        self.listeners.add(user_id)",
     "    ",
     "    def get_listener_count(self) -> int:",
-    "        \"\"\"Return the number of unique listeners for this song.\"\"\"",
     "        return len(self.listeners)",
-    "    ",
-    "    def get_name(self) -> str:",
-    "        \"\"\"Return the name of this song.\"\"\"",
-    "        return self.name",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        \"\"\"String representation for debugging.\"\"\"",
-    "        return f\"Song(name='{self.name}', listeners={self.listeners})\"",
     "",
     "",
     "class SongAnalytics:",
     "    \"\"\"",
-    "    Analytics system for tracking song plays and unique listeners.",
-    "    ",
-    "    This system allows adding songs with auto-incrementing IDs,",
-    "    recording play events while tracking unique listeners only,",
-    "    and generating sorted analytics reports.",
-    "    ",
-    "    Example:",
-    "        >>> analytics = SongAnalytics()",
-    "        >>> analytics.add_song(\"Song A\")",
-    "        1",
-    "        >>> analytics.play_song(1, 42)",
-    "        >>> analytics.print_analytics()",
-    "        Song A (1 unique listeners)",
+    "    Music streaming analytics system.",
+    "    Tracks unique listeners per song and generates sorted reports.",
     "    \"\"\"",
     "    ",
     "    def __init__(self) -> None:",
-    "        \"\"\"",
-    "        Initialize the analytics system.",
-    "        ",
-    "        Creates an empty song collection and sets the next ID to 1.",
-    "        \"\"\"",
-    "        self._songs: Dict[int, Song] = {}",
-    "        self._next_id: int = 1  # IDs start from 1, not 0!",
+    "        self.songs: dict[int, Song] = {}  # song_id -> Song",
+    "        self.next_id = 1  # IDs start from 1, not 0!",
     "    ",
     "    def add_song(self, name: str) -> int:",
-    "        \"\"\"",
-    "        Add a new song to the system.",
-    "        ",
-    "        Args:",
-    "            name: The name of the song to add",
-    "        ",
-    "        Returns:",
-    "            The auto-assigned unique ID for the song (starting from 1)",
-    "        ",
-    "        Note:",
-    "            Same song name can be added multiple times - each gets a unique ID.",
-    "        \"\"\"",
-    "        song_id = self._next_id",
-    "        self._songs[song_id] = Song(name)",
-    "        self._next_id += 1",
+    "        \"\"\"Add song with auto-assigned ID. Returns the assigned ID.\"\"\"",
+    "        song_id = self.next_id",
+    "        self.songs[song_id] = Song(name)",
+    "        self.next_id += 1",
     "        return song_id",
     "    ",
     "    def play_song(self, song_id: int, user_id: int) -> None:",
-    "        \"\"\"",
-    "        Record a play event for the given song by the given user.",
-    "        ",
-    "        Args:",
-    "            song_id: The ID of the song being played",
-    "            user_id: The ID of the user playing the song",
-    "        ",
-    "        Note:",
-    "            - If song_id does not exist, prints an error message",
-    "            - Each user is counted only once per song, even with multiple plays",
-    "        \"\"\"",
-    "        if song_id not in self._songs:",
+    "        \"\"\"Record a play event. Prints error if song doesn't exist.\"\"\"",
+    "        if song_id not in self.songs:",
     "            print(f\"Error: Song ID {song_id} does not exist.\")",
     "            return",
-    "        ",
-    "        self._songs[song_id].add_listener(user_id)",
+    "        self.songs[song_id].add_listener(user_id)",
     "    ",
     "    def print_analytics(self) -> None:",
-    "        \"\"\"",
-    "        Print all songs sorted by unique listener count.",
-    "        ",
-    "        Sorting rules:",
-    "            1. Primary: Unique listeners (DESCENDING - highest first)",
-    "            2. Secondary: Song name (ASCENDING - alphabetical)",
-    "        ",
-    "        Format: \"<song_name> (<count> unique listeners)\"",
-    "        ",
-    "        Note:",
-    "            Songs with 0 listeners are included in the output.",
-    "        \"\"\"",
-    "        # Get all songs and sort them",
-    "        sorted_songs: List[Song] = sorted(",
-    "            self._songs.values(),",
-    "            key=lambda song: (-song.get_listener_count(), song.get_name())",
+    "        \"\"\"Print songs sorted by unique listeners (desc), then name (asc).\"\"\"",
+    "        # Sort by: (-count, name) -> count DESC, name ASC",
+    "        sorted_songs = sorted(",
+    "            self.songs.values(),",
+    "            key=lambda s: (-s.get_listener_count(), s.name)",
     "        )",
-    "        ",
-    "        # Print each song in the required format",
     "        for song in sorted_songs:",
-    "            count = song.get_listener_count()",
-    "            print(f\"{song.get_name()} ({count} unique listeners)\")",
+    "            print(f\"{song.name} ({song.get_listener_count()} unique listeners)\")",
     "",
     "",
-    "def run_example_1() -> None:",
-    "    \"\"\"Run Example 1: Basic Operations.\"\"\"",
+    "if __name__ == '__main__':",
+    "    # Demo: Basic operations from Example 1",
     "    print(\"=\" * 60)",
     "    print(\"Example 1: Basic Operations\")",
     "    print(\"=\" * 60)",
-    "    ",
     "    analytics = SongAnalytics()",
     "    ",
     "    # Add songs",
-    "    id1 = analytics.add_song(\"Song A\")",
-    "    print(f\"Added 'Song A' with ID: {id1}\")",
+    "    id1 = analytics.add_song(\"Song A\")  # ID: 1",
+    "    id2 = analytics.add_song(\"Song B\")  # ID: 2",
+    "    id3 = analytics.add_song(\"Song C\")  # ID: 3",
+    "    print(f\"Added songs with IDs: {id1}, {id2}, {id3}\")",
     "    ",
-    "    id2 = analytics.add_song(\"Song B\")",
-    "    print(f\"Added 'Song B' with ID: {id2}\")",
-    "    ",
-    "    id3 = analytics.add_song(\"Song C\")",
-    "    print(f\"Added 'Song C' with ID: {id3}\")",
-    "    ",
-    "    # Play songs",
-    "    print(\"\\nPlaying songs...\")",
-    "    analytics.play_song(1, 1)  # User 1 plays Song A",
-    "    analytics.play_song(1, 2)  # User 2 plays Song A",
-    "    analytics.play_song(2, 1)  # User 1 plays Song B",
-    "    analytics.play_song(3, 3)  # User 3 plays Song C",
-    "    analytics.play_song(3, 3)  # User 3 plays Song C again (no change)",
+    "    # Play songs - note user 3 plays Song C twice",
+    "    analytics.play_song(1, 1)  # Song A: {1}",
+    "    analytics.play_song(1, 2)  # Song A: {1, 2}",
+    "    analytics.play_song(2, 1)  # Song B: {1}",
+    "    analytics.play_song(3, 3)  # Song C: {3}",
+    "    analytics.play_song(3, 3)  # Song C: {3} - no change (duplicate!)",
     "    ",
     "    print(\"\\nAnalytics Report:\")",
     "    analytics.print_analytics()",
-    "    print()",
-    "",
-    "",
-    "def run_example_2() -> None:",
-    "    \"\"\"Run Example 2: Tie-Breaking by Name.\"\"\"",
-    "    print(\"=\" * 60)",
+    "    ",
+    "    # Demo: Tie-breaking by name",
+    "    print(\"\\n\" + \"=\" * 60)",
     "    print(\"Example 2: Tie-Breaking by Name\")",
     "    print(\"=\" * 60)",
-    "    ",
-    "    analytics = SongAnalytics()",
-    "    ",
-    "    analytics.add_song(\"Zebra\")",
-    "    analytics.add_song(\"Apple\")",
-    "    analytics.add_song(\"Mango\")",
-    "    ",
-    "    analytics.play_song(1, 100)  # Zebra: 1 listener",
-    "    analytics.play_song(2, 200)  # Apple: 1 listener",
-    "    analytics.play_song(3, 300)  # Mango: 1 listener",
-    "    ",
-    "    print(\"All songs have 1 listener - sorted alphabetically:\")",
-    "    analytics.print_analytics()",
-    "    print()",
-    "",
-    "",
-    "def run_example_3() -> None:",
-    "    \"\"\"Run Example 3: Invalid Song ID Error.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"Example 3: Invalid Song ID Error\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    analytics = SongAnalytics()",
-    "    analytics.add_song(\"Hello\")",
-    "    ",
-    "    print(\"Playing valid song ID 1:\")",
-    "    analytics.play_song(1, 5)",
-    "    print(\"Success!\")",
-    "    ",
-    "    print(\"\\nPlaying invalid song ID 999:\")",
-    "    analytics.play_song(999, 5)",
-    "    print()",
-    "",
-    "",
-    "def run_example_4() -> None:",
-    "    \"\"\"Run Example 4: Songs with Zero Listeners.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"Example 4: Songs with Zero Listeners\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    analytics = SongAnalytics()",
-    "    analytics.add_song(\"Popular\")",
-    "    analytics.add_song(\"Unpopular\")",
-    "    ",
-    "    analytics.play_song(1, 1)  # Only Popular gets played",
-    "    ",
-    "    print(\"Analytics (including songs with 0 listeners):\")",
-    "    analytics.print_analytics()",
-    "    print()",
-    "",
-    "",
-    "def run_edge_cases() -> None:",
-    "    \"\"\"Run additional edge case tests.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"Edge Cases\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    # Edge case: Same user plays same song multiple times",
-    "    print(\"\\nTest: Same user plays same song multiple times\")",
-    "    analytics = SongAnalytics()",
-    "    analytics.add_song(\"Test Song\")",
-    "    for _ in range(5):",
-    "        analytics.play_song(1, 42)  # User 42 plays 5 times",
-    "    print(\"User 42 played 'Test Song' 5 times:\")",
-    "    analytics.print_analytics()",
-    "    print(\"(Count should still be 1)\")",
-    "    ",
-    "    # Edge case: Many unique users",
-    "    print(\"\\nTest: Many unique users for one song\")",
     "    analytics2 = SongAnalytics()",
-    "    analytics2.add_song(\"Viral Hit\")",
-    "    for user_id in range(1, 11):",
-    "        analytics2.play_song(1, user_id)",
+    "    analytics2.add_song(\"Zebra\")",
+    "    analytics2.add_song(\"Apple\")",
+    "    analytics2.add_song(\"Mango\")",
+    "    analytics2.play_song(1, 100)  # Zebra",
+    "    analytics2.play_song(2, 200)  # Apple",
+    "    analytics2.play_song(3, 300)  # Mango",
+    "    print(\"All have 1 listener - sorted alphabetically:\")",
     "    analytics2.print_analytics()",
-    "    print()",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    print()",
-    "    print(\"#\" * 60)",
-    "    print(\"#  SONG PLAY ANALYTICS SYSTEM - DEMO\")",
-    "    print(\"#\" * 60)",
-    "    print()",
     "    ",
-    "    run_example_1()",
-    "    run_example_2()",
-    "    run_example_3()",
-    "    run_example_4()",
-    "    run_edge_cases()",
-    "    ",
+    "    # Demo: Error handling",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Example 3: Error Handling\")",
     "    print(\"=\" * 60)",
-    "    print(\"All demos completed successfully!\")",
-    "    print(\"=\" * 60)"
+    "    analytics3 = SongAnalytics()",
+    "    analytics3.add_song(\"Hello\")",
+    "    analytics3.play_song(999, 5)  # Invalid ID",
+    "    ",
+    "    # Demo: Songs with zero listeners",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Example 4: Zero Listeners\")",
+    "    print(\"=\" * 60)",
+    "    analytics4 = SongAnalytics()",
+    "    analytics4.add_song(\"Popular\")",
+    "    analytics4.add_song(\"Unpopular\")",
+    "    analytics4.play_song(1, 1)",
+    "    print(\"Unpopular song still appears:\")",
+    "    analytics4.print_analytics()"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
     "/**",
-    " * Represents a song with its name and unique listeners.",
-    " * ",
-    " * This class encapsulates all song-related data and provides",
-    " * methods for tracking unique listeners.",
+    " * Song with unique listener tracking via HashSet.",
     " */",
     "class Song {",
-    "    private final String name;",
-    "    private final Set<Integer> listeners;",
+    "    private String name;",
+    "    private Set<Integer> listeners;",
     "    ",
-    "    /**",
-    "     * Creates a new Song with the given name.",
-    "     * ",
-    "     * @param name The display name of the song",
-    "     */",
     "    public Song(String name) {",
     "        this.name = name;",
     "        this.listeners = new HashSet<>();",
     "    }",
     "    ",
-    "    /**",
-    "     * Adds a user to this song's listener set.",
-    "     * If the user already exists, this is a no-op (Set behavior).",
-    "     * ",
-    "     * @param userId The ID of the user playing this song",
-    "     */",
     "    public void addListener(int userId) {",
-    "        listeners.add(userId);",
+    "        listeners.add(userId);  // Set handles duplicates",
     "    }",
     "    ",
-    "    /**",
-    "     * Returns the number of unique listeners for this song.",
-    "     * ",
-    "     * @return The count of unique listeners",
-    "     */",
     "    public int getListenerCount() {",
     "        return listeners.size();",
     "    }",
     "    ",
-    "    /**",
-    "     * Returns the name of this song.",
-    "     * ",
-    "     * @return The song name",
-    "     */",
     "    public String getName() {",
     "        return name;",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return \"Song{name='\" + name + \"', listeners=\" + listeners + \"}\";",
     "    }",
     "}",
     "",
     "/**",
-    " * Analytics system for tracking song plays and unique listeners.",
-    " * ",
-    " * This system allows adding songs with auto-incrementing IDs,",
-    " * recording play events while tracking unique listeners only,",
-    " * and generating sorted analytics reports.",
-    " * ",
-    " * Example usage:",
-    " * <pre>",
-    " * SongAnalytics analytics = new SongAnalytics();",
-    " * int id = analytics.addSong(\"Song A\");  // Returns 1",
-    " * analytics.playSong(1, 42);",
-    " * analytics.printAnalytics();  // Prints: Song A (1 unique listeners)",
-    " * </pre>",
+    " * Music streaming analytics system.",
+    " * Tracks unique listeners per song and generates sorted reports.",
     " */",
     "public class SongAnalytics {",
-    "    private final Map<Integer, Song> songs;",
+    "    private Map<Integer, Song> songs;",
     "    private int nextId;",
     "    ",
-    "    /**",
-    "     * Initializes the analytics system with an empty song collection.",
-    "     * IDs start from 1, not 0.",
-    "     */",
     "    public SongAnalytics() {",
     "        this.songs = new HashMap<>();",
-    "        this.nextId = 1;  // IDs start from 1!",
+    "        this.nextId = 1;  // Start from 1, not 0!",
     "    }",
     "    ",
-    "    /**",
-    "     * Adds a new song to the system.",
-    "     * ",
-    "     * @param name The name of the song to add",
-    "     * @return The auto-assigned unique ID for the song (starting from 1)",
-    "     */",
     "    public int addSong(String name) {",
     "        int songId = nextId;",
     "        songs.put(songId, new Song(name));",
@@ -623,171 +414,114 @@
     "        return songId;",
     "    }",
     "    ",
-    "    /**",
-    "     * Records a play event for the given song by the given user.",
-    "     * ",
-    "     * @param songId The ID of the song being played",
-    "     * @param userId The ID of the user playing the song",
-    "     */",
     "    public void playSong(int songId, int userId) {",
     "        if (!songs.containsKey(songId)) {",
     "            System.out.println(\"Error: Song ID \" + songId + \" does not exist.\");",
     "            return;",
     "        }",
-    "        ",
     "        songs.get(songId).addListener(userId);",
     "    }",
     "    ",
-    "    /**",
-    "     * Prints all songs sorted by unique listener count.",
-    "     * ",
-    "     * Sorting rules:",
-    "     * 1. Primary: Unique listeners (DESCENDING - highest first)",
-    "     * 2. Secondary: Song name (ASCENDING - alphabetical)",
-    "     */",
     "    public void printAnalytics() {",
-    "        // Collect all songs",
+    "        // Collect and sort: count DESC, then name ASC",
     "        List<Song> sortedSongs = new ArrayList<>(songs.values());",
-    "        ",
-    "        // Sort with custom comparator",
-    "        sortedSongs.sort((s1, s2) -> {",
-    "            // Primary: listener count descending",
-    "            int countCompare = Integer.compare(s2.getListenerCount(), s1.getListenerCount());",
-    "            if (countCompare != 0) {",
-    "                return countCompare;",
-    "            }",
-    "            // Secondary: name ascending",
-    "            return s1.getName().compareTo(s2.getName());",
+    "        sortedSongs.sort((a, b) -> {",
+    "            int countCompare = Integer.compare(b.getListenerCount(), a.getListenerCount());",
+    "            if (countCompare != 0) return countCompare;",
+    "            return a.getName().compareTo(b.getName());",
     "        });",
     "        ",
-    "        // Print each song",
     "        for (Song song : sortedSongs) {",
-    "            System.out.println(song.getName() + \" (\" + song.getListenerCount() + \" unique listeners)\");",
+    "            System.out.println(song.getName() + \" (\" + ",
+    "                song.getListenerCount() + \" unique listeners)\");",
     "        }",
     "    }",
     "    ",
-    "    // ==================== DEMO MAIN METHOD ====================",
-    "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println();",
     "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"  SONG PLAY ANALYTICS SYSTEM - JAVA DEMO\");",
+    "        System.out.println(\"Example 1: Basic Operations\");",
     "        System.out.println(\"============================================================\");",
-    "        System.out.println();",
     "        ",
-    "        // Example 1: Basic Operations",
-    "        System.out.println(\"--- Example 1: Basic Operations ---\");",
     "        SongAnalytics analytics = new SongAnalytics();",
-    "        ",
     "        int id1 = analytics.addSong(\"Song A\");",
-    "        System.out.println(\"Added 'Song A' with ID: \" + id1);",
-    "        ",
     "        int id2 = analytics.addSong(\"Song B\");",
-    "        System.out.println(\"Added 'Song B' with ID: \" + id2);",
-    "        ",
     "        int id3 = analytics.addSong(\"Song C\");",
-    "        System.out.println(\"Added 'Song C' with ID: \" + id3);",
+    "        System.out.println(\"Added songs with IDs: \" + id1 + \", \" + id2 + \", \" + id3);",
     "        ",
-    "        analytics.playSong(1, 1);  // User 1 plays Song A",
-    "        analytics.playSong(1, 2);  // User 2 plays Song A",
-    "        analytics.playSong(2, 1);  // User 1 plays Song B",
-    "        analytics.playSong(3, 3);  // User 3 plays Song C",
-    "        analytics.playSong(3, 3);  // User 3 plays Song C again (no change)",
+    "        analytics.playSong(1, 1);",
+    "        analytics.playSong(1, 2);",
+    "        analytics.playSong(2, 1);",
+    "        analytics.playSong(3, 3);",
+    "        analytics.playSong(3, 3);  // Duplicate - no change",
     "        ",
     "        System.out.println(\"\\nAnalytics Report:\");",
     "        analytics.printAnalytics();",
-    "        System.out.println();",
     "        ",
-    "        // Example 2: Tie-Breaking",
-    "        System.out.println(\"--- Example 2: Tie-Breaking by Name ---\");",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"Example 2: Tie-Breaking\");",
+    "        System.out.println(\"============================================================\");",
+    "        ",
     "        SongAnalytics analytics2 = new SongAnalytics();",
     "        analytics2.addSong(\"Zebra\");",
     "        analytics2.addSong(\"Apple\");",
     "        analytics2.addSong(\"Mango\");",
-    "        ",
     "        analytics2.playSong(1, 100);",
     "        analytics2.playSong(2, 200);",
     "        analytics2.playSong(3, 300);",
-    "        ",
-    "        System.out.println(\"All songs have 1 listener - sorted alphabetically:\");",
+    "        System.out.println(\"Sorted alphabetically (all tied):\");",
     "        analytics2.printAnalytics();",
-    "        System.out.println();",
     "        ",
-    "        // Example 3: Error Handling",
-    "        System.out.println(\"--- Example 3: Error Handling ---\");",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"Example 3: Error Handling\");",
+    "        System.out.println(\"============================================================\");",
     "        SongAnalytics analytics3 = new SongAnalytics();",
     "        analytics3.addSong(\"Hello\");",
-    "        analytics3.playSong(999, 5);  // Invalid ID",
-    "        System.out.println();",
-    "        ",
-    "        // Example 4: Zero Listeners",
-    "        System.out.println(\"--- Example 4: Zero Listeners ---\");",
-    "        SongAnalytics analytics4 = new SongAnalytics();",
-    "        analytics4.addSong(\"Popular\");",
-    "        analytics4.addSong(\"Unpopular\");",
-    "        analytics4.playSong(1, 1);",
-    "        analytics4.printAnalytics();",
-    "        System.out.println();",
-    "        ",
-    "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"  All demos completed successfully!\");",
-    "        System.out.println(\"============================================================\");",
+    "        analytics3.playSong(999, 5);  // Invalid",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-11",
-      "section": "Module Docstring & Imports",
-      "explanation": "We document the purpose and import `Dict`, `Set`, `List` from typing for type hints. Clean imports signal professional code quality."
-    },
-    {
-      "lines": "14-52",
+      "lines": "1-16 (Python) / 1-24 (Java)",
       "section": "Song Class",
-      "explanation": "The Song class encapsulates:\n- `name`: The song's display name\n- `listeners`: A Set for automatic deduplication\n\nThe `add_listener` method uses Set's natural behavior - adding a duplicate is a no-op. This is the **key insight** that makes unique tracking trivial."
+      "explanation": "The Song class encapsulates a song's name and its unique listeners. **Key insight**: Using a Set for listeners means `add()` automatically handles duplicates - if the same user plays the song 10 times, the Set still contains just one entry. `get_listener_count()` simply returns the Set's size."
     },
     {
-      "lines": "55-77",
-      "section": "SongAnalytics.__init__",
-      "explanation": "Initialize with:\n- `_songs`: Empty HashMap for O(1) song lookup\n- `_next_id = 1`: Critical! IDs start from 1, not 0\n\nUsing underscore prefix (`_songs`) signals these are internal implementation details."
+      "lines": "18-27 (Python) / 26-39 (Java)",
+      "section": "SongAnalytics Initialization",
+      "explanation": "We maintain a HashMap mapping song_id to Song objects for O(1) lookup, and a counter `next_id` starting at **1** (not 0!) for auto-incrementing IDs. This is a common interview gotcha."
     },
     {
-      "lines": "79-95",
+      "lines": "29-34 (Python) / 41-46 (Java)",
       "section": "add_song Method",
-      "explanation": "The sequence is important:\n1. Capture current `next_id` as `song_id`\n2. Create Song and store in HashMap\n3. Increment `next_id`\n4. Return the captured `song_id`\n\nThis ensures the ID returned matches what was stored."
+      "explanation": "Create a new Song, store it with the current `next_id`, then increment the counter. The key order is: save current ID \u2192 store song \u2192 increment. Return the assigned ID."
     },
     {
-      "lines": "97-116",
+      "lines": "36-41 (Python) / 48-54 (Java)",
       "section": "play_song Method",
-      "explanation": "**Error handling first**: Check if song_id exists before processing. The exact error message format is specified in requirements - match it exactly.\n\nIf valid, delegate to `song.add_listener()` - let the Song class handle its own state."
+      "explanation": "First validate the song_id exists - print exact error message if not. Then delegate to the Song's `add_listener()` method. The Set handles duplicate users automatically."
     },
     {
-      "lines": "118-140",
+      "lines": "43-50 (Python) / 56-66 (Java)",
       "section": "print_analytics Method",
-      "explanation": "The sorting key `(-count, name)` is the clever bit:\n- Negative count gives **descending** order (3 > 2 > 1)\n- Positive name gives **ascending** order ('A' < 'B' < 'C')\n\nPython's tuple comparison handles tie-breaking automatically."
-    },
-    {
-      "lines": "142-end",
-      "section": "Demo Main Block",
-      "explanation": "A comprehensive test suite demonstrating all examples from the problem. This shows the interviewer you test your code and understand all requirements."
+      "explanation": "The sorting is the trickiest part. We sort by a **tuple key** `(-count, name)` - negating count makes it descending, while name sorts ascending. In Java, we use a custom comparator with `Integer.compare(b, a)` for descending count."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. After implementing `add_song`: Print `self._songs` and `self._next_id` to verify IDs increment correctly\n2. After implementing `play_song`: Print the song's listener set to verify users are added\n3. After implementing `print_analytics`: Test with known examples, verify sort order",
+    "how_to_test_incrementally": "1. Test add_song alone - verify IDs start at 1 and increment. 2. Test play_song with valid ID. 3. Test play_song with invalid ID. 4. Test duplicate plays by same user. 5. Test print_analytics sorting.",
     "what_to_print_or_assert": [
-      "assert analytics.add_song('A') == 1, 'First ID should be 1'",
-      "assert analytics.add_song('B') == 2, 'Second ID should be 2'",
-      "print(f'Songs map: {analytics._songs}')",
-      "print(f'Listeners for song 1: {analytics._songs[1].listeners}')"
+      "print(f'Assigned ID: {song_id}') after add_song",
+      "print(f'Listeners after play: {song.listeners}') in play_song",
+      "print(f'Sort key: ({-s.get_listener_count()}, {s.name})') before sorting"
     ],
     "common_failure_modes": [
-      "**Off-by-one**: Starting ID from 0 instead of 1",
-      "**Wrong sort order**: Sorting count ascending instead of descending",
-      "**Missing error check**: Not validating song_id before processing",
-      "**Using list instead of set**: Allows duplicate listeners",
-      "**Wrong error format**: Mismatching the exact error message string"
+      "ID starting from 0 instead of 1",
+      "Count increasing on duplicate plays (using List not Set)",
+      "Sorting ascending instead of descending",
+      "Missing tie-breaker by name",
+      "Wrong error message format"
     ],
-    "how_to_fix_fast": "1. **Read the error message carefully** - often reveals exact issue\n2. **Add print statements** at each step to trace data flow\n3. **Test minimal case** - one song, one user, one play\n4. **Compare with examples** - expected vs actual output"
+    "how_to_fix_fast": "1. Print the listener Set after each play to verify no duplicates. 2. Print sort keys to verify negative count for descending. 3. Add test case with exact duplicate user to catch List vs Set."
   },
   "complexity_analysis": {
     "time": {
@@ -796,310 +530,283 @@
         "explanation": "HashMap put + integer increment"
       },
       "play_song": {
-        "complexity": "O(1) average",
-        "explanation": "HashMap get O(1) + HashSet add O(1) average"
+        "complexity": "O(1)",
+        "explanation": "HashMap containsKey + get + Set add"
       },
       "print_analytics": {
-        "complexity": "O(n log n)",
-        "explanation": "Sorting n songs dominates; printing is O(n)"
+        "complexity": "O(S log S)",
+        "explanation": "S = number of songs, dominated by sorting"
       },
-      "overall": "add_song: O(1), play_song: O(1), print_analytics: O(n log n)"
+      "overall": "O(1) for add/play operations, O(S log S) for analytics"
     },
     "space": {
-      "complexity": "O(S + P) where S = songs, P = unique (song, user) pairs",
-      "breakdown": "- HashMap for songs: O(S)\n- Each song's listener Set: O(users per song)\n- Total across all songs: O(P) where P = sum of all unique plays\n- next_id counter: O(1)",
-      "note": "In worst case, all users play all songs: O(S * U) where U = unique users"
+      "complexity": "O(S + L) where S = songs, L = total unique (song, user) pairs",
+      "breakdown": "- HashMap for songs: O(S)\n- Set per song for listeners: O(L) total across all songs\n- Sorting creates a copy: O(S) temporary",
+      "note": "We store listener IDs, not play events - space efficient"
     },
-    "can_we_do_better": "For the given requirements, this is optimal:\n- O(1) for add/play is best possible\n- O(n log n) for sorting is optimal for comparison-based sort\n- We could use O(n) counting sort if listener counts were bounded, but it's unnecessary"
+    "can_we_do_better": "For print_analytics, we could maintain a sorted structure (TreeSet with custom comparator), but it would complicate play_song since counts change. Current design is optimal for write-heavy workloads."
   },
   "dry_run": {
-    "example": "add_song(\"Song A\"), add_song(\"Song B\"), play_song(1, 10), play_song(1, 20), play_song(1, 10), play_song(2, 10), print_analytics()",
-    "trace_table": "| Step | Operation | songs HashMap | next_id | Output |\n|------|-----------|---------------|---------|--------|\n| 1 | `SongAnalytics()` | `{}` | `1` | - |\n| 2 | `add_song(\"Song A\")` | `{1: Song(\"Song A\", {})}` | `2` | Returns `1` |\n| 3 | `add_song(\"Song B\")` | `{1: Song(\"Song A\", {}), 2: Song(\"Song B\", {})}` | `3` | Returns `2` |\n| 4 | `play_song(1, 10)` | `{1: Song(\"Song A\", {10}), 2: Song(\"Song B\", {})}` | `3` | - |\n| 5 | `play_song(1, 20)` | `{1: Song(\"Song A\", {10, 20}), 2: Song(\"Song B\", {})}` | `3` | - |\n| 6 | `play_song(1, 10)` | `{1: Song(\"Song A\", {10, 20})}` \u2190 **NO CHANGE** (duplicate) | `3` | - |\n| 7 | `play_song(2, 10)` | `{1: Song(\"Song A\", {10, 20}), 2: Song(\"Song B\", {10})}` | `3` | - |\n| 8 | `print_analytics()` | (unchanged) | `3` | `Song A (2 unique listeners)`<br>`Song B (1 unique listeners)` |",
+    "example": "add_song(\"Song A\"), add_song(\"Song B\"), play_song(1, 101), play_song(1, 102), play_song(1, 101), play_song(2, 101), print_analytics()",
+    "trace_table": "| Step | Operation | songs Map | next_id | Output |\n|------|-----------|-----------|---------|--------|\n| 1 | SongAnalytics() | {} | 1 | - |\n| 2 | add_song(\"Song A\") | {1: Song(A, {})} | 2 | **1** |\n| 3 | add_song(\"Song B\") | {1: Song(A, {}), 2: Song(B, {})} | 3 | **2** |\n| 4 | play_song(1, 101) | {1: Song(A, {101}), 2: Song(B, {})} | 3 | - |\n| 5 | play_song(1, 102) | {1: Song(A, {101, 102}), 2: Song(B, {})} | 3 | - |\n| 6 | play_song(1, 101) | {1: Song(A, {101, 102}), 2: Song(B, {})} | 3 | - (no change!) |\n| 7 | play_song(2, 101) | {1: Song(A, {101, 102}), 2: Song(B, {101})} | 3 | - |\n| 8 | print_analytics() | Sort: A(2), B(1) | 3 | Song A (2)\\nSong B (1) |",
     "final_answer": "Song A (2 unique listeners)\\nSong B (1 unique listeners)"
   },
   "test_cases": [
     {
       "name": "Basic - Single song, single user",
       "category": "Happy Path",
-      "input": "add_song(\"Hello\"), play_song(1, 42), print_analytics()",
+      "input": "add_song('Hello'), play_song(1, 42), print_analytics()",
       "expected": "Hello (1 unique listeners)",
       "explanation": "Most basic case: one song, one play, one user"
     },
     {
-      "name": "Same user plays same song multiple times",
-      "category": "Deduplication",
-      "input": "add_song(\"Test\"), play_song(1, 5) x4, print_analytics()",
+      "name": "Duplicate user - Same user plays same song multiple times",
+      "category": "Core Logic",
+      "input": "add_song('Test'), play_song(1,1), play_song(1,1), play_song(1,1), print_analytics()",
       "expected": "Test (1 unique listeners)",
-      "explanation": "User 5 plays 4 times but count stays at 1 - Set deduplication"
+      "explanation": "User 1 plays 3 times but count stays at 1 - Set handles this"
     },
     {
       "name": "Tie-breaking by name",
       "category": "Sorting",
-      "input": "add_song(\"Zebra\"), add_song(\"Apple\"), add_song(\"Mango\"), play each once with different users",
-      "expected": "Apple (1 unique listeners)\\nMango (1 unique listeners)\\nZebra (1 unique listeners)",
-      "explanation": "All tied at 1 listener, sorted alphabetically A < M < Z"
+      "input": "add_song('Zebra'), add_song('Apple'), play each once, print_analytics()",
+      "expected": "Apple (1 unique listeners)\\nZebra (1 unique listeners)",
+      "explanation": "Equal counts \u2192 sort alphabetically ascending"
     },
     {
       "name": "Invalid song ID",
       "category": "Error Handling",
-      "input": "add_song(\"X\"), play_song(999, 1)",
+      "input": "add_song('Valid'), play_song(999, 1)",
       "expected": "Error: Song ID 999 does not exist.",
-      "explanation": "Must print exact error message format"
+      "explanation": "Must match exact error format"
     },
     {
       "name": "Song with zero listeners",
       "category": "Edge Case",
-      "input": "add_song(\"Popular\"), add_song(\"Unpopular\"), play_song(1, 1), print_analytics()",
+      "input": "add_song('Popular'), add_song('Unpopular'), play_song(1, 1), print_analytics()",
       "expected": "Popular (1 unique listeners)\\nUnpopular (0 unique listeners)",
-      "explanation": "Unpopular has 0 listeners but still appears in output"
+      "explanation": "Unpopular has 0 listeners but must still appear"
     },
     {
-      "name": "Many users, one song",
-      "category": "Scale",
-      "input": "add_song(\"Viral\"), 10 different users play it",
-      "expected": "Viral (10 unique listeners)",
-      "explanation": "10 unique users should show count of 10"
-    },
-    {
-      "name": "Complex sorting scenario",
+      "name": "Complex sorting",
       "category": "Integration",
-      "input": "Songs: Alpha, Beta, Gamma with 2, 3, 2 listeners respectively",
-      "expected": "Beta (3 unique listeners)\\nAlpha (2 unique listeners)\\nGamma (2 unique listeners)",
-      "explanation": "Beta first (highest count), then Alpha before Gamma (alphabetical tie-break)"
+      "input": "Echo(3 listeners), Alpha(2), Beta(1), Delta(1), Gamma(1)",
+      "expected": "Echo (3)\\nAlpha (2)\\nBeta (1)\\nDelta (1)\\nGamma (1)",
+      "explanation": "First by count DESC, then by name ASC for ties"
     }
   ],
   "common_mistakes": [
     {
       "mistake": "Starting ID from 0 instead of 1",
-      "why_wrong": "Requirements explicitly state IDs start from 1",
+      "why_wrong": "Problem explicitly states 'starting from 1'",
       "correct_approach": "Initialize next_id = 1",
-      "code_wrong": "self._next_id = 0  # WRONG",
-      "code_correct": "self._next_id = 1  # Correct - IDs start from 1"
+      "code_wrong": "self.next_id = 0",
+      "code_correct": "self.next_id = 1  # Start from 1!"
     },
     {
       "mistake": "Using List instead of Set for listeners",
-      "why_wrong": "Lists allow duplicates; same user would be counted multiple times",
-      "correct_approach": "Use Set for automatic deduplication",
-      "code_wrong": "self.listeners = []  # Allows duplicates!",
-      "code_correct": "self.listeners = set()  # Automatic deduplication"
+      "why_wrong": "Duplicate users will increase count",
+      "correct_approach": "Use Set - add() is idempotent",
+      "code_wrong": "self.listeners = []  # List\nself.listeners.append(user_id)",
+      "code_correct": "self.listeners = set()  # Set\nself.listeners.add(user_id)"
     },
     {
-      "mistake": "Sorting listener count in ascending order",
-      "why_wrong": "Requirements say 'descending order' - highest count first",
-      "correct_approach": "Negate the count in sort key OR use reverse=True with care",
-      "code_wrong": "sorted(songs, key=lambda s: (s.get_listener_count(), s.name))",
-      "code_correct": "sorted(songs, key=lambda s: (-s.get_listener_count(), s.name))"
+      "mistake": "Sorting count in ascending order",
+      "why_wrong": "Problem says 'descending order' for counts",
+      "correct_approach": "Negate count or reverse comparison",
+      "code_wrong": "key=lambda s: (s.get_listener_count(), s.name)",
+      "code_correct": "key=lambda s: (-s.get_listener_count(), s.name)"
     },
     {
-      "mistake": "Forgetting to handle invalid song ID",
-      "why_wrong": "Will throw KeyError/NullPointerException",
-      "correct_approach": "Check if song_id exists before processing",
-      "code_wrong": "self._songs[song_id].add_listener(user_id)  # Crashes if invalid",
-      "code_correct": "if song_id not in self._songs:\\n    print(f\"Error: Song ID {song_id} does not exist.\")\\n    return"
-    },
-    {
-      "mistake": "Filtering out songs with 0 listeners",
-      "why_wrong": "Requirements state songs with 0 listeners should be included",
-      "correct_approach": "Include all songs from the HashMap",
-      "code_wrong": "songs = [s for s in self._songs.values() if s.get_listener_count() > 0]",
-      "code_correct": "songs = list(self._songs.values())  # Include ALL songs"
+      "mistake": "Forgetting name tie-breaker",
+      "why_wrong": "Songs with same count will have undefined order",
+      "correct_approach": "Add name as secondary sort key",
+      "code_wrong": "key=lambda s: -s.get_listener_count()",
+      "code_correct": "key=lambda s: (-s.get_listener_count(), s.name)"
     },
     {
       "mistake": "Wrong error message format",
-      "why_wrong": "Tests may check exact string match",
-      "correct_approach": "Copy the exact format from requirements",
-      "code_wrong": "print(f\"Song {song_id} not found\")",
-      "code_correct": "print(f\"Error: Song ID {song_id} does not exist.\")"
+      "why_wrong": "Exact format is specified and often tested",
+      "correct_approach": "Match format exactly: 'Error: Song ID X does not exist.'",
+      "code_wrong": "print('Song not found')",
+      "code_correct": "print(f'Error: Song ID {song_id} does not exist.')"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for the problem. This looks like an OOP design problem for a music analytics system. Before I start coding, let me make sure I understand the requirements correctly...",
+    "opening": "Thank you for this problem. Before I start, I'd like to clarify a few things to make sure I understand the requirements correctly...",
     "clarifying_questions_to_ask": [
-      "Do IDs start from 0 or 1? (Answer: 1)",
-      "If the same song name is added twice, do they get different IDs? (Answer: Yes)",
-      "For the sort, is it case-sensitive comparison? (Likely: Yes, standard lexicographic)",
-      "Should songs with 0 listeners appear in analytics? (Answer: Yes)",
-      "What's the exact error message format for invalid song ID? (Copy from requirements)"
+      "Should duplicate song names create separate entries? (Confirm: yes)",
+      "What's the exact format for error messages?",
+      "Should songs with 0 listeners appear in analytics?",
+      "Is thread-safety a concern for this interview?"
     ],
     "what_to_mention_proactively": [
-      "I'll use a **Set** for listeners to get automatic deduplication",
-      "I'll use a **HashMap** for O(1) song lookup by ID",
-      "I'll create a **Song class** for clean encapsulation",
-      "For sorting, I'll use a tuple key `(-count, name)` for descending count and ascending name"
+      "I'll use a Set for listeners since we need unique counts only",
+      "IDs start from 1 per the requirements",
+      "For sorting, I'll use a tuple key: (-count, name) for desc/asc",
+      "Let me trace through the example after coding"
     ],
     "communication_during_coding": [
-      "I'm starting with the Song class since it's the simpler building block",
-      "Using a Set here so that adding the same user twice is a no-op",
-      "Note that I'm starting next_id at 1, not 0, per the requirements",
-      "The negative sign here makes the sort descending for count"
+      "I'm creating a Song class to encapsulate the data - good OOP practice",
+      "Using Set here because add() is idempotent - handles duplicates automatically",
+      "Note the next_id starts at 1, not 0",
+      "The key insight for sorting is negating the count for descending order"
     ],
     "if_stuck": [
-      "Let me step back and think about what data structure I need for unique tracking",
-      "The key insight is that Set.add() is idempotent - adding the same element twice has no effect",
-      "Let me trace through an example to verify my sort order is correct"
+      "Step back: What data structure prevents duplicates? Set!",
+      "For sorting: How do I sort descending? Negate the value!",
+      "Draw the data structures and trace through manually"
     ],
-    "time_management": "0-5min: Clarify requirements | 5-10min: Explain approach, draw data structure | 10-25min: Code Song class, then SongAnalytics | 25-35min: Test with examples, handle edge cases | 35-45min: Discuss complexity, prepare for follow-ups"
+    "time_management": "0-5min: Clarify requirements | 5-10min: Explain approach | 10-25min: Code | 25-35min: Test & trace | 35-45min: Discuss follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Set-based Unique Tracking + Custom Multi-level Sort",
+    "pattern_name": "HashMap + Set for Unique Counting",
     "indicators": [
-      "\"Unique\" or \"distinct\" count required",
-      "Same entity can appear multiple times but should count once",
-      "Multi-level sorting with different directions",
-      "OOP design with encapsulated entities"
+      "Track 'unique' X per Y",
+      "Same entity counted only once",
+      "Need O(1) lookup by ID"
     ],
     "similar_problems": [
-      "LC 347 - Top K Frequent Elements: Frequency counting + sorting",
-      "LC 692 - Top K Frequent Words: Multi-level sort (freq desc, word asc)",
-      "LC 355 - Design Twitter: OOP design with collections",
-      "LC 1165 - Single-Row Keyboard: Mapping with HashMap"
+      "LC 355 - Design Twitter: Track followed users per user",
+      "LC 347 - Top K Frequent Elements: Count unique occurrences",
+      "LC 692 - Top K Frequent Words: Similar sorting requirement"
     ],
-    "template": "1. Create entity class with Set for unique tracking\n2. Create manager class with HashMap for O(1) lookup\n3. For sorting: use tuple key with signs to control direction\n4. Handle error cases before processing"
+    "template": "HashMap<ID, Object> where Object contains Set<RelatedID>"
   },
   "follow_up_preparation": {
-    "part_2_hint": "Part 2 adds **recent plays with duplicates** - you'll need to track individual play events with timestamps. Consider adding a `List<PlayEvent>` to the Song class where each PlayEvent has timestamp and user_id. The unique listener tracking stays the same.",
-    "part_3_hint": "Part 3 asks for **recent unique plays** - you'll need to query listeners within a time window. Consider using a TreeMap/SortedDict keyed by timestamp for efficient range queries. The key challenge is deduplicating within the time window.",
-    "data_structure_evolution": "```\nPart 1: Song { name, Set<userId> }\n         \u2193\nPart 2: Song { name, Set<userId>, List<PlayEvent> }\n         \u2193\nPart 3: Song { name, TreeMap<timestamp, userId> }\n```"
+    "part_2_hint": "Part 2 adds 'recent plays with duplicates' - you'll need to store individual play events with timestamps, likely using a deque or list sorted by time",
+    "part_3_hint": "Part 3 asks for 'recent unique plays' - combines Part 2's time-based filtering with Part 1's uniqueness. Consider a LinkedHashSet or timestamp-keyed structure",
+    "data_structure_evolution": "Part 1: HashMap + Set (just unique users) \u2192 Part 2: Add List/Deque of timestamps \u2192 Part 3: Combine with OrderedDict/LinkedHashMap"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. It looks like I'm building a music analytics system that tracks unique listeners per song. Before I code, I'd like to clarify a few things and then share my approach.",
-    "after_clarification": "Great, so to summarize: I need to track songs with auto-incrementing IDs starting from 1, count unique listeners per song (not total plays), and print sorted analytics with descending listener count and ascending name for ties. My approach will be to use a Song class with a Set for listeners, and a SongAnalytics class with a HashMap for O(1) lookups. Does that sound right?",
+    "opening_verbatim": "Thank you for this problem. It looks like a classic OOP design with some analytics requirements. Before I start coding, let me clarify a few things and share my initial approach...",
+    "after_clarification": "Great, so to summarize: I need to track unique listeners per song using a Set, auto-increment IDs starting from 1, handle invalid song IDs with a specific error message, and sort by count descending then name ascending. My approach will use a Song class with a HashSet for listeners, and a SongAnalytics class with a HashMap for song lookup. Sound good?",
     "while_coding": [
-      "I'm creating the Song class first since it's the simpler building block...",
-      "Using a Set here for listeners - this gives me automatic deduplication...",
-      "Note I'm initializing next_id to 1, not 0, since IDs start from 1...",
-      "For the sort key, I'm using negative count for descending order..."
+      "I'm using a Set for listeners because Set.add() is idempotent - it handles duplicates automatically",
+      "Note I'm starting next_id at 1, not 0, per the requirements",
+      "For the sort key, I'm using (-count, name) - the negative makes it descending"
     ],
     "after_coding": "Let me trace through Example 1 to verify this works correctly...",
-    "when_stuck_verbatim": "I'm thinking about the sort order... Let me trace through an example with tied counts to make sure I have the comparison right.",
-    "after_mistake": "Oh, I see the issue - I was sorting count ascending instead of descending. Let me fix that by negating the count in the sort key.",
-    "before_moving_on": "This handles Part 1. The time complexity is O(1) for add_song and play_song, O(n log n) for print_analytics due to sorting. Space is O(S + P) where S is songs and P is total unique play pairs. Ready for Part 2?"
+    "when_stuck_verbatim": "I'm thinking about the sorting... Let me consider: I need count descending and name ascending. In Python, I can negate the count in the tuple key...",
+    "after_mistake": "Actually, I see I started the ID from 0 - let me fix that to 1 as specified.",
+    "before_moving_on": "This handles Part 1 with O(1) for add/play operations and O(S log S) for analytics. The space is O(S + L) for songs and listeners. Ready for the follow-up?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Problem decomposition** - Can you break this into logical components (Song class, Analytics class)?",
-      "**Data structure selection** - Do you recognize Set for deduplication, HashMap for lookup?",
-      "**Attention to detail** - Do you catch the ID starts from 1, exact error format?",
-      "**Code quality** - Clean naming, proper encapsulation, type hints?",
-      "**Testing instinct** - Do you trace through examples after coding?"
+      "Understanding of Set for uniqueness",
+      "Clean OOP design with proper encapsulation",
+      "Correct sorting with multi-key comparator",
+      "Attention to detail (ID from 1, exact error format)",
+      "Testing instinct and edge case awareness"
     ],
     "bonus_points": [
-      "Mentioning Set for deduplication immediately",
-      "Drawing a quick data structure diagram before coding",
-      "Catching the 'ID starts from 1' detail unprompted",
-      "Explaining the sort key trick (`-count, name`) clearly",
-      "Testing with the 'same user plays same song multiple times' case"
+      "Mentioning Set is idempotent unprompted",
+      "Explaining the (-count, name) tuple trick for sorting",
+      "Asking about edge cases like 0-listener songs",
+      "Clean separation of Song and SongAnalytics classes",
+      "Discussing thread-safety for production"
     ],
     "red_flags": [
-      "Jumping to code without understanding requirements",
-      "Using List instead of Set for listeners",
-      "Not handling the invalid song ID error",
-      "Getting the sort order wrong (ascending instead of descending)",
-      "Ignoring songs with 0 listeners in output"
+      "Using List instead of Set (shows weak data structure knowledge)",
+      "Forgetting the name tie-breaker in sorting",
+      "Wrong ID starting point (0 vs 1)",
+      "Not validating song_id in play_song",
+      "Silent coding without explaining approach"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates:\n1. Ask clarifying questions that reveal edge cases\n2. Explain their approach before coding\n3. Recognize the Set pattern for uniqueness immediately\n4. Handle error cases naturally, not as an afterthought\n5. Test their code with examples after writing\n6. Discuss complexity confidently"
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize Set as the solution for 'unique' counting, explain the sorting tuple trick clearly, handle all edge cases without being reminded, and write clean, well-organized code. They treat the problem as a mini-system design, thinking about extensibility."
   },
   "time_milestones": {
-    "by_5_min": "Understand problem, ask clarifying questions about IDs (start from 1?), sort order, error handling",
-    "by_10_min": "Explain approach: Song class with Set, SongAnalytics with HashMap, tuple sort key for multi-level sorting",
-    "by_15_min": "Song class implemented with add_listener, get_listener_count, get_name methods",
-    "by_25_min": "SongAnalytics class implemented with all four methods, basic testing started",
-    "by_30_min": "Edge cases handled (invalid ID, zero listeners, duplicate plays), dry run complete",
-    "by_35_min": "Part 1 complete, complexity discussed, ready for Part 2",
-    "warning_signs": "If still clarifying at 10 min or Song class not done by 15 min, speed up. Simplify if needed."
+    "by_5_min": "Understand problem, ask clarifying questions, identify Set for uniqueness and HashMap for lookup",
+    "by_10_min": "Explain full approach including sorting strategy, get interviewer buy-in",
+    "by_20_min": "Core implementation complete with both classes",
+    "by_25_min": "Error handling added, basic testing done",
+    "by_30_min": "Dry run complete, edge cases discussed, ready for Part 2",
+    "warning_signs": "If still designing at 15 min or still coding at 35 min, simplify or ask for hints"
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Don't panic. Say: 'I see the issue - I was sorting ascending instead of descending. Let me fix that.' Quickly fix it, explain briefly, and move on. Interviewers expect small bugs; they evaluate your debugging ability.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember if it's `compareTo` or `compare` in Java, but conceptually I need to compare these two strings lexicographically.' The interviewer may help, or you can write pseudocode.",
-    "when_approach_is_wrong": "Say: 'Actually, I realize using a List won't give me unique counts. Let me switch to a Set which handles deduplication automatically.' Pivot cleanly and explain why.",
-    "when_completely_stuck": "Say: 'I'm stuck on how to sort with different directions. Could you confirm that I need descending for count and ascending for name?' Asking focused questions shows self-awareness.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on getting the core functionality working and explain what I'd add for edge cases.' Prioritize working code over perfect code."
+    "when_you_make_a_bug": "Don't panic. Say: 'Actually, I see the sort is wrong - I'm sorting ascending instead of descending. Let me fix that by negating the count.' Fix quickly and move on.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact Python sort key syntax, but I need to sort by -count then name. Let me write it as a lambda...' Then look it up or ask.",
+    "when_approach_is_wrong": "Say: 'Actually, using a List for listeners won't work for unique counts. I should use a Set instead - let me update that.'",
+    "when_completely_stuck": "Say: 'I'm stuck on how to sort by multiple keys. Could you give me a hint on Python's sort key for multi-criteria sorting?'",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on the core logic and skip some edge case handling. I'd add validation for [X, Y, Z] given more time.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them wisely - they can help with boilerplate and syntax, but YOU must drive the solution approach.",
+    "when_using_cursor_or_copilot": "Use AI for boilerplate like class structure and imports, but solve the core logic yourself.",
     "what_to_do": [
-      "Use AI for generating class structure and imports",
-      "Use for suggesting method signatures",
-      "Use for syntax you've forgotten (e.g., Python sort key syntax)",
-      "Let it autocomplete obvious code like getters/setters"
+      "Let AI generate class skeleton and __init__",
+      "Use for syntax help (e.g., Python sort key)",
+      "Generate test cases with AI"
     ],
     "what_not_to_do": [
-      "Don't paste the entire problem and ask for solution",
-      "Don't accept suggestions without understanding them",
-      "Don't let AI decide your data structures - YOU decide, AI assists",
-      "Don't blindly accept sort order - verify it matches requirements"
+      "Don't paste the whole problem and accept solution",
+      "Don't accept sorting logic without understanding it",
+      "Don't let AI choose data structures for you"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests code, explain WHY it works. Say: 'The AI suggested using a Set here, and that's correct because Set.add() is idempotent - adding the same user twice has no effect.'",
-    "expectation_adjustment": "Using AI means you should complete MORE parts faster. If you're slower with AI than without, don't use it for this problem."
+    "how_to_demonstrate_understanding": "If AI suggests using Set, explain WHY: 'Set is perfect here because add() is idempotent - adding the same user twice has no effect, which is exactly what we need for unique counting.'",
+    "expectation_adjustment": "With AI, you should complete all parts faster. If AI is slowing you down, turn it off."
   },
   "signal_points": {
     "wow_factors": [
-      "Immediately recognizing Set for unique tracking",
-      "Drawing a quick data structure diagram unprompted",
-      "Catching 'ID starts from 1' without being told",
-      "Explaining the `-count` trick for descending sort elegantly",
-      "Testing with the 'same user multiple plays' edge case first"
+      "Immediately saying 'Set for unique listeners'",
+      "Explaining the (-count, name) tuple trick unprompted",
+      "Drawing a quick data structure diagram",
+      "Mentioning edge case of 0-listener songs",
+      "Discussing how the design extends for follow-ups"
     ],
     "subtle_signals_of_experience": [
-      "Using underscore prefix for internal attributes (`_songs`, `_next_id`)",
-      "Writing docstrings with examples",
-      "Considering thread safety (mentioning it even if not implementing)",
-      "Asking about edge cases before coding",
-      "Writing testable code with dependency injection potential"
+      "Using proper encapsulation (Song class owns its listeners)",
+      "Consistent naming conventions",
+      "Testing incrementally, not just at the end",
+      "Considering error message format seriously"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Staying silent for more than 30 seconds without explaining your thinking",
-      "Getting defensive when interviewer points out an issue",
+      "Going silent for more than 30 seconds",
+      "Getting defensive when interviewer suggests an issue",
       "Not asking any clarifying questions",
-      "Rushing to code without understanding requirements"
+      "Saying 'this is trivial' (it's not as simple as it looks)"
     ],
     "technical": [
-      "Using List instead of Set for unique tracking",
-      "Starting ID from 0 instead of 1",
-      "Wrong sort direction",
-      "Not handling error cases",
-      "Forgetting to include 0-listener songs"
+      "Using List for unique listener tracking",
+      "Hardcoding test values in the class",
+      "Ignoring the ID starting point requirement",
+      "Writing O(n) play_song by iterating all songs"
     ],
     "communication": [
-      "Using jargon without explaining (e.g., 'I'll use a hash map' without saying why)",
-      "Going too deep into implementation details before explaining the approach",
-      "Not summarizing your approach before coding",
-      "Not testing after coding"
+      "Jumping to code without explaining approach",
+      "Not mentioning complexity",
+      "Forgetting to trace through an example"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "\u2713 IDs start from 1 (not 0)",
-      "\u2713 Using Set for unique listeners (not List)",
-      "\u2713 Sort: listener count DESCENDING, name ASCENDING",
-      "\u2713 Error message format matches exactly",
-      "\u2713 Songs with 0 listeners included in output",
-      "\u2713 Traced through at least one example",
-      "\u2713 Discussed time and space complexity"
+      "IDs start from 1, not 0? \u2713",
+      "Set used for listeners (not List)? \u2713",
+      "Error message format exact? \u2713",
+      "Sort by count DESC, name ASC? \u2713",
+      "0-listener songs included? \u2713",
+      "Traced through at least one example? \u2713"
     ],
     "quick_code_review": [
-      "No hardcoded values (IDs, test data in production code)",
-      "Consistent naming (snake_case for Python, camelCase for Java)",
-      "Proper indentation (4 spaces in Python)",
-      "Error handling before processing",
-      "Type hints on all methods"
+      "No magic numbers (1 is documented)",
+      "Consistent naming (snake_case for Python)",
+      "Proper indentation",
+      "Error handling present"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "Input validation (name length, non-empty strings)",
-      "Logging for debugging and monitoring",
-      "Thread-safety if concurrent access is possible",
-      "Configuration for output format",
-      "Database persistence instead of in-memory storage",
-      "Rate limiting for play_song to prevent abuse"
+      "Input validation (non-empty names, positive IDs)",
+      "Logging for play events (for debugging/analytics)",
+      "Thread-safety if concurrent access",
+      "Persistence layer for durability",
+      "Caching for frequently accessed analytics"
     ],
-    "why_not_in_interview": "Keep interview code focused on the core problem. Over-engineering shows poor prioritization under time constraints.",
-    "how_to_mention": "Say: 'In production, I'd add input validation, logging, and consider thread-safety. For this interview, I'll focus on the core logic.'"
+    "why_not_in_interview": "Interview code should focus on the algorithm and data structures. Mention these verbally to show senior thinking.",
+    "how_to_mention": "Say: 'In production, I'd add thread-safety with locks, logging for observability, and input validation. But for this interview, I'll focus on the core logic.'"
   },
-  "generated_at": "2026-01-18T18:50:59.179462",
+  "generated_at": "2026-01-19T04:06:40.158504",
   "_meta": {
     "problem_id": "song_play_analytics",
     "part_number": null,

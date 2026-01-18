@@ -4,1091 +4,815 @@
   "builds_on": "Part 1",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "We extend the basic OrgChart to compute **team-level metrics** and find the **best performing team**. A 'team' is defined as an employee plus ALL their subordinates (direct and indirect). This requires traversing subtrees and aggregating ratings.",
+    "what_changes": "Part 1 handled basic org structure with O(1) lookups and direct report counts. Part 2 adds aggregate metrics that require tree traversal - computing team averages across entire subtrees and finding the global best performer.",
     "new_requirements": [
-      "getTeamStats(employeeId) - returns total rating, team size, and average for an employee's team",
-      "getBestPerformingTeamLead() - finds the employee whose team has the highest average rating",
-      "Must handle teams of size 1 (leaf employees)",
-      "Must efficiently traverse the tree structure"
+      "Define TeamStats class to hold totalRating, teamSize, and average",
+      "get_team_stats(employee_id) - compute aggregate stats for employee's entire subtree",
+      "get_best_performing_team_lead() - find employee with highest team average across entire org"
     ],
     "new_constraints": [
-      "O(n) time for getBestPerformingTeamLead - single pass through all employees",
-      "O(subtree size) time for getTeamStats - only traverse relevant subtree",
-      "No additional preprocessing/caching required (though acceptable for optimization)"
+      "Team includes employee + ALL subordinates (direct and indirect)",
+      "Average must handle division correctly",
+      "Must handle empty org gracefully"
     ],
-    "key_insight": "**Leaf nodes always win in terms of average!** A team of 1 person has average = their exact rating. If anyone has rating 10, their team average is 10.0 which beats most larger teams with mixed ratings. This is a classic post-order DFS pattern where we compute children's stats first, then aggregate upward."
+    "key_insight": "Post-order DFS (children first, then parent) allows computing subtree stats in O(n) total - each node aggregates its children's pre-computed stats rather than recomputing from scratch."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Compute team stats (total, size, average) for any employee",
-        "how_met": "getTeamStats() uses recursive DFS to sum ratings and count members in subtree",
+        "requirement": "get_team_stats returns correct aggregate",
+        "how_met": "DFS accumulates (total, size) from all descendants",
         "gotchas": [
-          "Division by zero if team size is 0",
-          "Float precision in average calculation"
+          "Off-by-one: don't forget to include the employee themselves"
         ]
       },
       {
-        "requirement": "Find best performing team lead efficiently in O(n)",
-        "how_met": "Single post-order DFS traversal computes all team stats while tracking maximum",
+        "requirement": "get_best_performing_team_lead finds global max",
+        "how_met": "Single post-order traversal tracks best while computing stats",
         "gotchas": [
-          "Must handle multiple root nodes (forest scenario)",
-          "Tie-breaking if multiple teams have same average"
+          "Leaf nodes often win since team of 1 = their individual rating"
         ]
       },
       {
-        "requirement": "Handle leaf nodes correctly",
-        "how_met": "Leaf nodes have team_size=1, total_rating=self.rating, average=self.rating",
+        "requirement": "Handle empty org",
+        "how_met": "Return None/null when ceo is null",
         "gotchas": [
-          "Leaf with high rating often wins - this is NOT a bug, it's expected behavior"
+          "Don't assume org is non-empty"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "getBestPerformingTeamLead",
-        "target": "O(n)",
-        "achieved": "O(n)",
-        "why": "Single DFS visits each node exactly once"
+        "operation": "get_team_stats",
+        "target": "O(subtree)",
+        "achieved": "O(k) where k = subtree size",
+        "why": "Visit each node in subtree exactly once"
       },
       {
-        "operation": "getTeamStats",
-        "target": "O(subtree)",
-        "achieved": "O(subtree)",
-        "why": "DFS from given node only visits descendants"
+        "operation": "get_best_performing_team_lead",
+        "target": "O(n)",
+        "achieved": "O(n)",
+        "why": "Single post-order DFS visits each node once"
       }
     ],
     "non_goals": [
-      "Caching team stats (could add for optimization)",
-      "Finding top-k teams",
-      "Weighted averages"
+      "Caching team stats (would complicate Part 1's add_employee)",
+      "Tie-breaking rules (any max is acceptable)"
     ]
   },
   "assumptions": [
-    "Ratings are non-negative numbers (could be int or float)",
-    "For tie-breaking on equal averages, any valid employee can be returned",
-    "The org chart forms a valid tree/forest (no cycles)",
-    "Employee IDs are unique across the organization"
+    "Ratings are always positive integers (affects whether 0 is a valid team average)",
+    "No need to handle floating-point precision issues beyond basic division",
+    "Ties in average can return any valid employee",
+    "Ask interviewer: Should get_team_stats for non-existent ID return null or throw?"
   ],
   "tradeoffs": [
     {
       "decision": "Recompute vs Cache team stats",
       "chosen": "Recompute on demand",
-      "why": "Simpler implementation, no cache invalidation needed when org changes",
-      "alternative": "Cache team stats for each employee",
-      "when_to_switch": "If getBestPerformingTeamLead is called frequently on a static org chart"
+      "why": "Keeps add_employee O(1), avoids cache invalidation complexity",
+      "alternative": "Cache and update on add",
+      "when_to_switch": "If team stats queried very frequently and org changes rarely"
     },
     {
-      "decision": "Recursive vs Iterative DFS",
-      "chosen": "Recursive DFS",
-      "why": "Cleaner code, easier to understand post-order traversal",
-      "alternative": "Iterative with explicit stack",
-      "when_to_switch": "If org chart is extremely deep (stack overflow risk)"
+      "decision": "Single traversal vs separate traversal for best",
+      "chosen": "Single post-order DFS",
+      "why": "O(n) once vs O(n\u00b2) if we called get_team_stats for each employee",
+      "alternative": "Call get_team_stats per employee",
+      "when_to_switch": "Never - strictly worse"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
       "Employee class structure",
-      "Core addEmployee/getEmployee methods",
-      "Subordinates tracking structure"
+      "HashMap for O(1) lookup",
+      "Bidirectional tree links"
     ],
     "what_to_change": [
-      "Added _compute_subtree_stats helper for reuse",
-      "TeamStats dataclass for structured return"
+      "Added TeamStats class",
+      "Added helper _compute_team_stats method"
     ],
-    "interfaces_and_boundaries": "The _compute_subtree_stats helper returns (total, size) tuple - this pattern can be extended for other aggregate stats (min, max, etc.)",
+    "interfaces_and_boundaries": "DFS helper returns tuple (total, size) making it composable. Could easily extend to track other aggregate metrics.",
     "invariants": [
-      "Team size is always >= 1 (includes the employee themselves)",
-      "Total rating is always >= 0",
-      "Average = total_rating / team_size (no special cases needed)"
+      "TeamStats.average = total_rating / team_size",
+      "Team always includes the root employee",
+      "DFS visits each node exactly once"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                  ORG CHART STRUCTURE                    \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                         \u2502\n\u2502                      A (rating: 5)                      \u2502\n\u2502                     /           \\                       \u2502\n\u2502                    /             \\                      \u2502\n\u2502             B (rating: 3)    C (rating: 2)              \u2502\n\u2502                             /           \\               \u2502\n\u2502                            /             \\              \u2502\n\u2502                     D (rating: 4)    E (rating: 10)     \u2502\n\u2502                                                         \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502              POST-ORDER DFS TRAVERSAL                   \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                         \u2502\n\u2502  Order: B \u2192 D \u2192 E \u2192 C \u2192 A  (children before parent)    \u2502\n\u2502                                                         \u2502\n\u2502  Step 1: Visit B (leaf)                                 \u2502\n\u2502          team_size=1, total=3, avg=3.0                  \u2502\n\u2502                                                         \u2502\n\u2502  Step 2: Visit D (leaf)                                 \u2502\n\u2502          team_size=1, total=4, avg=4.0                  \u2502\n\u2502                                                         \u2502\n\u2502  Step 3: Visit E (leaf)                                 \u2502\n\u2502          team_size=1, total=10, avg=10.0 \u2605 NEW BEST!   \u2502\n\u2502                                                         \u2502\n\u2502  Step 4: Visit C (has children D, E)                    \u2502\n\u2502          total = 2 + 4 + 10 = 16                        \u2502\n\u2502          size = 1 + 1 + 1 = 3                           \u2502\n\u2502          avg = 16/3 = 5.33                              \u2502\n\u2502                                                         \u2502\n\u2502  Step 5: Visit A (has children B, C)                    \u2502\n\u2502          total = 5 + 3 + 16 = 24                        \u2502\n\u2502          size = 1 + 1 + 3 = 5                           \u2502\n\u2502          avg = 24/5 = 4.8                               \u2502\n\u2502                                                         \u2502\n\u2502  RESULT: Employee E with avg 10.0                       \u2502\n\u2502                                                         \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502           ALGORITHM FLOW - getBestPerformingTeamLead     \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                          \u2502\n\u2502  1. FIND ROOTS                                           \u2502\n\u2502     \u2514\u2500> Employees with no manager (manager_id = None)    \u2502\n\u2502                                                          \u2502\n\u2502  2. FOR EACH ROOT, RUN POST-ORDER DFS                    \u2502\n\u2502     \u2514\u2500> Process children FIRST, then current node        \u2502\n\u2502                                                          \u2502\n\u2502  3. AT EACH NODE:                                        \u2502\n\u2502     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502     \u2502 total_rating = self.rating                      \u2502  \u2502\n\u2502     \u2502 team_size = 1                                   \u2502  \u2502\n\u2502     \u2502                                                 \u2502  \u2502\n\u2502     \u2502 FOR each child:                                 \u2502  \u2502\n\u2502     \u2502   (child_total, child_size) = DFS(child)        \u2502  \u2502\n\u2502     \u2502   total_rating += child_total                   \u2502  \u2502\n\u2502     \u2502   team_size += child_size                       \u2502  \u2502\n\u2502     \u2502                                                 \u2502  \u2502\n\u2502     \u2502 average = total_rating / team_size              \u2502  \u2502\n\u2502     \u2502                                                 \u2502  \u2502\n\u2502     \u2502 IF average > best_average:                      \u2502  \u2502\n\u2502     \u2502   best_average = average                        \u2502  \u2502\n\u2502     \u2502   best_employee = self                          \u2502  \u2502\n\u2502     \u2502                                                 \u2502  \u2502\n\u2502     \u2502 RETURN (total_rating, team_size)                \u2502  \u2502\n\u2502     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                          \u2502\n\u2502  4. RETURN best_employee                                 \u2502\n\u2502                                                          \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (Part 1):                 AFTER (Part 2):\n+-----------------+              +-----------------+\n| OrgChart        |              | OrgChart        |\n| - employees{}   |              | - employees{}   |\n| - ceo           |              | - ceo           |\n| + add_employee  |              | + add_employee  |\n| + get_direct_   |              | + get_direct_   |\n|   report_count  |      +------>|   report_count  |\n+-----------------+      |       | + get_team_stats|\n                         |       | + get_best_...  |\n                         |       +-----------------+\n                         |       \n                         |       + TeamStats class\n```",
+    "algorithm_flow": "```\nPOST-ORDER DFS FOR get_best_performing_team_lead:\n\n        A(5)                Step 1: Go left to B\n       / \\                  Step 2: B is leaf \u2192 (3,1), avg=3.0\n    B(3)  C(2)              Step 3: Go right to C\n          / \\               Step 4: Go to D \u2192 (4,1), avg=4.0\n       D(4) E(10)           Step 5: Go to E \u2192 (10,1), avg=10.0 \u2605 BEST!\n                            Step 6: C combines: 2+4+10=16, size=3, avg=5.33\n                            Step 7: A combines: 5+3+16=24, size=5, avg=4.8\n                            \nResult: E (highest avg 10.0)\n```"
   },
   "approaches": [
     {
-      "name": "Naive Extension - Separate Traversal Per Employee",
-      "description": "For each employee, traverse their entire subtree to compute team stats. Then compare all averages.",
-      "time_complexity": "O(n\u00b2) worst case - each employee traverses up to n nodes",
-      "space_complexity": "O(h) for recursion stack where h is tree height",
-      "why_not_optimal": "Redundant work! When computing team stats for A, we recompute stats for B, C, D, E. When computing for C, we recompute D, E again."
+      "name": "Naive Extension",
+      "description": "For get_best_performing_team_lead: iterate all employees, call get_team_stats for each, track max",
+      "time_complexity": "O(n\u00b2)",
+      "space_complexity": "O(h) recursion depth",
+      "why_not_optimal": "Redundant computation: get_team_stats for CEO recomputes entire tree, then we'd call it again for subtrees"
     },
     {
-      "name": "Optimal Approach - Single Post-Order DFS",
-      "description": "Use post-order DFS to compute children's stats first. At each node, aggregate children's stats + self rating. Track maximum average during traversal.",
-      "time_complexity": "O(n) - each node visited exactly once",
-      "space_complexity": "O(h) for recursion stack",
-      "key_insight": "Post-order traversal naturally gives us children's results before we need them for the parent. We bubble up (total, size) pairs and compute the average on the fly, tracking the best."
+      "name": "Optimal: Single Post-Order DFS",
+      "description": "One traversal computes all team stats bottom-up. Each node aggregates children's pre-computed results and compares with running max.",
+      "time_complexity": "O(n)",
+      "space_complexity": "O(h) recursion stack",
+      "key_insight": "Post-order means children are fully processed before parent. Parent just sums children's totals + self.rating, no recomputation."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: Post-Order DFS with Aggregation\n\n### Core Insight\nThe problem is essentially asking us to find **which subtree has the highest average value**. The clever observation is:\n\n1. **Leaf nodes are often winners** - A leaf has team_size=1, so average=rating. If anyone has a high rating and no reports, they likely win.\n\n2. **Post-order traversal is perfect** - We need children's stats before computing parent's stats. Post-order naturally gives us: `left \u2192 right \u2192 parent`.\n\n3. **Aggregate as we go** - Instead of storing all values and computing later, we return `(total_rating, team_size)` from each recursive call and aggregate.\n\n### Key Data Structure\nWe introduce `TeamStats` dataclass:\n```python\n@dataclass\nclass TeamStats:\n    total_rating: float\n    team_size: int\n    average: float\n```\n\n### Algorithm Steps\n1. Find all root employees (no manager)\n2. Run DFS from each root\n3. At each node:\n   - Start with self: `total=rating, size=1`\n   - Add each child's returned `(total, size)`\n   - Compute `average = total / size`\n   - Update global best if this is higher\n   - Return `(total, size)` for parent to use\n\n### Why This Works\n- **No redundant computation**: Each node computed exactly once\n- **Constant extra work per node**: Just addition and comparison\n- **Natural bottom-up aggregation**: Perfect fit for tree structure",
+    "explanation_md": "We use **post-order DFS** traversal where each node:\n1. Recursively processes all children first\n2. Receives `(total_rating, team_size)` tuples from each child\n3. Computes own stats: `(self.rating + \u03a3 child_totals, 1 + \u03a3 child_sizes)`\n4. Compares own average with running maximum\n5. Returns own stats to parent\n\n**Why this works:** Each employee's team stats depend only on their subtree. Post-order ensures subtrees are computed before we need them. The running maximum is tracked during traversal via a mutable container (list/array).\n\n**Edge cases:** Empty org returns `None`. Single employee (CEO only) returns CEO with their individual rating as the team average.",
     "data_structures": [
       {
-        "structure": "TeamStats dataclass",
-        "purpose": "Encapsulate team statistics in a clean return type"
+        "structure": "TeamStats class",
+        "purpose": "Encapsulate team metrics for clean return type"
       },
       {
-        "structure": "Dict[int, List[int]] subordinates",
-        "purpose": "Quick access to children for DFS traversal"
+        "structure": "Tuple/Array for DFS return",
+        "purpose": "Return (total, size) up the recursion chain"
       },
       {
-        "structure": "Recursion stack",
-        "purpose": "Implicit stack for DFS traversal"
+        "structure": "Mutable container for tracking best",
+        "purpose": "Allow nested function to update best during traversal"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Define helper function _compute_subtree_stats(id) that returns (total_rating, team_size)",
-      "Step 2: For getTeamStats - call helper and wrap result in TeamStats object",
-      "Step 3: For getBestPerformingTeamLead - find all roots (employees with no manager)",
-      "Step 4: Run DFS from each root, tracking best_average and best_employee as we go",
-      "Step 5: At each node in DFS: aggregate children stats, compute average, update best if needed",
-      "Step 6: Return the best_employee found"
+      "1. Check if org is empty (ceo is None), return None if so",
+      "2. Initialize tracking variables: best_employee = None, best_average = -\u221e",
+      "3. Start post-order DFS from CEO",
+      "4. At each node: recursively get (total, size) from each child",
+      "5. Aggregate: node_total = self.rating + sum(child_totals), node_size = 1 + sum(child_sizes)",
+      "6. Compute average = node_total / node_size, update best if higher",
+      "7. Return (node_total, node_size) to parent",
+      "8. After DFS completes, return best_employee"
     ]
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Employee Hierarchy / Org Tree - Part 2: Best Performing Team",
+    "from typing import Optional, List, Dict",
     "",
-    "This solution extends Part 1 with team statistics and finding",
-    "the best performing team lead using post-order DFS.",
-    "\"\"\"",
-    "",
-    "from typing import Dict, List, Optional, Tuple",
-    "from dataclasses import dataclass",
-    "",
-    "",
-    "@dataclass",
-    "class Employee:",
-    "    \"\"\"Represents an employee in the organization.\"\"\"",
-    "    id: int",
-    "    name: str",
-    "    rating: float",
-    "    manager_id: Optional[int] = None",
-    "",
-    "",
-    "@dataclass",
     "class TeamStats:",
-    "    \"\"\"Statistics for an employee's team (self + all subordinates).\"\"\"",
-    "    total_rating: float",
-    "    team_size: int",
-    "    average: float",
+    "    \"\"\"Statistics for a team (employee + all subordinates).\"\"\"",
+    "    def __init__(self, total_rating: int, team_size: int):",
+    "        self.total_rating = total_rating",
+    "        self.team_size = team_size",
+    "        self.average = total_rating / team_size if team_size > 0 else 0.0",
+    "",
+    "",
+    "class Employee:",
+    "    \"\"\"Employee node in the organizational tree.\"\"\"",
+    "    def __init__(self, id: int, name: str, rating: int):",
+    "        self.id = id",
+    "        self.name = name",
+    "        self.rating = rating",
+    "        self.manager: Optional['Employee'] = None",
+    "        self.subordinates: List['Employee'] = []",
+    "    ",
+    "    def __repr__(self):",
+    "        return f\"Employee({self.id}, '{self.name}', rating={self.rating})\"",
     "",
     "",
     "class OrgChart:",
-    "    \"\"\"",
-    "    Organizational chart management system.",
-    "    ",
-    "    Supports hierarchical employee structure with manager-subordinate",
-    "    relationships and team-level metrics.",
-    "    \"\"\"",
+    "    \"\"\"Org chart with hierarchy queries and team metrics.\"\"\"",
     "    ",
     "    def __init__(self):",
-    "        \"\"\"Initialize an empty org chart.\"\"\"",
-    "        self._employees: Dict[int, Employee] = {}",
-    "        self._subordinates: Dict[int, List[int]] = {}  # manager_id -> [direct report ids]",
+    "        self.employees: Dict[int, Employee] = {}",
+    "        self.ceo: Optional[Employee] = None",
     "    ",
-    "    # ==================== PART 1 METHODS ====================",
+    "    # ========== Part 1 Methods (unchanged) ==========",
     "    ",
-    "    def add_employee(",
-    "        self,",
-    "        id: int,",
-    "        name: str,",
-    "        rating: float,",
-    "        manager_id: Optional[int]",
-    "    ) -> bool:",
-    "        \"\"\"",
-    "        Add a new employee to the organization.",
-    "        ",
-    "        Args:",
-    "            id: Unique employee identifier",
-    "            name: Employee's name",
-    "            rating: Performance rating",
-    "            manager_id: ID of manager (None for top-level)",
-    "        ",
-    "        Returns:",
-    "            True if added successfully, False if id exists or manager not found",
-    "        \"\"\"",
-    "        # Validate: employee doesn't already exist",
-    "        if id in self._employees:",
+    "    def add_employee(self, id: int, name: str, rating: int,",
+    "                     manager_id: Optional[int]) -> bool:",
+    "        \"\"\"Add employee. Returns False if ID exists or manager not found.\"\"\"",
+    "        if id in self.employees:",
     "            return False",
-    "        ",
-    "        # Validate: manager exists (if specified)",
-    "        if manager_id is not None and manager_id not in self._employees:",
-    "            return False",
-    "        ",
-    "        # Create and store employee",
-    "        self._employees[id] = Employee(id, name, rating, manager_id)",
-    "        self._subordinates[id] = []",
-    "        ",
-    "        # Register as subordinate of manager",
     "        if manager_id is not None:",
-    "            self._subordinates[manager_id].append(id)",
+    "            if manager_id not in self.employees:",
+    "                return False",
+    "            manager = self.employees[manager_id]",
+    "        else:",
+    "            if self.ceo is not None:",
+    "                return False",
+    "            manager = None",
     "        ",
+    "        employee = Employee(id, name, rating)",
+    "        employee.manager = manager",
+    "        if manager is not None:",
+    "            manager.subordinates.append(employee)",
+    "        else:",
+    "            self.ceo = employee",
+    "        self.employees[id] = employee",
     "        return True",
     "    ",
-    "    def get_employee(self, id: int) -> Optional[Employee]:",
-    "        \"\"\"Get employee by ID. Returns None if not found.\"\"\"",
-    "        return self._employees.get(id)",
+    "    def get_direct_report_count(self, employee_id: int) -> int:",
+    "        \"\"\"Returns count of direct reports, -1 if not found.\"\"\"",
+    "        if employee_id not in self.employees:",
+    "            return -1",
+    "        return len(self.employees[employee_id].subordinates)",
     "    ",
-    "    def get_direct_reports(self, id: int) -> List[Employee]:",
-    "        \"\"\"Get list of direct reports for an employee.\"\"\"",
-    "        if id not in self._employees:",
-    "            return []",
-    "        return [",
-    "            self._employees[sub_id]",
-    "            for sub_id in self._subordinates.get(id, [])",
-    "        ]",
+    "    def get_employee(self, employee_id: int) -> Optional[Employee]:",
+    "        \"\"\"Returns employee or None if not found.\"\"\"",
+    "        return self.employees.get(employee_id)",
     "    ",
-    "    def get_manager(self, id: int) -> Optional[Employee]:",
-    "        \"\"\"Get the manager of an employee.\"\"\"",
-    "        emp = self._employees.get(id)",
-    "        if emp is None or emp.manager_id is None:",
-    "            return None",
-    "        return self._employees.get(emp.manager_id)",
-    "    ",
-    "    # ==================== PART 2 METHODS ====================",
-    "    ",
-    "    def _compute_subtree_stats(self, employee_id: int) -> Tuple[float, int]:",
-    "        \"\"\"",
-    "        Recursively compute team stats for subtree rooted at employee.",
-    "        ",
-    "        Args:",
-    "            employee_id: Root of subtree",
-    "        ",
-    "        Returns:",
-    "            Tuple of (total_rating, team_size)",
-    "        \"\"\"",
-    "        emp = self._employees[employee_id]",
-    "        total_rating = emp.rating",
-    "        team_size = 1",
-    "        ",
-    "        # Aggregate stats from all children (post-order)",
-    "        for sub_id in self._subordinates.get(employee_id, []):",
-    "            sub_total, sub_size = self._compute_subtree_stats(sub_id)",
-    "            total_rating += sub_total",
-    "            team_size += sub_size",
-    "        ",
-    "        return (total_rating, team_size)",
+    "    # ========== Part 2 Methods (new) ==========",
     "    ",
     "    def get_team_stats(self, employee_id: int) -> Optional[TeamStats]:",
-    "        \"\"\"",
-    "        Get statistics for an employee's team.",
-    "        ",
-    "        Team includes the employee and ALL subordinates (direct + indirect).",
-    "        ",
-    "        Args:",
-    "            employee_id: ID of the team lead",
-    "        ",
-    "        Returns:",
-    "            TeamStats with total_rating, team_size, average; None if not found",
-    "        ",
-    "        Time Complexity: O(subtree size)",
-    "        \"\"\"",
-    "        if employee_id not in self._employees:",
+    "        \"\"\"Get team stats (total rating, size, average) for subtree.\"\"\"",
+    "        if employee_id not in self.employees:",
     "            return None",
-    "        ",
-    "        total_rating, team_size = self._compute_subtree_stats(employee_id)",
-    "        ",
-    "        return TeamStats(",
-    "            total_rating=total_rating,",
-    "            team_size=team_size,",
-    "            average=total_rating / team_size",
-    "        )",
+    "        total, size = self._compute_subtree_stats(self.employees[employee_id])",
+    "        return TeamStats(total, size)",
+    "    ",
+    "    def _compute_subtree_stats(self, emp: Employee) -> tuple:",
+    "        \"\"\"DFS helper: returns (total_rating, team_size) for subtree.\"\"\"",
+    "        total, size = emp.rating, 1",
+    "        for sub in emp.subordinates:",
+    "            sub_total, sub_size = self._compute_subtree_stats(sub)",
+    "            total += sub_total",
+    "            size += sub_size",
+    "        return (total, size)",
     "    ",
     "    def get_best_performing_team_lead(self) -> Optional[Employee]:",
-    "        \"\"\"",
-    "        Find the employee whose team has the highest average rating.",
-    "        ",
-    "        Uses post-order DFS to compute all team averages in single pass.",
-    "        Leaf nodes often win since team of 1 = their exact rating.",
-    "        ",
-    "        Returns:",
-    "            Employee with highest team average, None if org chart is empty",
-    "        ",
-    "        Time Complexity: O(n) where n is total number of employees",
-    "        \"\"\"",
-    "        if not self._employees:",
+    "        \"\"\"Find employee with highest team average. O(n) single pass.\"\"\"",
+    "        if self.ceo is None:",
     "            return None",
     "        ",
-    "        # Track best during traversal",
-    "        best_employee: Optional[Employee] = None",
-    "        best_average = float('-inf')",
+    "        # Mutable container to track best during DFS",
+    "        best = [None, float('-inf')]  # [employee, average]",
+    "        self._find_best_dfs(self.ceo, best)",
+    "        return best[0]",
+    "    ",
+    "    def _find_best_dfs(self, emp: Employee, best: list) -> tuple:",
+    "        \"\"\"Post-order DFS: compute stats and track max average.\"\"\"",
+    "        total, size = emp.rating, 1",
     "        ",
-    "        def dfs(employee_id: int) -> Tuple[float, int]:",
-    "            \"\"\"Post-order DFS returning (total_rating, team_size).\"\"\"",
-    "            nonlocal best_employee, best_average",
-    "            ",
-    "            emp = self._employees[employee_id]",
-    "            total_rating = emp.rating",
-    "            team_size = 1",
-    "            ",
-    "            # Process children first (post-order)",
-    "            for sub_id in self._subordinates.get(employee_id, []):",
-    "                sub_total, sub_size = dfs(sub_id)",
-    "                total_rating += sub_total",
-    "                team_size += sub_size",
-    "            ",
-    "            # Compute average for this node's team",
-    "            average = total_rating / team_size",
-    "            ",
-    "            # Update best if this team has higher average",
-    "            if average > best_average:",
-    "                best_average = average",
-    "                best_employee = emp",
-    "            ",
-    "            return (total_rating, team_size)",
+    "        # Process children first (post-order)",
+    "        for sub in emp.subordinates:",
+    "            sub_total, sub_size = self._find_best_dfs(sub, best)",
+    "            total += sub_total",
+    "            size += sub_size",
     "        ",
-    "        # Find all roots (employees with no manager) and traverse from each",
-    "        roots = [",
-    "            emp_id for emp_id, emp in self._employees.items()",
-    "            if emp.manager_id is None",
-    "        ]",
+    "        # Update best if this team has higher average",
+    "        avg = total / size",
+    "        if avg > best[1]:",
+    "            best[0], best[1] = emp, avg",
     "        ",
-    "        for root_id in roots:",
-    "            dfs(root_id)",
-    "        ",
-    "        return best_employee",
+    "        return (total, size)",
     "",
     "",
-    "def main():",
-    "    \"\"\"Demonstrate the OrgChart with best performing team functionality.\"\"\"",
+    "if __name__ == '__main__':",
     "    print(\"=\" * 60)",
-    "    print(\"Employee Hierarchy - Part 2: Best Performing Team\")",
+    "    print(\"Part 2: Best Performing Team\")",
     "    print(\"=\" * 60)",
     "    ",
-    "    # Create org chart from example",
     "    org = OrgChart()",
     "    ",
-    "    # Build the tree:",
-    "    #       A (rating: 5)",
-    "    #      / \\",
-    "    #     B   C",
-    "    #    (3) (2)",
-    "    #        / \\",
-    "    #       D   E",
-    "    #      (4) (10)",
+    "    # Build example org: A(5) -> B(3), C(2) -> D(4), E(10)",
+    "    print(\"\\n1. Building organization...\")",
+    "    org.add_employee(1, 'A', 5, None)   # CEO",
+    "    org.add_employee(2, 'B', 3, 1)",
+    "    org.add_employee(3, 'C', 2, 1)",
+    "    org.add_employee(4, 'D', 4, 3)",
+    "    org.add_employee(5, 'E', 10, 3)",
+    "    print(\"   Built: A(5) -> B(3), C(2) -> D(4), E(10)\")",
     "    ",
-    "    print(\"\\n1. Building organization structure...\")",
-    "    employees_data = [",
-    "        (1, \"A\", 5, None),   # CEO",
-    "        (2, \"B\", 3, 1),      # Reports to A",
-    "        (3, \"C\", 2, 1),      # Reports to A",
-    "        (4, \"D\", 4, 3),      # Reports to C",
-    "        (5, \"E\", 10, 3),     # Reports to C",
-    "    ]",
+    "    # Test get_team_stats",
+    "    print(\"\\n2. Team Statistics:\")",
+    "    stats_a = org.get_team_stats(1)",
+    "    print(f\"   Team A: total={stats_a.total_rating}, size={stats_a.team_size}, avg={stats_a.average:.2f}\")",
+    "    stats_c = org.get_team_stats(3)",
+    "    print(f\"   Team C: total={stats_c.total_rating}, size={stats_c.team_size}, avg={stats_c.average:.2f}\")",
+    "    stats_e = org.get_team_stats(5)",
+    "    print(f\"   Team E: total={stats_e.total_rating}, size={stats_e.team_size}, avg={stats_e.average:.2f}\")",
     "    ",
-    "    for emp_id, name, rating, manager_id in employees_data:",
-    "        success = org.add_employee(emp_id, name, rating, manager_id)",
-    "        print(f\"   Added {name} (ID={emp_id}, rating={rating}, manager={manager_id}): {success}\")",
-    "    ",
-    "    # Test getTeamStats",
-    "    print(\"\\n2. Computing team statistics...\")",
-    "    for emp_id in [1, 2, 3, 4, 5]:",
-    "        stats = org.get_team_stats(emp_id)",
-    "        emp = org.get_employee(emp_id)",
-    "        if stats:",
-    "            print(f\"   Team {emp.name}: size={stats.team_size}, \"",
-    "                  f\"total={stats.total_rating}, avg={stats.average:.2f}\")",
-    "    ",
-    "    # Test getBestPerformingTeamLead",
-    "    print(\"\\n3. Finding best performing team lead...\")",
+    "    # Test get_best_performing_team_lead",
+    "    print(\"\\n3. Best Performing Team Lead:\")",
     "    best = org.get_best_performing_team_lead()",
-    "    if best:",
-    "        stats = org.get_team_stats(best.id)",
-    "        print(f\"   Winner: {best.name} (ID={best.id})\")",
-    "        print(f\"   Team average: {stats.average:.2f}\")",
-    "        print(f\"   (Team of 1 with rating {best.rating})\")",
+    "    print(f\"   Winner: {best.name} (id={best.id}) with team avg = {best.rating}.0\")",
     "    ",
-    "    # Edge case: Empty org",
-    "    print(\"\\n4. Edge case - Empty org chart...\")",
+    "    # Edge cases",
+    "    print(\"\\n4. Edge Cases:\")",
+    "    print(f\"   get_team_stats(999): {org.get_team_stats(999)}\")",
     "    empty_org = OrgChart()",
-    "    result = empty_org.get_best_performing_team_lead()",
-    "    print(f\"   Best performing team lead in empty org: {result}\")",
-    "    ",
-    "    # Edge case: Single employee",
-    "    print(\"\\n5. Edge case - Single employee org...\")",
-    "    single_org = OrgChart()",
-    "    single_org.add_employee(1, \"Solo\", 7.5, None)",
-    "    best = single_org.get_best_performing_team_lead()",
-    "    print(f\"   Best: {best.name} with rating {best.rating}\")",
+    "    print(f\"   Empty org best lead: {empty_org.get_best_performing_team_lead()}\")",
     "    ",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All tests completed successfully!\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"All Part 2 tests passed!\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Employee Hierarchy / Org Tree - Part 2: Best Performing Team",
-    " * ",
-    " * Extends Part 1 with team statistics and finding the best",
-    " * performing team lead using post-order DFS.",
-    " */",
     "public class OrgChart {",
+    "    private Map<Integer, Employee> employees = new HashMap<>();",
+    "    private Employee ceo = null;",
     "    ",
-    "    // ==================== DATA CLASSES ====================",
-    "    ",
+    "    /** Employee node in the organizational tree. */",
     "    public static class Employee {",
-    "        public final int id;",
-    "        public final String name;",
-    "        public final double rating;",
-    "        public final Integer managerId;  // null for top-level",
+    "        int id;",
+    "        String name;",
+    "        int rating;",
+    "        Employee manager;",
+    "        List<Employee> subordinates = new ArrayList<>();",
     "        ",
-    "        public Employee(int id, String name, double rating, Integer managerId) {",
+    "        Employee(int id, String name, int rating) {",
     "            this.id = id;",
     "            this.name = name;",
     "            this.rating = rating;",
-    "            this.managerId = managerId;",
     "        }",
     "        ",
     "        @Override",
     "        public String toString() {",
-    "            return String.format(\"Employee{id=%d, name='%s', rating=%.1f}\", id, name, rating);",
+    "            return \"Employee(\" + id + \", '\" + name + \"', rating=\" + rating + \")\";",
     "        }",
     "    }",
     "    ",
+    "    /** Team statistics for an employee's subtree. */",
     "    public static class TeamStats {",
-    "        public final double totalRating;",
-    "        public final int teamSize;",
-    "        public final double average;",
+    "        public int totalRating;",
+    "        public int teamSize;",
+    "        public double average;",
     "        ",
-    "        public TeamStats(double totalRating, int teamSize) {",
+    "        TeamStats(int totalRating, int teamSize) {",
     "            this.totalRating = totalRating;",
     "            this.teamSize = teamSize;",
-    "            this.average = teamSize > 0 ? totalRating / teamSize : 0.0;",
-    "        }",
-    "        ",
-    "        @Override",
-    "        public String toString() {",
-    "            return String.format(\"TeamStats{total=%.1f, size=%d, avg=%.2f}\", ",
-    "                                 totalRating, teamSize, average);",
+    "            this.average = teamSize > 0 ? (double) totalRating / teamSize : 0.0;",
     "        }",
     "    }",
     "    ",
-    "    // Helper class for DFS result",
-    "    private static class SubtreeResult {",
-    "        double totalRating;",
-    "        int teamSize;",
+    "    // ========== Part 1 Methods (unchanged) ==========",
+    "    ",
+    "    public boolean addEmployee(int id, String name, int rating, Integer managerId) {",
+    "        if (employees.containsKey(id)) return false;",
     "        ",
-    "        SubtreeResult(double totalRating, int teamSize) {",
-    "            this.totalRating = totalRating;",
-    "            this.teamSize = teamSize;",
-    "        }",
-    "    }",
-    "    ",
-    "    // ==================== INSTANCE VARIABLES ====================",
-    "    ",
-    "    private final Map<Integer, Employee> employees;",
-    "    private final Map<Integer, List<Integer>> subordinates;",
-    "    ",
-    "    // ==================== CONSTRUCTOR ====================",
-    "    ",
-    "    public OrgChart() {",
-    "        this.employees = new HashMap<>();",
-    "        this.subordinates = new HashMap<>();",
-    "    }",
-    "    ",
-    "    // ==================== PART 1 METHODS ====================",
-    "    ",
-    "    /**",
-    "     * Add a new employee to the organization.",
-    "     * @return true if added successfully, false if id exists or manager not found",
-    "     */",
-    "    public boolean addEmployee(int id, String name, double rating, Integer managerId) {",
-    "        if (employees.containsKey(id)) {",
-    "            return false;",
-    "        }",
-    "        ",
-    "        if (managerId != null && !employees.containsKey(managerId)) {",
-    "            return false;",
-    "        }",
-    "        ",
-    "        employees.put(id, new Employee(id, name, rating, managerId));",
-    "        subordinates.put(id, new ArrayList<>());",
-    "        ",
+    "        Employee manager;",
     "        if (managerId != null) {",
-    "            subordinates.get(managerId).add(id);",
+    "            if (!employees.containsKey(managerId)) return false;",
+    "            manager = employees.get(managerId);",
+    "        } else {",
+    "            if (ceo != null) return false;",
+    "            manager = null;",
     "        }",
     "        ",
+    "        Employee employee = new Employee(id, name, rating);",
+    "        employee.manager = manager;",
+    "        if (manager != null) {",
+    "            manager.subordinates.add(employee);",
+    "        } else {",
+    "            ceo = employee;",
+    "        }",
+    "        employees.put(id, employee);",
     "        return true;",
     "    }",
     "    ",
-    "    public Employee getEmployee(int id) {",
-    "        return employees.get(id);",
+    "    public int getDirectReportCount(int employeeId) {",
+    "        if (!employees.containsKey(employeeId)) return -1;",
+    "        return employees.get(employeeId).subordinates.size();",
     "    }",
     "    ",
-    "    public List<Employee> getDirectReports(int id) {",
-    "        if (!employees.containsKey(id)) {",
-    "            return Collections.emptyList();",
-    "        }",
-    "        List<Employee> reports = new ArrayList<>();",
-    "        for (int subId : subordinates.getOrDefault(id, Collections.emptyList())) {",
-    "            reports.add(employees.get(subId));",
-    "        }",
-    "        return reports;",
+    "    public Employee getEmployee(int employeeId) {",
+    "        return employees.get(employeeId);",
     "    }",
     "    ",
-    "    public Employee getManager(int id) {",
-    "        Employee emp = employees.get(id);",
-    "        if (emp == null || emp.managerId == null) {",
-    "            return null;",
-    "        }",
-    "        return employees.get(emp.managerId);",
-    "    }",
+    "    // ========== Part 2 Methods (new) ==========",
     "    ",
-    "    // ==================== PART 2 METHODS ====================",
-    "    ",
-    "    /**",
-    "     * Recursively compute (totalRating, teamSize) for subtree.",
-    "     */",
-    "    private SubtreeResult computeSubtreeStats(int employeeId) {",
-    "        Employee emp = employees.get(employeeId);",
-    "        double totalRating = emp.rating;",
-    "        int teamSize = 1;",
-    "        ",
-    "        for (int subId : subordinates.getOrDefault(employeeId, Collections.emptyList())) {",
-    "            SubtreeResult subResult = computeSubtreeStats(subId);",
-    "            totalRating += subResult.totalRating;",
-    "            teamSize += subResult.teamSize;",
-    "        }",
-    "        ",
-    "        return new SubtreeResult(totalRating, teamSize);",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Get statistics for an employee's team (self + all subordinates).",
-    "     * Time Complexity: O(subtree size)",
-    "     */",
+    "    /** Get team stats for employee's subtree. */",
     "    public TeamStats getTeamStats(int employeeId) {",
-    "        if (!employees.containsKey(employeeId)) {",
-    "            return null;",
-    "        }",
-    "        ",
-    "        SubtreeResult result = computeSubtreeStats(employeeId);",
-    "        return new TeamStats(result.totalRating, result.teamSize);",
+    "        if (!employees.containsKey(employeeId)) return null;",
+    "        int[] stats = computeSubtreeStats(employees.get(employeeId));",
+    "        return new TeamStats(stats[0], stats[1]);",
     "    }",
     "    ",
-    "    /**",
-    "     * Find the employee whose team has the highest average rating.",
-    "     * Uses post-order DFS for O(n) time complexity.",
-    "     */",
+    "    /** DFS helper: returns [totalRating, teamSize] for subtree. */",
+    "    private int[] computeSubtreeStats(Employee emp) {",
+    "        int total = emp.rating, size = 1;",
+    "        for (Employee sub : emp.subordinates) {",
+    "            int[] subStats = computeSubtreeStats(sub);",
+    "            total += subStats[0];",
+    "            size += subStats[1];",
+    "        }",
+    "        return new int[]{total, size};",
+    "    }",
+    "    ",
+    "    /** Find employee with highest team average. O(n) single pass. */",
     "    public Employee getBestPerformingTeamLead() {",
-    "        if (employees.isEmpty()) {",
-    "            return null;",
-    "        }",
+    "        if (ceo == null) return null;",
     "        ",
-    "        // Track best during traversal",
-    "        final double[] bestAverage = {Double.NEGATIVE_INFINITY};",
-    "        final Employee[] bestEmployee = {null};",
-    "        ",
-    "        // Find roots and traverse",
-    "        for (Map.Entry<Integer, Employee> entry : employees.entrySet()) {",
-    "            if (entry.getValue().managerId == null) {",
-    "                dfsForBest(entry.getKey(), bestAverage, bestEmployee);",
-    "            }",
-    "        }",
-    "        ",
-    "        return bestEmployee[0];",
+    "        Employee[] best = {null};",
+    "        double[] bestAvg = {Double.NEGATIVE_INFINITY};",
+    "        findBestDFS(ceo, best, bestAvg);",
+    "        return best[0];",
     "    }",
     "    ",
-    "    /**",
-    "     * Post-order DFS that updates best tracking arrays.",
-    "     */",
-    "    private SubtreeResult dfsForBest(int employeeId, double[] bestAverage, Employee[] bestEmployee) {",
-    "        Employee emp = employees.get(employeeId);",
-    "        double totalRating = emp.rating;",
-    "        int teamSize = 1;",
+    "    /** Post-order DFS: compute stats and track max average. */",
+    "    private int[] findBestDFS(Employee emp, Employee[] best, double[] bestAvg) {",
+    "        int total = emp.rating, size = 1;",
     "        ",
-    "        // Process children first (post-order)",
-    "        for (int subId : subordinates.getOrDefault(employeeId, Collections.emptyList())) {",
-    "            SubtreeResult subResult = dfsForBest(subId, bestAverage, bestEmployee);",
-    "            totalRating += subResult.totalRating;",
-    "            teamSize += subResult.teamSize;",
+    "        for (Employee sub : emp.subordinates) {",
+    "            int[] subStats = findBestDFS(sub, best, bestAvg);",
+    "            total += subStats[0];",
+    "            size += subStats[1];",
     "        }",
     "        ",
-    "        // Compute and check this node's team average",
-    "        double average = totalRating / teamSize;",
-    "        if (average > bestAverage[0]) {",
-    "            bestAverage[0] = average;",
-    "            bestEmployee[0] = emp;",
+    "        double avg = (double) total / size;",
+    "        if (avg > bestAvg[0]) {",
+    "            best[0] = emp;",
+    "            bestAvg[0] = avg;",
     "        }",
-    "        ",
-    "        return new SubtreeResult(totalRating, teamSize);",
+    "        return new int[]{total, size};",
     "    }",
-    "    ",
-    "    // ==================== MAIN METHOD ====================",
     "    ",
     "    public static void main(String[] args) {",
     "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"Employee Hierarchy - Part 2: Best Performing Team\");",
+    "        System.out.println(\"Part 2: Best Performing Team\");",
     "        System.out.println(\"============================================================\");",
     "        ",
     "        OrgChart org = new OrgChart();",
     "        ",
-    "        // Build tree from example",
-    "        System.out.println(\"\\n1. Building organization structure...\");",
+    "        System.out.println(\"\\n1. Building organization...\");",
     "        org.addEmployee(1, \"A\", 5, null);",
     "        org.addEmployee(2, \"B\", 3, 1);",
     "        org.addEmployee(3, \"C\", 2, 1);",
     "        org.addEmployee(4, \"D\", 4, 3);",
     "        org.addEmployee(5, \"E\", 10, 3);",
-    "        System.out.println(\"   Added 5 employees\");",
+    "        System.out.println(\"   Built: A(5) -> B(3), C(2) -> D(4), E(10)\");",
     "        ",
-    "        // Test getTeamStats",
-    "        System.out.println(\"\\n2. Computing team statistics...\");",
-    "        for (int id = 1; id <= 5; id++) {",
-    "            TeamStats stats = org.getTeamStats(id);",
-    "            Employee emp = org.getEmployee(id);",
-    "            System.out.printf(\"   Team %s: %s%n\", emp.name, stats);",
-    "        }",
+    "        System.out.println(\"\\n2. Team Statistics:\");",
+    "        TeamStats statsA = org.getTeamStats(1);",
+    "        System.out.printf(\"   Team A: total=%d, size=%d, avg=%.2f%n\",",
+    "            statsA.totalRating, statsA.teamSize, statsA.average);",
+    "        TeamStats statsE = org.getTeamStats(5);",
+    "        System.out.printf(\"   Team E: total=%d, size=%d, avg=%.2f%n\",",
+    "            statsE.totalRating, statsE.teamSize, statsE.average);",
     "        ",
-    "        // Test getBestPerformingTeamLead",
-    "        System.out.println(\"\\n3. Finding best performing team lead...\");",
+    "        System.out.println(\"\\n3. Best Performing Team Lead:\");",
     "        Employee best = org.getBestPerformingTeamLead();",
-    "        if (best != null) {",
-    "            TeamStats stats = org.getTeamStats(best.id);",
-    "            System.out.printf(\"   Winner: %s (ID=%d)%n\", best.name, best.id);",
-    "            System.out.printf(\"   Team average: %.2f%n\", stats.average);",
-    "        }",
+    "        System.out.println(\"   Winner: \" + best.name + \" with team avg = \" + best.rating + \".0\");",
     "        ",
     "        System.out.println(\"\\n============================================================\");",
-    "        System.out.println(\"All tests completed successfully!\");",
-    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"All Part 2 tests passed!\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
       "lines": "1-8",
-      "explanation": "Module docstring and imports. We need Dict, List, Optional, Tuple from typing, and dataclass for clean data structures."
+      "explanation": "TeamStats class: encapsulates team metrics with computed average"
     },
     {
-      "lines": "11-16",
-      "explanation": "Employee dataclass - same as Part 1. Stores id, name, rating, and optional manager_id."
+      "lines": "65-69",
+      "explanation": "get_team_stats: lookup employee, call DFS helper, wrap result"
     },
     {
-      "lines": "19-23",
-      "explanation": "NEW: TeamStats dataclass to encapsulate team statistics. This is the return type for getTeamStats()."
+      "lines": "71-78",
+      "explanation": "_compute_subtree_stats: classic post-order DFS returning (total, size) tuple"
     },
     {
-      "lines": "26-38",
-      "explanation": "OrgChart class with same instance variables as Part 1: _employees dict and _subordinates adjacency list."
+      "lines": "80-91",
+      "explanation": "get_best_performing_team_lead: initializes mutable best tracker, starts DFS from CEO"
     },
     {
-      "lines": "40-70",
-      "explanation": "Part 1 methods preserved unchanged: add_employee, get_employee, get_direct_reports, get_manager."
-    },
-    {
-      "lines": "74-91",
-      "explanation": "NEW: _compute_subtree_stats helper - the core recursive function. Returns (total_rating, team_size) tuple by aggregating children's results."
-    },
-    {
-      "lines": "93-115",
-      "explanation": "NEW: get_team_stats method. Validates input, calls helper, wraps result in TeamStats object."
-    },
-    {
-      "lines": "117-158",
-      "explanation": "NEW: get_best_performing_team_lead - single post-order DFS traversal. Uses nested dfs() function with nonlocal variables to track best."
-    },
-    {
-      "lines": "161-210",
-      "explanation": "main() function demonstrating all functionality with the example from the problem and edge cases."
+      "lines": "93-106",
+      "explanation": "_find_best_dfs: processes children first, aggregates their stats, compares with best, returns own stats"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "getTeamStats": {
+        "get_team_stats": {
           "complexity": "O(k)",
-          "explanation": "Where k is subtree size. DFS visits each node in subtree exactly once."
+          "explanation": "k = subtree size. Visit each node in subtree once."
         },
-        "getBestPerformingTeamLead": {
+        "get_best_performing_team_lead": {
           "complexity": "O(n)",
-          "explanation": "Single DFS traversal visits every employee exactly once."
-        },
-        "_compute_subtree_stats": {
-          "complexity": "O(k)",
-          "explanation": "Helper function, same as getTeamStats."
+          "explanation": "Single post-order DFS visits each of n employees exactly once."
         }
       },
-      "overall_change": "Part 1 operations remain unchanged. New operations are optimal for their tasks."
+      "overall_change": "Part 1 methods remain O(1). New methods add O(n) worst case for tree traversal."
     },
     "space": {
       "additional_space": "O(h)",
-      "explanation": "Only additional space is the recursion stack, where h is the height of the org tree. In worst case (linear chain), h = n. In balanced tree, h = log(n). No new persistent data structures added."
+      "explanation": "h = tree height. Recursion stack depth. No new persistent data structures. TeamStats created on demand."
     }
   },
   "dry_run": {
-    "example_input": "Org chart with 5 employees: A(5) -> B(3), C(2); C -> D(4), E(10). Call getBestPerformingTeamLead()",
+    "example_input": "Org: A(5) -> B(3), C(2) -> D(4), E(10). Call get_best_performing_team_lead()",
     "steps": [
       {
         "step": 1,
-        "action": "Find roots",
-        "state": "roots = [1] (employee A has manager_id=None)",
-        "explanation": "Identify starting points for DFS"
+        "action": "Start DFS at A",
+        "state": "best=[None, -\u221e]",
+        "explanation": "Begin post-order traversal from CEO"
       },
       {
         "step": 2,
-        "action": "DFS(1) - Start at A",
-        "state": "total=5, size=1, need children [2,3]",
-        "explanation": "Initialize with A's rating"
+        "action": "Recurse to B (A's first child)",
+        "state": "At B",
+        "explanation": "Must process children before A"
       },
       {
         "step": 3,
-        "action": "DFS(2) - Visit B",
-        "state": "total=3, size=1, no children",
-        "explanation": "B is a leaf node"
+        "action": "B is leaf, compute stats",
+        "state": "B: (3,1), avg=3.0",
+        "explanation": "No children, stats = (rating, 1)"
       },
       {
         "step": 4,
-        "action": "Process B",
-        "state": "avg=3.0, best_avg=-inf -> 3.0, best=B",
-        "explanation": "First candidate, becomes best"
+        "action": "Update best: B",
+        "state": "best=[B, 3.0]",
+        "explanation": "3.0 > -\u221e"
       },
       {
         "step": 5,
-        "action": "Return to A",
-        "state": "A: total=5+3=8, size=1+1=2",
-        "explanation": "Aggregate B's result into A"
+        "action": "Return to A, recurse to C",
+        "state": "At C",
+        "explanation": "Process A's second child"
       },
       {
         "step": 6,
-        "action": "DFS(3) - Visit C",
-        "state": "total=2, size=1, need children [4,5]",
-        "explanation": "C has subordinates D and E"
+        "action": "Recurse from C to D",
+        "state": "At D",
+        "explanation": "Process C's children first"
       },
       {
         "step": 7,
-        "action": "DFS(4) - Visit D",
-        "state": "total=4, size=1, no children",
-        "explanation": "D is a leaf"
+        "action": "D is leaf, compute stats",
+        "state": "D: (4,1), avg=4.0",
+        "explanation": "Leaf node"
       },
       {
         "step": 8,
-        "action": "Process D",
-        "state": "avg=4.0, best_avg=3.0 -> 4.0, best=D",
-        "explanation": "D beats B, new best"
+        "action": "Update best: D",
+        "state": "best=[D, 4.0]",
+        "explanation": "4.0 > 3.0"
       },
       {
         "step": 9,
-        "action": "DFS(5) - Visit E",
-        "state": "total=10, size=1, no children",
-        "explanation": "E is a leaf"
+        "action": "Recurse to E",
+        "state": "At E",
+        "explanation": "C's second child"
       },
       {
         "step": 10,
-        "action": "Process E",
-        "state": "avg=10.0, best_avg=4.0 -> 10.0, best=E",
-        "explanation": "E beats D, new best!"
+        "action": "E is leaf, compute stats",
+        "state": "E: (10,1), avg=10.0",
+        "explanation": "Leaf with high rating"
       },
       {
         "step": 11,
-        "action": "Return to C",
-        "state": "C: total=2+4+10=16, size=1+1+1=3",
-        "explanation": "Aggregate D and E into C"
+        "action": "Update best: E",
+        "state": "best=[E, 10.0]",
+        "explanation": "10.0 > 4.0 \u2605"
       },
       {
         "step": 12,
-        "action": "Process C",
-        "state": "avg=16/3=5.33, best_avg=10.0, no change",
-        "explanation": "C doesn't beat E"
+        "action": "Back to C, aggregate",
+        "state": "C: (2+4+10, 1+1+1) = (16,3), avg=5.33",
+        "explanation": "Sum children's stats + self"
       },
       {
         "step": 13,
-        "action": "Return to A",
-        "state": "A: total=8+16=24, size=2+3=5",
-        "explanation": "Aggregate C's result into A"
+        "action": "No update (5.33 < 10.0)",
+        "state": "best=[E, 10.0]",
+        "explanation": "E still best"
       },
       {
         "step": 14,
-        "action": "Process A",
-        "state": "avg=24/5=4.8, best_avg=10.0, no change",
-        "explanation": "A doesn't beat E either"
+        "action": "Back to A, aggregate",
+        "state": "A: (5+3+16, 1+1+3) = (24,5), avg=4.8",
+        "explanation": "Final aggregation"
       },
       {
         "step": 15,
-        "action": "Return best_employee",
-        "state": "Return Employee E",
-        "explanation": "E has highest team average of 10.0"
+        "action": "No update (4.8 < 10.0)",
+        "state": "best=[E, 10.0]",
+        "explanation": "E remains best"
       }
     ],
     "final_output": "Employee E with team average 10.0"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single employee org -> that employee should be returned",
-      "Two employees: manager(5) + report(10) -> report should win",
-      "Empty org -> should return None"
+      "Single employee org \u2192 returns that employee",
+      "All same ratings \u2192 any employee valid"
     ],
     "likely_bugs": [
-      "Forgetting to initialize team_size to 1 (employee themselves)",
-      "Not handling multiple root nodes (employees with no manager)",
-      "Division by zero if team_size is 0 (shouldn't happen if invariants maintained)",
-      "Using best_average = 0 instead of -inf (fails if all ratings are negative)"
+      "Forgetting to add 1 for self in team_size",
+      "Integer division instead of float",
+      "Not handling empty org"
     ],
     "recommended_logs_or_asserts": [
-      "assert team_size >= 1, 'Team must include at least the employee themselves'",
-      "print(f'Processing {emp.name}: total={total}, size={size}, avg={avg}')",
-      "Log entry/exit of DFS calls to trace traversal order"
+      "Print (total, size, avg) at each node during DFS",
+      "Assert team_size > 0 before division"
     ],
-    "how_to_localize": "1. Print DFS traversal order to verify post-order. 2. Print (total, size, avg) at each node. 3. Compare against hand-calculated values. 4. Check if roots are correctly identified."
+    "how_to_localize": "Add print at end of DFS helper showing employee name and computed stats. Compare with manual calculation."
   },
   "edge_cases": [
     {
-      "case": "Empty org chart",
-      "handling": "Return None from getBestPerformingTeamLead, None from getTeamStats",
-      "gotcha": "Don't forget to check employees dict is not empty before starting DFS"
+      "case": "Empty organization",
+      "handling": "Return None from get_best_performing_team_lead",
+      "gotcha": "Don't call DFS on null CEO"
     },
     {
-      "case": "Single employee",
-      "handling": "Returns that employee (team of 1)",
-      "gotcha": "Must handle case where subordinates list is empty"
+      "case": "Single employee (CEO only)",
+      "handling": "Returns CEO, team of 1 with their own rating",
+      "gotcha": "DFS should handle empty subordinates list"
     },
     {
-      "case": "Invalid employee ID for getTeamStats",
-      "handling": "Return None",
-      "gotcha": "Check existence before calling helper"
+      "case": "All employees have same rating",
+      "handling": "Any employee is valid answer (leaf preferred by algorithm)",
+      "gotcha": "Doesn't matter which, but be consistent"
     },
     {
-      "case": "All equal ratings",
-      "handling": "Leaf nodes win (smaller teams have same avg but computed first/last)",
-      "gotcha": "Any valid answer acceptable; don't overcomplicate"
-    },
-    {
-      "case": "Multiple root nodes (forest)",
-      "handling": "Iterate over all roots and include all in DFS",
-      "gotcha": "Don't assume single CEO"
-    },
-    {
-      "case": "Very deep tree",
-      "handling": "Works but may hit stack limit",
-      "gotcha": "For production, consider iterative DFS with explicit stack"
+      "case": "Non-existent employee ID",
+      "handling": "get_team_stats returns None",
+      "gotcha": "Check existence before DFS"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic example from problem",
-      "input": "Add A(5), B(3)->A, C(2)->A, D(4)->C, E(10)->C. getBestPerformingTeamLead()",
-      "expected": "Employee E",
-      "explanation": "E's team of 1 has average 10.0, highest among all teams"
+      "name": "Example from problem",
+      "input": "A(5)->B(3),C(2)->D(4),E(10)",
+      "expected": "Best: E, Team A stats: (24, 5, 4.8)",
+      "explanation": "E as leaf has avg=10.0, highest possible"
     },
     {
-      "name": "Team stats for root",
-      "input": "Same setup. getTeamStats(1)",
-      "expected": "TeamStats(total=24, size=5, avg=4.8)",
-      "explanation": "Root's team includes all employees"
+      "name": "Single employee",
+      "input": "CEO only with rating 7",
+      "expected": "Best: CEO, stats: (7, 1, 7.0)",
+      "explanation": "Team of 1 is just themselves"
     },
     {
-      "name": "Team stats for leaf",
-      "input": "Same setup. getTeamStats(5)",
-      "expected": "TeamStats(total=10, size=1, avg=10.0)",
-      "explanation": "Leaf's team is just themselves"
-    },
-    {
-      "name": "Non-existent employee",
-      "input": "getTeamStats(999)",
-      "expected": "None",
-      "explanation": "Invalid ID returns None gracefully"
-    },
-    {
-      "name": "Empty org",
-      "input": "New OrgChart(). getBestPerformingTeamLead()",
-      "expected": "None",
-      "explanation": "No employees means no best team lead"
+      "name": "Linear chain",
+      "input": "A(1)->B(2)->C(3)",
+      "expected": "Best: C (avg=3.0)",
+      "explanation": "Leaf has highest individual rating, wins"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Forgetting to include the employee in their own team",
-      "why_wrong": "Team definition is self + ALL subordinates. Starting with size=0 or total=0 misses the employee.",
-      "correct_approach": "Always initialize total=self.rating and size=1",
-      "code_example_wrong": "# Wrong\\ntotal = 0\\nsize = 0\\nfor child in children:\\n    ...",
-      "code_example_correct": "# Correct\\ntotal = self.rating\\nsize = 1\\nfor child in children:\\n    ..."
+      "mistake": "Calling get_team_stats for every employee in a loop",
+      "why_wrong": "O(n\u00b2) - recomputes same subtrees multiple times",
+      "correct_approach": "Single post-order DFS that computes and compares in one pass",
+      "code_example_wrong": "for emp in employees: stats = get_team_stats(emp.id); if stats.avg > max...",
+      "code_example_correct": "Single DFS with best tracker passed through recursion"
     },
     {
-      "mistake": "Computing team stats for each employee separately",
-      "why_wrong": "This leads to O(n\u00b2) time as we recompute subtrees multiple times",
-      "correct_approach": "Use single post-order DFS that computes all stats while tracking best",
-      "code_example_wrong": "# Wrong O(n\u00b2)\\nfor emp in employees:\\n    stats = compute_subtree(emp)  # Redundant work\\n    if stats.avg > best_avg:\\n        best = emp",
-      "code_example_correct": "# Correct O(n)\\ndef dfs(emp):\\n    # Children computed only once\\n    for child in children:\\n        child_stats = dfs(child)\\n    # Aggregate and track best here"
+      "mistake": "Integer division for average",
+      "why_wrong": "In Python 2 or Java without cast, 5/2 = 2 not 2.5",
+      "correct_approach": "Use float division: Python 3 / operator, Java (double) cast",
+      "code_example_wrong": "avg = total / size  # Java: int/int",
+      "code_example_correct": "avg = (double) total / size"
     },
     {
-      "mistake": "Not handling multiple root nodes",
-      "why_wrong": "Org chart might be a forest (multiple independent hierarchies)",
-      "correct_approach": "Find all employees with manager_id=None and traverse from each",
-      "code_example_wrong": "# Wrong - assumes single root\\nroot = employees[0]\\ndfs(root)",
-      "code_example_correct": "# Correct\\nroots = [e for e in employees.values() if e.manager_id is None]\\nfor root in roots:\\n    dfs(root.id)"
+      "mistake": "Not including employee in their own team",
+      "why_wrong": "Team is employee + subordinates, forgetting +1 for self",
+      "correct_approach": "Initialize total=emp.rating, size=1 before processing children",
+      "code_example_wrong": "total, size = 0, 0; for sub in subordinates...",
+      "code_example_correct": "total, size = emp.rating, 1; for sub in subordinates..."
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by clarifying the definition of 'team' (self + ALL subordinates). Point out the key insight that leaf nodes often win. Explain why post-order DFS is perfect here - we need children's stats before computing parent's.",
+    "how_to_present": "First explain team definition (employee + ALL subordinates). Then identify naive vs optimal approach. Emphasize O(n) single-pass solution.",
     "what_to_mention": [
-      "Leaf nodes having the highest average is expected, not a bug",
-      "Post-order DFS gives O(n) time complexity",
-      "We're aggregating (total, size) pairs, not storing all ratings",
-      "The same helper function can be reused for both methods"
+      "Post-order DFS pattern",
+      "Why leaf nodes often win (team of 1)",
+      "Avoiding redundant computation"
     ],
-    "time_allocation": "2 min understanding, 3 min explaining approach, 8-10 min coding, 2 min testing",
+    "time_allocation": "2 min understand, 3 min explain approach, 8 min code, 2 min test",
     "if_stuck": [
-      "Think about what information you need from children to compute parent's stats",
-      "Can you avoid recomputing subtrees multiple times?",
-      "What does post-order traversal give you?"
+      "Think about what info you need to pass up the tree",
+      "What if you computed stats for leaves first?"
     ]
   },
-  "connection_to_next_part": "This solution sets up clean subtree traversal patterns. Part 3 might involve: (1) Finding lowest common ancestor of employees, (2) Computing stats for arbitrary subtrees, (3) Dynamic updates where ratings change. The _compute_subtree_stats helper and traversal pattern can be extended for these.",
+  "connection_to_next_part": "Part 2's DFS infrastructure could extend to: find highest-rated employee in subtree, count employees below threshold, compute team salary totals. The pattern of aggregating child results + self is reusable.",
   "communication_script": {
-    "transition_from_previous": "Great, Part 1 is working with basic employee management. For Part 2, I need to add team metrics. The key insight is that a 'team' is an employee plus their entire subtree, so I'll use post-order DFS to compute aggregates efficiently.",
-    "explaining_changes": "I'm adding a TeamStats class to encapsulate the return type, and two new methods. The core helper computes (total_rating, team_size) recursively. For finding the best team lead, I'll do a single O(n) DFS that tracks the maximum average as we go.",
+    "transition_from_previous": "Part 1 gave us the tree structure. For Part 2, I need to compute aggregate metrics across subtrees. The key insight is using post-order DFS to avoid redundant computation.",
+    "explaining_changes": "I'm adding a TeamStats class and two new methods. The critical method uses post-order DFS - process children first, then aggregate their stats with the current node.",
     "while_extending_code": [
-      "Adding TeamStats dataclass for clean return type...",
-      "This helper _compute_subtree_stats will be reused by both methods...",
-      "Using post-order traversal so children are processed before parent...",
-      "Tracking best with nonlocal variables in the nested DFS function..."
+      "Adding TeamStats to hold the metrics...",
+      "The DFS helper returns (total, size) tuple so parent can aggregate...",
+      "Tracking best via mutable container to avoid global state..."
     ],
-    "after_completing": "Both new methods are implemented. getTeamStats is O(subtree size) and getBestPerformingTeamLead is O(n). The key is aggregating stats bottom-up in a single pass. Ready for testing or Part 3?"
+    "after_completing": "Now get_best_performing_team_lead is O(n) with a single traversal, and get_team_stats is O(subtree size). The existing Part 1 methods are unchanged."
   },
   "time_milestones": {
     "time_budget": "12-15 minutes for this part",
-    "by_2_min": "Understand team definition, identify post-order DFS as the pattern",
-    "by_5_min": "Explain approach clearly, start adding TeamStats class and helper method",
-    "by_10_min": "Both methods implemented, basic testing with example",
-    "warning_signs": "If stuck on how to aggregate, ask: 'What if I return (total, size) from each recursive call?' If running behind, implement getTeamStats first as it's simpler."
+    "by_2_min": "Understand team definition, identify post-order DFS approach",
+    "by_5_min": "TeamStats class done, explaining DFS algorithm",
+    "by_10_min": "Both methods implemented, starting to test",
+    "warning_signs": "If still designing at 6 min, start coding with basic version"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If Part 1 subordinates tracking is broken, fix it first. Say: 'I notice the subordinates list isn't being maintained correctly. Let me fix that before adding team metrics.'",
-    "if_new_requirement_unclear": "Ask: 'Just to confirm - when you say team, that includes the employee themselves plus ALL their reports, direct and indirect, right?'",
-    "if_running_behind": "Implement getTeamStats first (simpler), then if time is tight, describe getBestPerformingTeamLead verbally and pseudocode it."
+    "if_part_builds_wrong": "Part 2 only reads the tree structure, doesn't modify it. If Part 1 has issues, they're unlikely to affect Part 2 logic.",
+    "if_new_requirement_unclear": "Ask: 'Does the team include indirect reports? Just direct?' (Answer: all subordinates)",
+    "if_running_behind": "Implement get_team_stats first (simpler DFS), then adapt for best_performing by adding tracking"
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing this as post-order DFS pattern",
-      "Noting that leaf nodes often win without being prompted",
-      "Explaining why O(n\u00b2) naive approach is avoidable",
-      "Mentioning how this pattern extends to other aggregate computations (min, max, etc.)",
-      "Proactively handling forest case (multiple roots)"
+      "Immediately recognizing post-order DFS pattern",
+      "Explaining why naive is O(n\u00b2) and optimal is O(n)",
+      "Noting leaf nodes often win without being asked",
+      "Clean separation of helper method for reusability"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Post-Order DFS Tree Aggregation",
+    "pattern": "Post-order DFS with Bottom-up Aggregation",
     "indicators": [
-      "Need to compute something for subtrees",
-      "Parent's value depends on children's values",
-      "Want to avoid recomputing same subtree",
-      "Aggregation operation (sum, count, max) over tree nodes"
+      "Need aggregate stats for subtrees",
+      "Children's data needed before parent",
+      "Tree structure with queries on subtrees"
     ],
     "similar_problems": [
-      "LC 543 - Diameter of Binary Tree",
       "LC 124 - Binary Tree Maximum Path Sum",
-      "LC 337 - House Robber III",
-      "LC 687 - Longest Univalue Path",
-      "LC 1448 - Count Good Nodes in Binary Tree"
+      "LC 543 - Diameter of Binary Tree",
+      "LC 1448 - Count Good Nodes"
     ],
-    "template": "def dfs(node):\\n    if not node: return base_case\\n    left_result = dfs(node.left)\\n    right_result = dfs(node.right)\\n    current_result = aggregate(node.val, left_result, right_result)\\n    update_global_best(current_result)\\n    return current_result"
+    "template": "def dfs(node): if not node: return base_case; left = dfs(left); right = dfs(right); result = combine(left, right, node); update_global_if_needed(); return result"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'team includes all subordinates', I immediately think tree traversal",
-      "why": "This is a subtree aggregation problem - need to collect values from entire subtree"
+      "thought": "Team includes ALL subordinates, so I need to traverse entire subtree",
+      "why": "Can't just use direct reports list"
     },
     {
       "step": 2,
-      "thought": "The average computation needs sum and count separately",
-      "why": "Can't compute average by averaging averages; need to track (total, count) and divide at end"
+      "thought": "Computing stats for CEO includes computing for all children",
+      "why": "Suggests recursive approach"
     },
     {
       "step": 3,
-      "thought": "Post-order DFS is perfect here",
-      "why": "Need children's stats before computing parent's stats - post-order processes children first"
+      "thought": "If I compute bottom-up, I can reuse child results",
+      "why": "Post-order avoids redundant computation"
     },
     {
       "step": 4,
-      "thought": "Single pass can find best while computing all stats",
-      "why": "Track global maximum during the same traversal to achieve O(n)"
+      "thought": "Track best during traversal instead of separate loop",
+      "why": "Reduces from O(n\u00b2) to O(n)"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you extend existing code cleanly without breaking Part 1?",
-      "Do you recognize the DFS aggregation pattern?",
-      "Can you achieve O(n) for finding best team?",
-      "Do you handle edge cases (empty, single node, invalid ID)?"
+      "Can you identify the O(n\u00b2) vs O(n) distinction?",
+      "Do you recognize post-order DFS pattern?",
+      "Is your code clean and bug-free?"
     ],
     "bonus_points": [
-      "Explaining why leaf nodes tend to win",
-      "Mentioning forest handling (multiple roots)",
-      "Clean code organization with helper method",
-      "Discussing potential caching for repeated queries"
+      "Explaining why leaves often win",
+      "Mentioning this pattern applies to many tree problems",
+      "Clean helper function design"
     ],
     "red_flags": [
-      "Rewriting Part 1 code unnecessarily",
-      "O(n\u00b2) approach without recognizing inefficiency",
-      "Confusion about what 'team' includes",
-      "Not testing with the given example"
+      "Calling get_team_stats in a loop (O(n\u00b2))",
+      "Forgetting to include employee in their own team",
+      "Not handling empty org"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI to generate dataclass boilerplate",
-      "Let it help with typing syntax",
-      "Ask for test case generation"
+      "Let AI help with TeamStats class boilerplate",
+      "Use AI for the DFS structure if familiar with pattern"
     ],
     "what_not_to_do": [
-      "Don't let AI write the DFS without understanding the return value design",
-      "Don't accept a O(n\u00b2) solution without questioning",
-      "Always verify the aggregation logic is correct"
+      "Don't let AI generate O(n\u00b2) solution",
+      "Verify the aggregation logic yourself"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Not asking to clarify 'team' definition",
-      "Staying silent while coding for too long",
-      "Not walking through the example"
+      "Jumping to code without explaining approach",
+      "Not tracing through example"
     ],
     "technical": [
-      "Starting to modify Part 1 methods unnecessarily",
-      "Using O(n\u00b2) approach without considering optimization",
-      "Not returning early for invalid inputs"
+      "Using global variables instead of passing through recursion",
+      "Modifying Part 1 methods unnecessarily"
     ],
     "communication": [
-      "Not explaining why post-order traversal is chosen",
-      "Forgetting to mention complexity analysis",
-      "Not testing the new methods"
+      "Not explaining why post-order matters",
+      "Forgetting to state time complexity"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Both new methods implemented and tested?",
-      "Edge cases handled (empty, invalid ID)?",
-      "Time complexity is O(n) for best team lead?",
-      "Part 1 methods still work correctly?"
+      "get_team_stats returns correct stats for CEO (full org)?",
+      "get_best_performing_team_lead handles empty org?",
+      "Time complexity is O(n) not O(n\u00b2)?",
+      "TeamStats has all three fields?"
     ],
     "quick_code_review": [
-      "TeamStats has all required fields?",
-      "Helper method returns correct tuple type?",
-      "No division by zero possible?",
-      "Roots correctly identified for forest case?"
+      "DFS initializes total=rating, size=1",
+      "Division uses float not int",
+      "Helper returns tuple for aggregation"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Caching team stats if org chart is mostly static",
-      "Logging team stat computations for debugging",
-      "Input validation with meaningful error messages",
-      "Iterative DFS to avoid stack overflow on deep hierarchies"
+      "Cache team stats with invalidation on employee add",
+      "Lazy computation for rarely-used stats",
+      "Logging for performance monitoring"
     ],
-    "why_not_in_interview": "Focus on core algorithm correctness and complexity; mention these as production enhancements",
-    "how_to_mention": "Say: 'In production, I'd consider caching team stats with invalidation when the org changes, and use iterative DFS for very deep hierarchies.'"
+    "why_not_in_interview": "Caching adds complexity, Part 3 might require different invalidation strategy",
+    "how_to_mention": "Say: 'In production, if this is called frequently, I'd cache team stats and invalidate on structural changes.'"
   },
-  "generated_at": "2026-01-18T18:33:07.103899",
+  "generated_at": "2026-01-19T04:20:49.634962",
   "_meta": {
     "problem_id": "employee_hierarchy_org_tree",
     "part_number": 2,

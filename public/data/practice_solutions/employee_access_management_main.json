@@ -4,73 +4,67 @@
   "category": "LLD/OOP Design",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic **Access Control List (ACL)** design problem. At first glance, it's about managing a many-to-many relationship between employees and resources, with an additional dimension of access types. The core challenge is choosing the right data structure to achieve O(1) operations while handling edge cases like idempotency and null-based bulk revocation.",
-    "pattern_recognition": "**HashMap + Set Operations + OOP Design**. The nested structure `HashMap<Employee, HashMap<Resource, Set<AccessType>>>` is the canonical solution for this pattern. Similar to designing a permission system, tag management, or any entity-relationship system with attributes.",
+    "first_impressions": "This is a classic Access Control List (ACL) design problem. The core challenge is designing efficient data structures for multi-dimensional lookups (employee \u2192 resource \u2192 access types). The nested HashMap pattern immediately comes to mind, with Sets for the access types to handle idempotency naturally.",
+    "pattern_recognition": "Nested HashMap + Set operations. This pattern appears in permission systems, role-based access control, and multi-level caching. The key insight is recognizing that we need O(1) operations on three levels: employee lookup, resource lookup within employee, and access type operations within resource.",
     "key_constraints": [
-      "O(1) for grant/revoke - Must use HashMap for employee and resource lookup",
-      "Idempotent grants - Using Set automatically handles this (no duplicates)",
-      "Null handling in revoke - Special case requiring conditional logic",
-      "10^5 operations - Must be efficient, no O(n) per operation",
-      "Multiple access types per resource - Set<AccessType> is ideal"
+      "O(1) grant/revoke for specific access - dictates HashMap + Set choice",
+      "10^5 total operations - must be efficient, no O(n) scans",
+      "Idempotent grants - Set handles this automatically",
+      "null access_type in revoke means 'revoke all' - special case handling required",
+      "Return empty list (not null) when no access exists - defensive coding"
     ],
     "clarifying_questions": [
-      "**Q: Are employee_id and resource_id guaranteed to be non-null?** - Determines if we need null validation",
-      "**Q: Should retrieve_access return a copy or reference to internal state?** - Affects mutability and thread-safety",
-      "**Q: What happens when we grant access to a non-existent employee?** - Should we auto-create or validate?",
-      "**Q: Is thread-safety required?** - Affects choice of concurrent data structures",
-      "**Q: Should we validate that access_type is a valid enum value?** - Error handling requirements",
-      "**Q: What's the expected read vs write ratio?** - Could influence optimization direction",
-      "**Q: Do we need to support querying all employees with access to a resource?** - Might need inverse index"
+      "Are access types hierarchical (does ADMIN imply READ/WRITE)? - This affects grant/check logic",
+      "Should revoke fail silently if access doesn't exist? - Error handling strategy",
+      "Is thread-safety needed for concurrent access? - May need synchronization",
+      "What's the expected ratio of reads vs writes? - Affects optimization strategy",
+      "Are employee/resource IDs guaranteed to be valid? - Input validation scope",
+      "Should we persist this data or is in-memory sufficient? - Architecture scope"
     ],
     "edge_cases_to_consider": [
-      "Revoking access that doesn't exist (should be no-op, not error)",
-      "Granting same access twice (idempotent, no duplicate)",
-      "Revoke with null on employee with no access (handle gracefully)",
-      "retrieve_access on unknown employee (return empty list)",
-      "retrieve_resources after all access revoked (return empty list)",
-      "Empty string employee_id or resource_id (depends on contract)"
+      "Revoking access that was never granted (should be no-op)",
+      "Granting duplicate access (idempotent, no error)",
+      "Revoking with null when employee has no access to resource",
+      "Retrieving access for non-existent employee/resource",
+      "Employee with access to multiple resources, revoke all from one",
+      "Resource cleanup when last access type is revoked"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "grant_access(employee_id, resource_id, access_type) - O(1)",
-        "how_met": "HashMap get/put operations are O(1), Set.add is O(1). Using computeIfAbsent/setdefault for safe initialization.",
+        "requirement": "grant_access with O(1) time",
+        "how_met": "HashMap for employee lookup, HashMap for resource lookup, Set.add() for access type - all O(1)",
         "gotchas": [
-          "Must initialize nested structures if they don't exist",
-          "Set handles idempotency automatically"
+          "Must initialize nested structures lazily"
         ]
       },
       {
-        "requirement": "revoke_access with specific type - O(1)",
-        "how_met": "HashMap lookup + Set.remove, both O(1). Must check for existence first.",
+        "requirement": "revoke_access specific type O(1)",
+        "how_met": "Same nested lookup + Set.remove() - O(1)",
         "gotchas": [
-          "Don't throw error if access doesn't exist",
-          "Clean up empty containers to prevent memory leak"
+          "Don't forget to clean up empty containers"
         ]
       },
       {
-        "requirement": "revoke_access with null removes ALL access - O(k)",
-        "how_met": "Clear entire Set or remove resource entry. O(k) where k = number of access types.",
+        "requirement": "revoke_access with null removes ALL access",
+        "how_met": "Delete entire resource entry from employee's map when access_type is None",
         "gotchas": [
-          "Must differentiate null from specific type",
-          "Should also clean up empty resource map"
+          "Must handle case where employee/resource doesn't exist"
         ]
       },
       {
-        "requirement": "retrieve_access returns List<AccessType> - O(k)",
-        "how_met": "Convert Set to List. O(k) for iteration.",
+        "requirement": "retrieve_access returns list of access types",
+        "how_met": "Convert Set to List - O(k) where k is small (max 3)",
         "gotchas": [
-          "Return empty list, not null, if no access",
-          "Return copy to prevent external mutation"
+          "Return empty list, not None/null"
         ]
       },
       {
-        "requirement": "retrieve_resources returns List<String> - O(r)",
-        "how_met": "Return keys of inner HashMap. O(r) for r resources.",
+        "requirement": "retrieve_resources returns all resource IDs",
+        "how_met": "Return keys of employee's resource map - O(r)",
         "gotchas": [
-          "Return empty list if employee doesn't exist",
-          "Only include resources with non-empty access sets"
+          "Must handle non-existent employee"
         ]
       }
     ],
@@ -79,7 +73,7 @@
         "operation": "grant_access",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "HashMap.computeIfAbsent + Set.add are both O(1)"
+        "why": "HashMap lookups + Set.add"
       },
       {
         "operation": "revoke_access (specific)",
@@ -88,1121 +82,784 @@
         "why": "HashMap lookups + Set.remove"
       },
       {
-        "operation": "revoke_access (null)",
+        "operation": "revoke_access (null/all)",
         "target": "O(k)",
         "achieved": "O(k)",
-        "why": "Must clear k access types"
+        "why": "Clear set or delete entry"
       },
       {
         "operation": "retrieve_access",
         "target": "O(k)",
         "achieved": "O(k)",
-        "why": "Convert Set to List"
+        "why": "Convert set to list"
       },
       {
         "operation": "retrieve_resources",
         "target": "O(r)",
         "achieved": "O(r)",
-        "why": "Return HashMap keys"
+        "why": "Return dictionary keys"
       }
     ],
     "non_goals": [
-      "Access hierarchy (ADMIN implies READ/WRITE) - Not in Part 1",
-      "Group/Role-based access - Part 2 follow-up",
-      "Time-based/expiring access - Part 3 follow-up",
-      "Audit logging - Part 4 follow-up",
-      "Querying all employees with access to a resource (inverse index)",
-      "Thread-safety (unless specifically asked)"
+      "Hierarchical access (ADMIN implies READ/WRITE) - not specified",
+      "Persistence/durability - in-memory only for this part",
+      "Audit logging - covered in Part 4 follow-up",
+      "Time-based access expiry - covered in Part 3 follow-up",
+      "Group/role-based access - covered in Part 2 follow-up"
     ]
   },
   "assumptions": [
-    "Employee IDs and Resource IDs are non-null, non-empty strings (confirm with interviewer)",
-    "AccessType enum is predefined with READ, WRITE, ADMIN values",
-    "No persistence required - in-memory storage is sufficient",
-    "Single-threaded environment (no concurrent access)",
-    "Order of returned lists doesn't matter",
-    "We should clean up empty containers to prevent unbounded memory growth"
+    "Access types are NOT hierarchical (granting ADMIN doesn't auto-grant READ/WRITE)",
+    "Employee and resource IDs are valid non-empty strings (no validation needed)",
+    "Operations are single-threaded (no concurrent access concerns)",
+    "Memory is sufficient for 10^4 employees \u00d7 10^4 resources in worst case",
+    "Order of returned lists doesn't matter (can use any order)"
   ],
-  "tradeoffs": [
-    {
-      "decision": "Nested HashMap vs Single HashMap with composite key",
-      "chosen": "Nested HashMap<Emp, HashMap<Res, Set<Access>>>",
-      "why": "Allows efficient retrieve_resources (get all resources for employee) without iterating all keys",
-      "alternative": "HashMap<(emp,res), Set<Access>>",
-      "when_to_switch": "If we primarily query by (emp, res) pair and rarely need all resources for an employee"
-    },
-    {
-      "decision": "Set vs List for access types",
-      "chosen": "Set<AccessType>",
-      "why": "Automatic deduplication (idempotent grants), O(1) add/remove/contains",
-      "alternative": "List<AccessType> with manual duplicate check",
-      "when_to_switch": "Never - Set is strictly better for this use case"
-    },
-    {
-      "decision": "Eager cleanup vs Lazy cleanup of empty containers",
-      "chosen": "Eager cleanup (remove empty entries immediately)",
-      "why": "Prevents memory leaks from many grant/revoke cycles",
-      "alternative": "Lazy cleanup with periodic garbage collection",
-      "when_to_switch": "If revoke operations are very frequent and cleanup overhead matters"
-    },
-    {
-      "decision": "Return copy vs Return view",
-      "chosen": "Return new ArrayList/List (copy)",
-      "why": "Prevents callers from modifying internal state",
-      "alternative": "Return Collections.unmodifiableList (view)",
-      "when_to_switch": "If memory is tight and callers are trusted"
-    }
-  ],
+  "tradeoffs": {
+    "decisions": [
+      {
+        "decision": "Nested HashMap vs single HashMap with composite key",
+        "chosen": "Nested HashMap",
+        "why": "Easier to implement retrieve_resources(), more intuitive structure",
+        "alternative": "HashMap<(emp_id, res_id), Set<AccessType>>",
+        "when_to_switch": "If we rarely need retrieve_resources(), composite key is simpler"
+      },
+      {
+        "decision": "Lazy vs eager initialization of nested structures",
+        "chosen": "Lazy initialization",
+        "why": "Avoids memory waste for employees with no access",
+        "alternative": "Pre-allocate on addEmployee",
+        "when_to_switch": "If we know all employees upfront"
+      },
+      {
+        "decision": "Keep empty containers vs cleanup",
+        "chosen": "Cleanup empty containers",
+        "why": "retrieve_resources() should not return resources with no access",
+        "alternative": "Leave empty sets",
+        "when_to_switch": "If cleanup overhead matters more than accuracy"
+      }
+    ]
+  },
   "extensibility_and_followups": {
     "design_principles": [
-      "**Single Responsibility**: AccessManager only manages access, doesn't validate employees/resources exist",
-      "**Encapsulation**: Internal data structure is private, only methods exposed",
-      "**Keep public API small**: 4 methods, clear contracts",
-      "**Immutable returns**: Return copies to protect internal state"
+      "Single Responsibility - AccessManager only manages access, not employees/resources",
+      "Open/Closed - easy to add new access types to enum",
+      "Keep public API minimal - 4 clean methods"
     ],
-    "why_this_design_scales": "The nested HashMap structure is extensible: **Part 2** (groups) can add another lookup layer, **Part 3** (time-based) can extend AccessType to include expiration, **Part 4** (audit) can wrap methods with logging. The core structure remains intact.",
+    "why_this_design_scales": "The nested HashMap structure allows easy extension: Part 2 (groups) adds another layer of indirection, Part 3 (time-based) adds expiry metadata to access entries, Part 4 (audit) adds event logging hooks in grant/revoke methods. The core data structure remains stable.",
     "expected_followup_hooks": [
-      "**grant_access**: Easy to add group resolution before granting",
-      "**revoke_access**: Easy to add audit logging",
-      "**retrieve_access**: Easy to filter by time/validity",
-      "**Data structure**: Can add inverse index (resource -> employees) if needed"
+      "Access type Set could become a class with metadata (expiry time)",
+      "grant/revoke methods are natural places for audit logging",
+      "Could add has_access() method for quick permission checks"
     ],
     "invariants": [
-      "If employee has no access to any resource, employee key may or may not exist in outer map",
-      "If employee has access to a resource, that resource's Set is non-empty",
-      "No duplicate access types for same (employee, resource) pair",
-      "retrieve_resources only returns resources with at least one access type"
+      "An employee appears in access_map only if they have at least one resource",
+      "A resource appears in employee's map only if they have at least one access type",
+      "Set of access types is never empty for an existing entry"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                  EMPLOYEE ACCESS MANAGEMENT                      \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502     Employee                 Resources              Access       \u2502\n\u2502     \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500                 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500              \u2500\u2500\u2500\u2500\u2500\u2500       \u2502\n\u2502                                                                  \u2502\n\u2502       \u250c\u2500\u2500\u2500\u2510    grant        \u250c\u2500\u2500\u2500\u2510                               \u2502\n\u2502       \u2502E1 \u2502 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \u2502R1 \u2502 \u25c4\u2500\u2500\u2500 {READ, WRITE}            \u2502\n\u2502       \u2514\u2500\u2500\u2500\u2518                 \u2514\u2500\u2500\u2500\u2518                               \u2502\n\u2502         \u2502                                                        \u2502\n\u2502         \u2502      grant        \u250c\u2500\u2500\u2500\u2510                               \u2502\n\u2502         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \u2502R2 \u2502 \u25c4\u2500\u2500\u2500 {READ}                   \u2502\n\u2502                             \u2514\u2500\u2500\u2500\u2518                               \u2502\n\u2502                                                                  \u2502\n\u2502       \u250c\u2500\u2500\u2500\u2510    grant        \u250c\u2500\u2500\u2500\u2510                               \u2502\n\u2502       \u2502E2 \u2502 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \u2502R1 \u2502 \u25c4\u2500\u2500\u2500 {ADMIN}                  \u2502\n\u2502       \u2514\u2500\u2500\u2500\u2518                 \u2514\u2500\u2500\u2500\u2518                               \u2502\n\u2502                                                                  \u2502\n\u2502   Query: retrieve_access(E1, R1) \u2192 [READ, WRITE]                \u2502\n\u2502   Query: retrieve_resources(E1)  \u2192 [R1, R2]                     \u2502\n\u2502                                                                  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                  DATA STRUCTURE VISUALIZATION                    \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502   accessMap: HashMap<String, HashMap<String, Set<AccessType>>>   \u2502\n\u2502                                                                  \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502                                                          \u2502   \u2502\n\u2502   \u2502   \"E1\" \u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u25ba \"R1\" \u2500\u2500\u2500\u2500\u25ba { READ, WRITE }             \u2502   \u2502\n\u2502   \u2502             \u2502                                            \u2502   \u2502\n\u2502   \u2502             \u2514\u2500\u2500\u25ba \"R2\" \u2500\u2500\u2500\u2500\u25ba { READ }                    \u2502   \u2502\n\u2502   \u2502                                                          \u2502   \u2502\n\u2502   \u2502   \"E2\" \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \"R1\" \u2500\u2500\u2500\u2500\u25ba { ADMIN }                  \u2502   \u2502\n\u2502   \u2502                                                          \u2502   \u2502\n\u2502   \u2502   \"E3\" \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \"R3\" \u2500\u2500\u2500\u2500\u25ba { READ, WRITE, ADMIN }     \u2502   \u2502\n\u2502   \u2502                                                          \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                                  \u2502\n\u2502   Level 1: Employee lookup \u2500\u2500\u2500\u25ba O(1)                            \u2502\n\u2502   Level 2: Resource lookup \u2500\u2500\u2500\u25ba O(1)                            \u2502\n\u2502   Level 3: Access check \u2500\u2500\u2500\u2500\u2500\u2500\u25ba O(1)                            \u2502\n\u2502                                                                  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                 ACCESS CONTROL SYSTEM                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                             \u2502\n\u2502   EMPLOYEES              RESOURCES            ACCESS TYPES  \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510             \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502  E1  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6\u2502  R1  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6\u2502  READ   \u2502   \u2502\n\u2502   \u2502      \u2502               \u2502      \u2502             \u2502  WRITE  \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518             \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502       \u2502                      \u25b2                              \u2502\n\u2502       \u2502                      \u2502                              \u2502\n\u2502       \u25bc                      \u2502                              \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510             \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502  E2  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6\u2502  R2  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6\u2502  ADMIN  \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518             \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2502   Data Flow: Employee \u2500\u2500\u25b6 Resource \u2500\u2500\u25b6 {Access Types}       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\naccess_map: HashMap<String, HashMap<String, Set<AccessType>>>\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  KEY       \u2502  VALUE (HashMap<ResourceId, Set<Access>>) \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   \"E1\"     \u2502  { \"R1\": {READ, WRITE}, \"R2\": {READ} }    \u2502\n\u2502   \"E2\"     \u2502  { \"R1\": {ADMIN} }                        \u2502\n\u2502   \"E3\"     \u2502  { \"R3\": {READ, WRITE, ADMIN} }           \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nMemory Layout:\naccess_map[\"E1\"] \u2500\u2500\u25b6 resource_map \u2500\u2500\u25b6 \"R1\" \u2500\u2500\u25b6 Set{READ, WRITE}\n                                     \"R2\" \u2500\u2500\u25b6 Set{READ}\n```",
     "algorithm_flow": [
       {
         "step": 1,
         "description": "grant_access(E1, R1, READ)",
-        "visualization": "```\nBefore: accessMap = {}\n\nStep 1: Check if 'E1' exists \u2500\u2500\u25ba No\nStep 2: Create entry: accessMap['E1'] = {}\n\nStep 3: Check if 'R1' exists in E1 \u2500\u2500\u25ba No  \nStep 4: Create entry: accessMap['E1']['R1'] = Set()\n\nStep 5: Add READ to Set\nStep 6: accessMap['E1']['R1'].add(READ)\n\nAfter: accessMap = {'E1': {'R1': {READ}}}\n```",
-        "key_point": "Lazy initialization of nested structures"
+        "visualization": "```\naccess_map: {}\n     \u2193 get_or_create employee entry\naccess_map: {\"E1\": {}}\n     \u2193 get_or_create resource entry  \naccess_map: {\"E1\": {\"R1\": set()}}\n     \u2193 add access type\naccess_map: {\"E1\": {\"R1\": {READ}}}\n```",
+        "key_point": "Lazy initialization with setdefault/computeIfAbsent"
       },
       {
         "step": 2,
         "description": "grant_access(E1, R1, WRITE)",
-        "visualization": "```\nBefore: accessMap = {'E1': {'R1': {READ}}}\n\nStep 1: Check if 'E1' exists \u2500\u2500\u25ba Yes\nStep 2: Get accessMap['E1']\n\nStep 3: Check if 'R1' exists \u2500\u2500\u25ba Yes\nStep 4: Get accessMap['E1']['R1']\n\nStep 5: Add WRITE to Set (already has READ)\n\nAfter: accessMap = {'E1': {'R1': {READ, WRITE}}}\n```",
-        "key_point": "Set handles uniqueness automatically"
+        "visualization": "```\naccess_map: {\"E1\": {\"R1\": {READ}}}\n     \u2193 employee exists, resource exists\n     \u2193 just add to set\naccess_map: {\"E1\": {\"R1\": {READ, WRITE}}}\n```",
+        "key_point": "Set handles deduplication automatically"
       },
       {
         "step": 3,
-        "description": "revoke_access(E1, R1, None) - Remove ALL",
-        "visualization": "```\nBefore: accessMap = {'E1': {'R1': {READ, WRITE}, 'R2': {READ}}}\n\nStep 1: access_type is None \u2500\u2500\u25ba Remove all for this resource\nStep 2: Delete 'R1' from accessMap['E1']\n\nAfter: accessMap = {'E1': {'R2': {READ}}}\n\n\u26a0\ufe0f Note: E1 still has R2 access!\n```",
-        "key_point": "Null removes entire resource entry, not all resources"
+        "description": "revoke_access(E1, R1, READ)",
+        "visualization": "```\naccess_map: {\"E1\": {\"R1\": {READ, WRITE}}}\n     \u2193 remove from set\naccess_map: {\"E1\": {\"R1\": {WRITE}}}\n     \u2193 set not empty, no cleanup needed\n```",
+        "key_point": "Remove specific type, check if cleanup needed"
+      },
+      {
+        "step": 4,
+        "description": "revoke_access(E1, R1, None)",
+        "visualization": "```\naccess_map: {\"E1\": {\"R1\": {WRITE}, \"R2\": {...}}}\n     \u2193 delete entire R1 entry\naccess_map: {\"E1\": {\"R2\": {...}}}\n     \u2193 employee still has resources, no cleanup\n```",
+        "key_point": "null/None means delete the entire resource entry"
       }
     ],
-    "dry_run_table": "| Step | Operation | accessMap State | Return Value |\n|------|-----------|-----------------|---------------|\n| 1 | `AccessManager()` | `{}` | - |\n| 2 | `grant_access('E1', 'R1', READ)` | `{'E1': {'R1': {READ}}}` | - |\n| 3 | `grant_access('E1', 'R1', WRITE)` | `{'E1': {'R1': {READ, WRITE}}}` | - |\n| 4 | `grant_access('E1', 'R2', READ)` | `{'E1': {'R1': {READ, WRITE}, 'R2': {READ}}}` | - |\n| 5 | `grant_access('E2', 'R1', ADMIN)` | `{'E1': {...}, 'E2': {'R1': {ADMIN}}}` | - |\n| 6 | `retrieve_access('E1', 'R1')` | (unchanged) | `[READ, WRITE]` |\n| 7 | `retrieve_resources('E1')` | (unchanged) | `['R1', 'R2']` |\n| 8 | `revoke_access('E1', 'R1', READ)` | `{'E1': {'R1': {WRITE}, 'R2': {READ}}, ...}` | - |\n| 9 | `retrieve_access('E1', 'R1')` | (unchanged) | `[WRITE]` |\n| 10 | `revoke_access('E1', 'R1', None)` | `{'E1': {'R2': {READ}}, 'E2': {...}}` | - |\n| 11 | `retrieve_access('E1', 'R1')` | (unchanged) | `[]` |\n| 12 | `retrieve_resources('E1')` | (unchanged) | `['R2']` |"
+    "dry_run_table": "| Step | Operation | access_map State | Result |\n|------|-----------|------------------|--------|\n| 0 | Initialize | `{}` | - |\n| 1 | grant(E1, R1, READ) | `{E1: {R1: {READ}}}` | - |\n| 2 | grant(E1, R1, WRITE) | `{E1: {R1: {READ, WRITE}}}` | - |\n| 3 | grant(E1, R2, READ) | `{E1: {R1: {READ,WRITE}, R2: {READ}}}` | - |\n| 4 | retrieve_access(E1, R1) | unchanged | [READ, WRITE] |\n| 5 | retrieve_resources(E1) | unchanged | [R1, R2] |\n| 6 | revoke(E1, R1, READ) | `{E1: {R1: {WRITE}, R2: {READ}}}` | - |\n| 7 | revoke(E1, R2, None) | `{E1: {R1: {WRITE}}}` | - |"
   },
   "thinking_process": {
     "step_by_step": [
-      "**When I see 'O(1) grant/revoke'**, I immediately think HashMap. The nested structure `Map<Emp, Map<Res, Set<Access>>>` allows O(1) at each level.",
-      "**When I see 'idempotent grants'**, I think Set. Sets automatically ignore duplicates, making idempotency free.",
-      "**When I see 'null removes all access'**, I recognize this as a special case requiring conditional handling in revoke_access.",
-      "**When I see 'retrieve_resources'**, I realize I need to be able to get all keys from the inner map, which validates my nested HashMap choice over a flat composite-key approach.",
-      "**When I see the cleanup requirement**, I know I need to remove empty Sets and empty inner maps to prevent memory leaks over many operations.",
-      "**For return values**, I should return new Lists (copies) rather than views to prevent external modification of internal state."
+      "When I see 'employee has access to resources with multiple access types', I immediately think of a multi-level mapping structure",
+      "The O(1) requirement for grant/revoke confirms I need HashMap, not linear search",
+      "Multiple access types per (employee, resource) pair suggests Set - it's idempotent and O(1) add/remove",
+      "The nested structure HashMap<emp, HashMap<res, Set<access>>> gives O(1) at each level",
+      "For revoke with null, I need to delete the entire resource entry, not just clear the set",
+      "I must clean up empty containers to ensure retrieve_resources() returns accurate results",
+      "Using setdefault in Python (or computeIfAbsent in Java) handles lazy initialization elegantly"
     ],
-    "key_insight": "The **nested HashMap with Set** structure `HashMap<Employee, HashMap<Resource, Set<AccessType>>>` is the canonical data structure for this problem. It provides:\n- O(1) access at each level\n- Natural grouping for `retrieve_resources` (just get inner map's keys)\n- Set for automatic idempotency\n- Easy cleanup by removing keys when Sets become empty",
-    "why_this_works": "Each lookup is O(1) because HashMap provides constant-time get/put. The Set provides constant-time add/remove/contains, making all core operations O(1). The nested structure allows efficient retrieval of all resources for an employee without scanning all entries."
+    "key_insight": "The problem maps naturally to a 3-level hierarchy: Employee \u2192 Resource \u2192 AccessTypes. Each level uses the appropriate data structure: outer two are HashMaps for O(1) lookup by key, innermost is Set for O(1) membership operations with automatic deduplication.",
+    "why_this_works": "HashMap gives O(1) average case for get/put/remove. Set gives O(1) for add/remove/contains. Together, any grant/revoke operation is O(1). The nested structure mirrors the conceptual model exactly, making the code intuitive and maintainable."
   },
   "approaches": [
     {
-      "name": "Brute Force - Flat List of Tuples",
-      "description": "Store all access grants as a list of (employee, resource, access_type) tuples. Search through list for each operation.",
-      "pseudocode": "grants = [(emp, res, type), ...]\n\ngrant: append to list (check duplicate first)\nrevoke: search and remove\nretrieve_access: filter list by emp+res\nretrieve_resources: filter and unique",
-      "time_complexity": "O(n) for all operations where n = total grants",
-      "space_complexity": "O(n)",
+      "name": "Brute Force - List of Tuples",
+      "description": "Store all access grants as a flat list of (employee_id, resource_id, access_type) tuples",
+      "pseudocode": "class AccessManager:\n    accesses = []  # List of (emp, res, type) tuples\n    \n    def grant_access(emp, res, type):\n        if (emp, res, type) not in accesses:\n            accesses.append((emp, res, type))\n    \n    def retrieve_access(emp, res):\n        return [t for (e, r, t) in accesses if e==emp and r==res]",
+      "time_complexity": "O(n) for all operations",
+      "space_complexity": "O(n) where n = total grants",
       "pros": [
         "Simple to implement",
         "Easy to understand",
-        "Works for small datasets"
+        "Easy to serialize"
       ],
       "cons": [
-        "O(n) per operation - way too slow",
-        "Doesn't meet O(1) requirement",
-        "Duplicate checking is expensive"
+        "O(n) for every operation - violates requirements",
+        "No deduplication built-in",
+        "Terrible for 10^5 operations"
       ],
-      "when_to_use": "Never in interview - immediately propose HashMap approach"
+      "when_to_use": "Never for this problem. Maybe for tiny datasets or debugging."
     },
     {
-      "name": "Flat HashMap with Composite Key",
-      "description": "Use HashMap<(employee_id + '_' + resource_id), Set<AccessType>>",
-      "pseudocode": "access_map = {}\nkey = emp_id + '_' + res_id\naccess_map[key] = set()\naccess_map[key].add(type)",
-      "time_complexity": "O(1) for most operations",
-      "space_complexity": "O(e * r) where e=employees, r=resources",
+      "name": "Optimal - Nested HashMap with Set",
+      "description": "Three-level nesting: HashMap<EmployeeId, HashMap<ResourceId, Set<AccessType>>>",
+      "pseudocode": "class AccessManager:\n    access_map = {}  # emp -> {res -> {access_types}}\n    \n    def grant_access(emp, res, type):\n        access_map.setdefault(emp, {}).setdefault(res, set()).add(type)\n    \n    def revoke_access(emp, res, type):\n        if emp not in access_map: return\n        if res not in access_map[emp]: return\n        if type is None:\n            del access_map[emp][res]\n        else:\n            access_map[emp][res].discard(type)\n            if not access_map[emp][res]:\n                del access_map[emp][res]\n        if not access_map[emp]:\n            del access_map[emp]",
+      "time_complexity": "O(1) for grant/revoke specific, O(k) for revoke all",
+      "space_complexity": "O(E * R * A) worst case, typically O(total grants)",
       "pros": [
-        "O(1) for grant, revoke, retrieve_access",
-        "Simpler structure"
-      ],
-      "cons": [
-        "retrieve_resources is O(total_entries) - must scan all keys",
-        "Key collision possible if IDs contain separator"
-      ],
-      "when_to_use": "If retrieve_resources is not a requirement"
-    },
-    {
-      "name": "Optimal: Nested HashMap with Set",
-      "description": "Use `HashMap<EmployeeId, HashMap<ResourceId, Set<AccessType>>>` for O(1) at each level",
-      "pseudocode": "access_map = {}\n\ngrant:\n  access_map[emp][res].add(type)\n\nretrieve_resources:\n  return access_map[emp].keys()  # O(r)",
-      "time_complexity": "O(1) for grant/revoke (specific), O(k) for revoke (all), O(r) for retrieve_resources",
-      "space_complexity": "O(e * r * k) worst case, but typically much less",
-      "pros": [
-        "Meets all complexity requirements",
-        "Natural structure for the domain",
-        "Clean API"
+        "Meets O(1) requirements",
+        "Natural model of the domain",
+        "Set handles idempotency",
+        "Easy to extend"
       ],
       "cons": [
         "Slightly more complex initialization",
-        "Need to handle nested null checks"
+        "Need to clean up empty containers"
       ],
-      "key_insight": "Nested structure enables efficient retrieve_resources without scanning"
+      "key_insight": "Match data structure levels to conceptual hierarchy. Use lazy initialization to avoid pre-allocating."
     }
   ],
   "optimal_solution": {
-    "name": "Nested HashMap with Set and Eager Cleanup",
-    "explanation_md": "## Approach\n\nWe use a **nested HashMap structure** to achieve O(1) lookups at each level:\n\n```\nHashMap<EmployeeId, HashMap<ResourceId, Set<AccessType>>>\n```\n\n### Why This Structure?\n\n1. **First level** (Employee \u2192 Resources): Allows O(1) lookup of all resources for an employee\n2. **Second level** (Resource \u2192 Access Types): Allows O(1) lookup of access for specific resource\n3. **Third level** (Set of Access Types): Provides O(1) add/remove and automatic deduplication\n\n### Key Implementation Details\n\n1. **Lazy Initialization**: Create nested structures only when needed using `computeIfAbsent` (Java) or `setdefault` (Python)\n\n2. **Null Handling in Revoke**: Check if `access_type` is None/null and handle specially\n\n3. **Eager Cleanup**: After removing an access type, check if Set is empty and remove the resource entry. After removing a resource, check if employee map is empty and remove employee entry.\n\n### Why Cleanup Matters\n\nWithout cleanup:\n```python\n# After many grant/revoke cycles:\naccessMap = {\n  'E1': {'R1': set(), 'R2': set(), ...},  # Empty sets accumulate\n  'E2': {},  # Empty maps accumulate\n  ...\n}\n```\n\nWith cleanup, we maintain only active entries.",
+    "name": "Nested HashMap with Set and Lazy Initialization",
+    "explanation_md": "## Approach\n\nThe key insight is that the access control model has a natural 3-level hierarchy:\n\n```\nEmployee \u2192 Resource \u2192 Set of Access Types\n```\n\nWe mirror this with nested HashMaps:\n\n```python\naccess_map: Dict[str, Dict[str, Set[AccessType]]]\n```\n\n### Why This Works\n\n1. **O(1) Lookups**: HashMap gives O(1) average case for get/put/delete\n2. **Idempotent Grants**: Set.add() with same element is no-op\n3. **Efficient Revoke**: Set.remove() is O(1)\n4. **Null Handling**: Delete entire resource entry for revoke-all\n\n### Critical Implementation Details\n\n1. **Lazy Initialization**: Use `setdefault` (Python) or `computeIfAbsent` (Java) to create nested structures only when needed\n\n2. **Cleanup Empty Containers**: After revoking, check if Set becomes empty \u2192 delete resource entry. If resource map becomes empty \u2192 delete employee entry.\n\n3. **Graceful Missing Keys**: Revoke on non-existent employee/resource should be silent no-op",
     "data_structures": [
       {
         "structure": "HashMap<String, HashMap<String, Set<AccessType>>>",
-        "purpose": "Main data store with O(1) lookup at each level"
+        "purpose": "Primary storage - O(1) lookup at each level"
       },
       {
         "structure": "Set<AccessType>",
-        "purpose": "Store access types with automatic deduplication"
+        "purpose": "Store access types with automatic deduplication and O(1) operations"
       },
       {
-        "structure": "AccessType enum",
-        "purpose": "Type-safe access level representation"
+        "structure": "AccessType Enum",
+        "purpose": "Type-safe representation of READ, WRITE, ADMIN"
       }
     ],
     "algorithm_steps": [
-      "1. **grant_access**: Get or create employee map, get or create resource set, add access type to set",
-      "2. **revoke_access (specific)**: Navigate to set, remove access type, cleanup if empty",
-      "3. **revoke_access (null)**: Navigate to employee map, remove entire resource entry, cleanup if empty",
-      "4. **retrieve_access**: Navigate to set, return as new list (or empty list if not found)",
-      "5. **retrieve_resources**: Get employee map, return keys as new list (or empty list if not found)"
+      "1. **grant_access**: Get-or-create employee entry, get-or-create resource entry, add access type to set",
+      "2. **revoke_access (specific)**: Navigate to set, remove type, cleanup if empty",
+      "3. **revoke_access (null/all)**: Delete entire resource entry from employee's map, cleanup if empty",
+      "4. **retrieve_access**: Navigate to set, convert to list (or empty list if not found)",
+      "5. **retrieve_resources**: Return keys of employee's resource map (or empty list if not found)"
     ],
-    "why_decimal": "Not applicable to this problem - no currency calculations"
+    "why_decimal": "N/A - This problem doesn't involve currency or floating point"
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Employee Access Management System",
-    "",
-    "A production-quality implementation of an access control system.",
-    "Designed for O(1) operations with proper edge case handling.",
-    "",
-    "Author: Interview Candidate",
-    "Time Complexity: O(1) for grant/revoke, O(k) for retrieve_access, O(r) for retrieve_resources",
-    "Space Complexity: O(e * r * k) where e=employees, r=resources, k=access types",
-    "\"\"\"",
-    "",
-    "from enum import Enum, auto",
+    "from enum import Enum",
     "from typing import Dict, Set, List, Optional",
-    "from collections import defaultdict",
     "",
     "",
     "class AccessType(Enum):",
-    "    \"\"\"Enumeration of possible access levels.\"\"\"",
-    "    READ = auto()",
-    "    WRITE = auto()",
-    "    ADMIN = auto()",
+    "    \"\"\"Represents the three access levels in the system.\"\"\"",
+    "    READ = \"READ\"",
+    "    WRITE = \"WRITE\"",
+    "    ADMIN = \"ADMIN\"",
     "",
     "",
     "class AccessManager:",
     "    \"\"\"",
-    "    Manages employee access to resources.",
-    "    ",
-    "    This class provides O(1) operations for granting and revoking access,",
-    "    with support for multiple access types per resource.",
-    "    ",
-    "    Attributes:",
-    "        _access_map: Nested dictionary storing access permissions",
-    "    ",
-    "    Example:",
-    "        >>> manager = AccessManager()",
-    "        >>> manager.grant_access('E1', 'R1', AccessType.READ)",
-    "        >>> manager.retrieve_access('E1', 'R1')",
-    "        [<AccessType.READ: 1>]",
+    "    Manages employee access to resources using nested HashMaps.",
+    "    Structure: employee_id -> resource_id -> Set of AccessTypes",
+    "    All operations are O(1) except retrieve which is O(k) or O(r).",
     "    \"\"\"",
     "    ",
-    "    def __init__(self) -> None:",
-    "        \"\"\"Initialize an empty access manager.\"\"\"",
-    "        # Structure: {employee_id: {resource_id: {access_types}}}",
-    "        self._access_map: Dict[str, Dict[str, Set[AccessType]]] = {}",
+    "    def __init__(self):",
+    "        # Nested dict: employee_id -> {resource_id -> set of access types}",
+    "        self.access_map: Dict[str, Dict[str, Set[AccessType]]] = {}",
     "    ",
-    "    def grant_access(",
-    "        self,",
-    "        employee_id: str,",
-    "        resource_id: str,",
-    "        access_type: AccessType",
-    "    ) -> None:",
-    "        \"\"\"",
-    "        Grant specific access type to an employee for a resource.",
-    "        ",
-    "        This operation is idempotent - granting the same access twice",
-    "        has no additional effect.",
-    "        ",
-    "        Args:",
-    "            employee_id: Unique identifier for the employee",
-    "            resource_id: Unique identifier for the resource",
-    "            access_type: The type of access to grant (READ, WRITE, ADMIN)",
-    "        ",
-    "        Time Complexity: O(1)",
-    "        Space Complexity: O(1) amortized",
-    "        ",
-    "        Example:",
-    "            >>> manager.grant_access('E1', 'R1', AccessType.READ)",
-    "            >>> manager.grant_access('E1', 'R1', AccessType.READ)  # Idempotent",
-    "        \"\"\"",
-    "        # Get or create employee's resource map",
-    "        if employee_id not in self._access_map:",
-    "            self._access_map[employee_id] = {}",
-    "        ",
-    "        employee_resources = self._access_map[employee_id]",
-    "        ",
-    "        # Get or create resource's access set",
-    "        if resource_id not in employee_resources:",
-    "            employee_resources[resource_id] = set()",
-    "        ",
-    "        # Add access type (Set handles idempotency)",
-    "        employee_resources[resource_id].add(access_type)",
+    "    def grant_access(self, employee_id: str, resource_id: str, ",
+    "                     access_type: AccessType) -> None:",
+    "        \"\"\"Grant access type to employee for resource. Idempotent.\"\"\"",
+    "        # Lazy initialization using setdefault for both levels",
+    "        self.access_map.setdefault(employee_id, {}).setdefault(",
+    "            resource_id, set()).add(access_type)",
     "    ",
-    "    def revoke_access(",
-    "        self,",
-    "        employee_id: str,",
-    "        resource_id: str,",
-    "        access_type: Optional[AccessType]",
-    "    ) -> None:",
+    "    def revoke_access(self, employee_id: str, resource_id: str,",
+    "                      access_type: Optional[AccessType]) -> None:",
     "        \"\"\"",
-    "        Revoke access from an employee for a resource.",
-    "        ",
-    "        If access_type is None, revokes ALL access types for the resource.",
-    "        This operation is safe to call even if the access doesn't exist.",
-    "        ",
-    "        Args:",
-    "            employee_id: Unique identifier for the employee",
-    "            resource_id: Unique identifier for the resource",
-    "            access_type: Specific type to revoke, or None to revoke all",
-    "        ",
-    "        Time Complexity: O(1) for specific type, O(k) for all types",
-    "        Space Complexity: O(1)",
-    "        ",
-    "        Example:",
-    "            >>> manager.revoke_access('E1', 'R1', AccessType.READ)  # Specific",
-    "            >>> manager.revoke_access('E1', 'R1', None)  # All access",
+    "        Revoke access. If access_type is None, revoke ALL access.",
+    "        Silent no-op if access doesn't exist.",
     "        \"\"\"",
-    "        # Check if employee exists",
-    "        if employee_id not in self._access_map:",
-    "            return  # Nothing to revoke",
-    "        ",
-    "        employee_resources = self._access_map[employee_id]",
-    "        ",
-    "        # Check if resource exists for this employee",
-    "        if resource_id not in employee_resources:",
-    "            return  # Nothing to revoke",
+    "        if employee_id not in self.access_map:",
+    "            return",
+    "        if resource_id not in self.access_map[employee_id]:",
+    "            return",
     "        ",
     "        if access_type is None:",
     "            # Revoke ALL access for this resource",
-    "            del employee_resources[resource_id]",
+    "            del self.access_map[employee_id][resource_id]",
     "        else:",
     "            # Revoke specific access type",
-    "            access_set = employee_resources[resource_id]",
-    "            access_set.discard(access_type)  # discard doesn't raise if missing",
-    "            ",
-    "            # Cleanup: remove empty set",
-    "            if not access_set:",
-    "                del employee_resources[resource_id]",
+    "            self.access_map[employee_id][resource_id].discard(access_type)",
+    "            # Cleanup empty set",
+    "            if not self.access_map[employee_id][resource_id]:",
+    "                del self.access_map[employee_id][resource_id]",
     "        ",
-    "        # Cleanup: remove empty employee entry",
-    "        if not employee_resources:",
-    "            del self._access_map[employee_id]",
+    "        # Cleanup empty employee entry",
+    "        if not self.access_map[employee_id]:",
+    "            del self.access_map[employee_id]",
     "    ",
-    "    def retrieve_access(",
-    "        self,",
-    "        employee_id: str,",
-    "        resource_id: str",
-    "    ) -> List[AccessType]:",
-    "        \"\"\"",
-    "        Retrieve all access types an employee has for a resource.",
-    "        ",
-    "        Args:",
-    "            employee_id: Unique identifier for the employee",
-    "            resource_id: Unique identifier for the resource",
-    "        ",
-    "        Returns:",
-    "            List of access types. Empty list if no access exists.",
-    "        ",
-    "        Time Complexity: O(k) where k = number of access types",
-    "        Space Complexity: O(k) for the returned list",
-    "        ",
-    "        Example:",
-    "            >>> manager.grant_access('E1', 'R1', AccessType.READ)",
-    "            >>> manager.grant_access('E1', 'R1', AccessType.WRITE)",
-    "            >>> manager.retrieve_access('E1', 'R1')",
-    "            [<AccessType.READ: 1>, <AccessType.WRITE: 2>]",
-    "        \"\"\"",
-    "        # Navigate to access set, returning empty list if not found",
-    "        if employee_id not in self._access_map:",
+    "    def retrieve_access(self, employee_id: str, ",
+    "                        resource_id: str) -> List[AccessType]:",
+    "        \"\"\"Return list of access types. Empty list if no access.\"\"\"",
+    "        if employee_id not in self.access_map:",
     "            return []",
-    "        ",
-    "        employee_resources = self._access_map[employee_id]",
-    "        ",
-    "        if resource_id not in employee_resources:",
+    "        if resource_id not in self.access_map[employee_id]:",
     "            return []",
-    "        ",
-    "        # Return copy as list (don't expose internal set)",
-    "        return list(employee_resources[resource_id])",
+    "        return list(self.access_map[employee_id][resource_id])",
     "    ",
     "    def retrieve_resources(self, employee_id: str) -> List[str]:",
-    "        \"\"\"",
-    "        Retrieve all resources an employee has access to.",
-    "        ",
-    "        Args:",
-    "            employee_id: Unique identifier for the employee",
-    "        ",
-    "        Returns:",
-    "            List of resource IDs. Empty list if employee has no access.",
-    "        ",
-    "        Time Complexity: O(r) where r = number of resources",
-    "        Space Complexity: O(r) for the returned list",
-    "        ",
-    "        Example:",
-    "            >>> manager.grant_access('E1', 'R1', AccessType.READ)",
-    "            >>> manager.grant_access('E1', 'R2', AccessType.WRITE)",
-    "            >>> manager.retrieve_resources('E1')",
-    "            ['R1', 'R2']",
-    "        \"\"\"",
-    "        if employee_id not in self._access_map:",
+    "        \"\"\"Return all resource IDs the employee can access.\"\"\"",
+    "        if employee_id not in self.access_map:",
     "            return []",
-    "        ",
-    "        # Return copy of keys as list",
-    "        return list(self._access_map[employee_id].keys())",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        \"\"\"Return string representation for debugging.\"\"\"",
-    "        return f\"AccessManager(employees={len(self._access_map)})\"",
+    "        return list(self.access_map[employee_id].keys())",
     "",
     "",
-    "def run_demo() -> None:",
-    "    \"\"\"",
-    "    Demonstrate the AccessManager with comprehensive examples.",
-    "    \"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"     EMPLOYEE ACCESS MANAGEMENT SYSTEM - DEMO\")",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"Employee Access Management System - Demo\")",
     "    print(\"=\" * 60)",
     "    ",
     "    manager = AccessManager()",
     "    ",
-    "    # Example 1: Basic Grant and Retrieve",
-    "    print(\"\\n[Example 1: Basic Grant and Retrieve]\")",
-    "    print(\"-\" * 40)",
+    "    # Test 1: Basic grant and retrieve",
+    "    print(\"\\n[Test 1] Basic grant and retrieve\")",
+    "    manager.grant_access(\"E1\", \"R1\", AccessType.READ)",
+    "    manager.grant_access(\"E1\", \"R1\", AccessType.WRITE)",
+    "    print(f\"E1's access to R1: {manager.retrieve_access('E1', 'R1')}\")",
+    "    print(f\"E1's resources: {manager.retrieve_resources('E1')}\")",
     "    ",
-    "    manager.grant_access('E1', 'R1', AccessType.READ)",
-    "    print(\"\u2713 Granted E1 READ access to R1\")",
+    "    # Test 2: Idempotent grant",
+    "    print(\"\\n[Test 2] Idempotent grant\")",
+    "    manager.grant_access(\"E1\", \"R1\", AccessType.READ)  # Duplicate",
+    "    print(f\"After duplicate grant: {manager.retrieve_access('E1', 'R1')}\")",
     "    ",
-    "    manager.grant_access('E1', 'R1', AccessType.WRITE)",
-    "    print(\"\u2713 Granted E1 WRITE access to R1\")",
+    "    # Test 3: Revoke specific access",
+    "    print(\"\\n[Test 3] Revoke specific access\")",
+    "    manager.revoke_access(\"E1\", \"R1\", AccessType.READ)",
+    "    print(f\"After revoking READ: {manager.retrieve_access('E1', 'R1')}\")",
     "    ",
-    "    access = manager.retrieve_access('E1', 'R1')",
-    "    print(f\"\u2192 E1's access to R1: {[a.name for a in access]}\")",
+    "    # Test 4: Revoke all access (None)",
+    "    print(\"\\n[Test 4] Revoke all access with None\")",
+    "    manager.grant_access(\"E1\", \"R1\", AccessType.ADMIN)",
+    "    manager.revoke_access(\"E1\", \"R1\", None)",
+    "    print(f\"After revoking all: {manager.retrieve_access('E1', 'R1')}\")",
+    "    print(f\"E1's resources: {manager.retrieve_resources('E1')}\")",
     "    ",
-    "    resources = manager.retrieve_resources('E1')",
-    "    print(f\"\u2192 E1's resources: {resources}\")",
-    "    ",
-    "    # Example 2: Idempotent Grant",
-    "    print(\"\\n[Example 2: Idempotent Grant]\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    manager.grant_access('E1', 'R1', AccessType.READ)  # Duplicate",
-    "    print(\"\u2713 Granted E1 READ access to R1 again (idempotent)\")",
-    "    ",
-    "    access = manager.retrieve_access('E1', 'R1')",
-    "    print(f\"\u2192 E1's access to R1 (no duplicate): {[a.name for a in access]}\")",
-    "    ",
-    "    # Example 3: Revoke Specific Access",
-    "    print(\"\\n[Example 3: Revoke Specific Access]\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    manager.grant_access('E1', 'R1', AccessType.ADMIN)",
-    "    print(\"\u2713 Granted E1 ADMIN access to R1\")",
-    "    ",
-    "    access_before = manager.retrieve_access('E1', 'R1')",
-    "    print(f\"\u2192 Before revoke: {[a.name for a in access_before]}\")",
-    "    ",
-    "    manager.revoke_access('E1', 'R1', AccessType.WRITE)",
-    "    print(\"\u2713 Revoked WRITE access from E1 for R1\")",
-    "    ",
-    "    access_after = manager.retrieve_access('E1', 'R1')",
-    "    print(f\"\u2192 After revoke: {[a.name for a in access_after]}\")",
-    "    ",
-    "    # Example 4: Revoke All Access (null)",
-    "    print(\"\\n[Example 4: Revoke All Access (None)]\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    manager.grant_access('E1', 'R2', AccessType.READ)",
-    "    print(\"\u2713 Granted E1 READ access to R2\")",
-    "    ",
-    "    resources_before = manager.retrieve_resources('E1')",
-    "    print(f\"\u2192 E1's resources before: {resources_before}\")",
-    "    ",
-    "    manager.revoke_access('E1', 'R1', None)  # Revoke ALL for R1",
-    "    print(\"\u2713 Revoked ALL access from E1 for R1 (access_type=None)\")",
-    "    ",
-    "    access_r1 = manager.retrieve_access('E1', 'R1')",
-    "    print(f\"\u2192 E1's access to R1 after: {[a.name for a in access_r1]}\")",
-    "    ",
-    "    resources_after = manager.retrieve_resources('E1')",
-    "    print(f\"\u2192 E1's resources after: {resources_after}\")",
-    "    ",
-    "    # Example 5: Multiple Employees",
-    "    print(\"\\n[Example 5: Multiple Employees]\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    manager.grant_access('E2', 'R1', AccessType.ADMIN)",
-    "    manager.grant_access('E2', 'R3', AccessType.READ)",
-    "    print(\"\u2713 Granted E2 ADMIN on R1, READ on R3\")",
-    "    ",
-    "    print(f\"\u2192 E1's resources: {manager.retrieve_resources('E1')}\")",
-    "    print(f\"\u2192 E2's resources: {manager.retrieve_resources('E2')}\")",
-    "    print(f\"\u2192 E2's access to R1: {[a.name for a in manager.retrieve_access('E2', 'R1')]}\")",
-    "    ",
-    "    # Example 6: Edge Cases",
-    "    print(\"\\n[Example 6: Edge Cases]\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    # Revoke non-existent access (should not error)",
-    "    manager.revoke_access('E1', 'R99', AccessType.READ)",
-    "    print(\"\u2713 Revoke on non-existent resource: No error\")",
-    "    ",
-    "    # Retrieve for non-existent employee",
-    "    access_e99 = manager.retrieve_access('E99', 'R1')",
-    "    print(f\"\u2192 Non-existent employee access: {access_e99}\")",
-    "    ",
-    "    # Retrieve resources for non-existent employee",
-    "    resources_e99 = manager.retrieve_resources('E99')",
-    "    print(f\"\u2192 Non-existent employee resources: {resources_e99}\")",
+    "    # Test 5: Non-existent access",
+    "    print(\"\\n[Test 5] Non-existent employee/resource\")",
+    "    print(f\"Unknown employee: {manager.retrieve_access('E99', 'R1')}\")",
+    "    manager.revoke_access(\"E99\", \"R1\", AccessType.READ)  # Should not throw",
+    "    print(\"Revoke on non-existent: OK (no error)\")",
     "    ",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"                    DEMO COMPLETE\")",
-    "    print(\"=\" * 60 + \"\\n\")",
-    "",
-    "",
-    "if __name__ == '__main__':",
-    "    run_demo()"
+    "    print(\"All tests passed!\")",
+    "    print(\"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
     "/**",
-    " * Employee Access Management System",
-    " * ",
-    " * A production-quality implementation of an access control system.",
-    " * Designed for O(1) operations with proper edge case handling.",
-    " * ",
-    " * @author Interview Candidate",
-    " */",
-    "",
-    "/**",
-    " * Enumeration of possible access levels.",
+    " * Access types for the permission system.",
     " */",
     "enum AccessType {",
-    "    READ,",
-    "    WRITE,",
-    "    ADMIN",
+    "    READ, WRITE, ADMIN",
     "}",
     "",
     "/**",
-    " * Manages employee access to resources.",
-    " * ",
-    " * This class provides O(1) operations for granting and revoking access,",
-    " * with support for multiple access types per resource.",
+    " * Manages employee access to resources using nested HashMaps.",
+    " * Structure: employeeId -> resourceId -> Set of AccessTypes",
+    " * All operations are O(1) except retrieve which is O(k) or O(r).",
     " */",
     "public class AccessManager {",
+    "    // Nested map: employeeId -> {resourceId -> set of access types}",
+    "    private Map<String, Map<String, Set<AccessType>>> accessMap;",
     "    ",
-    "    // Structure: {employee_id: {resource_id: {access_types}}}",
-    "    private final Map<String, Map<String, Set<AccessType>>> accessMap;",
-    "    ",
-    "    /**",
-    "     * Initialize an empty access manager.",
-    "     */",
     "    public AccessManager() {",
     "        this.accessMap = new HashMap<>();",
     "    }",
     "    ",
     "    /**",
-    "     * Grant specific access type to an employee for a resource.",
-    "     * ",
-    "     * This operation is idempotent - granting the same access twice",
-    "     * has no additional effect.",
-    "     * ",
-    "     * @param employeeId Unique identifier for the employee",
-    "     * @param resourceId Unique identifier for the resource",
-    "     * @param accessType The type of access to grant",
-    "     * ",
-    "     * Time Complexity: O(1)",
-    "     * Space Complexity: O(1) amortized",
+    "     * Grant access type to employee for resource. Idempotent.",
     "     */",
-    "    public void grantAccess(String employeeId, String resourceId, AccessType accessType) {",
-    "        // Get or create employee's resource map",
+    "    public void grantAccess(String employeeId, String resourceId, ",
+    "                            AccessType accessType) {",
+    "        // Lazy initialization using computeIfAbsent",
     "        accessMap.computeIfAbsent(employeeId, k -> new HashMap<>())",
     "                 .computeIfAbsent(resourceId, k -> new HashSet<>())",
     "                 .add(accessType);",
     "    }",
     "    ",
     "    /**",
-    "     * Revoke access from an employee for a resource.",
-    "     * ",
-    "     * If accessType is null, revokes ALL access types for the resource.",
-    "     * This operation is safe to call even if the access doesn't exist.",
-    "     * ",
-    "     * @param employeeId Unique identifier for the employee",
-    "     * @param resourceId Unique identifier for the resource",
-    "     * @param accessType Specific type to revoke, or null to revoke all",
-    "     * ",
-    "     * Time Complexity: O(1) for specific type, O(k) for all types",
-    "     * Space Complexity: O(1)",
+    "     * Revoke access. If accessType is null, revoke ALL access.",
+    "     * Silent no-op if access doesn't exist.",
     "     */",
-    "    public void revokeAccess(String employeeId, String resourceId, AccessType accessType) {",
-    "        // Check if employee exists",
-    "        Map<String, Set<AccessType>> employeeResources = accessMap.get(employeeId);",
-    "        if (employeeResources == null) {",
-    "            return; // Nothing to revoke",
-    "        }",
+    "    public void revokeAccess(String employeeId, String resourceId,",
+    "                             AccessType accessType) {",
+    "        Map<String, Set<AccessType>> resourceMap = accessMap.get(employeeId);",
+    "        if (resourceMap == null) return;",
     "        ",
-    "        // Check if resource exists for this employee",
-    "        Set<AccessType> accessSet = employeeResources.get(resourceId);",
-    "        if (accessSet == null) {",
-    "            return; // Nothing to revoke",
-    "        }",
+    "        Set<AccessType> accessSet = resourceMap.get(resourceId);",
+    "        if (accessSet == null) return;",
     "        ",
     "        if (accessType == null) {",
     "            // Revoke ALL access for this resource",
-    "            employeeResources.remove(resourceId);",
+    "            resourceMap.remove(resourceId);",
     "        } else {",
     "            // Revoke specific access type",
     "            accessSet.remove(accessType);",
-    "            ",
-    "            // Cleanup: remove empty set",
+    "            // Cleanup empty set",
     "            if (accessSet.isEmpty()) {",
-    "                employeeResources.remove(resourceId);",
+    "                resourceMap.remove(resourceId);",
     "            }",
     "        }",
     "        ",
-    "        // Cleanup: remove empty employee entry",
-    "        if (employeeResources.isEmpty()) {",
+    "        // Cleanup empty employee entry",
+    "        if (resourceMap.isEmpty()) {",
     "            accessMap.remove(employeeId);",
     "        }",
     "    }",
     "    ",
     "    /**",
-    "     * Retrieve all access types an employee has for a resource.",
-    "     * ",
-    "     * @param employeeId Unique identifier for the employee",
-    "     * @param resourceId Unique identifier for the resource",
-    "     * @return List of access types, empty if no access exists",
-    "     * ",
-    "     * Time Complexity: O(k) where k = number of access types",
-    "     * Space Complexity: O(k) for the returned list",
+    "     * Return list of access types. Empty list if no access.",
     "     */",
-    "    public List<AccessType> retrieveAccess(String employeeId, String resourceId) {",
-    "        Map<String, Set<AccessType>> employeeResources = accessMap.get(employeeId);",
-    "        if (employeeResources == null) {",
-    "            return new ArrayList<>();",
-    "        }",
+    "    public List<AccessType> retrieveAccess(String employeeId, ",
+    "                                           String resourceId) {",
+    "        Map<String, Set<AccessType>> resourceMap = accessMap.get(employeeId);",
+    "        if (resourceMap == null) return new ArrayList<>();",
     "        ",
-    "        Set<AccessType> accessSet = employeeResources.get(resourceId);",
-    "        if (accessSet == null) {",
-    "            return new ArrayList<>();",
-    "        }",
+    "        Set<AccessType> accessSet = resourceMap.get(resourceId);",
+    "        if (accessSet == null) return new ArrayList<>();",
     "        ",
-    "        // Return copy as list",
     "        return new ArrayList<>(accessSet);",
     "    }",
     "    ",
     "    /**",
-    "     * Retrieve all resources an employee has access to.",
-    "     * ",
-    "     * @param employeeId Unique identifier for the employee",
-    "     * @return List of resource IDs, empty if employee has no access",
-    "     * ",
-    "     * Time Complexity: O(r) where r = number of resources",
-    "     * Space Complexity: O(r) for the returned list",
+    "     * Return all resource IDs the employee can access.",
     "     */",
     "    public List<String> retrieveResources(String employeeId) {",
-    "        Map<String, Set<AccessType>> employeeResources = accessMap.get(employeeId);",
-    "        if (employeeResources == null) {",
-    "            return new ArrayList<>();",
-    "        }",
-    "        ",
-    "        return new ArrayList<>(employeeResources.keySet());",
+    "        Map<String, Set<AccessType>> resourceMap = accessMap.get(employeeId);",
+    "        if (resourceMap == null) return new ArrayList<>();",
+    "        return new ArrayList<>(resourceMap.keySet());",
     "    }",
     "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return \"AccessManager(employees=\" + accessMap.size() + \")\";",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Main method demonstrating the AccessManager functionality.",
-    "     */",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"     EMPLOYEE ACCESS MANAGEMENT SYSTEM - DEMO\");",
+    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"Employee Access Management System - Demo\");",
     "        System.out.println(\"=\".repeat(60));",
     "        ",
     "        AccessManager manager = new AccessManager();",
     "        ",
-    "        // Example 1: Basic Grant and Retrieve",
-    "        System.out.println(\"\\n[Example 1: Basic Grant and Retrieve]\");",
-    "        System.out.println(\"-\".repeat(40));",
-    "        ",
+    "        // Test 1: Basic grant and retrieve",
+    "        System.out.println(\"\\n[Test 1] Basic grant and retrieve\");",
     "        manager.grantAccess(\"E1\", \"R1\", AccessType.READ);",
-    "        System.out.println(\"\u2713 Granted E1 READ access to R1\");",
-    "        ",
     "        manager.grantAccess(\"E1\", \"R1\", AccessType.WRITE);",
-    "        System.out.println(\"\u2713 Granted E1 WRITE access to R1\");",
+    "        System.out.println(\"E1's access to R1: \" + ",
+    "            manager.retrieveAccess(\"E1\", \"R1\"));",
+    "        System.out.println(\"E1's resources: \" + ",
+    "            manager.retrieveResources(\"E1\"));",
     "        ",
-    "        List<AccessType> access = manager.retrieveAccess(\"E1\", \"R1\");",
-    "        System.out.println(\"\u2192 E1's access to R1: \" + access);",
+    "        // Test 2: Revoke specific access",
+    "        System.out.println(\"\\n[Test 2] Revoke specific access\");",
+    "        manager.revokeAccess(\"E1\", \"R1\", AccessType.READ);",
+    "        System.out.println(\"After revoking READ: \" + ",
+    "            manager.retrieveAccess(\"E1\", \"R1\"));",
     "        ",
-    "        List<String> resources = manager.retrieveResources(\"E1\");",
-    "        System.out.println(\"\u2192 E1's resources: \" + resources);",
-    "        ",
-    "        // Example 2: Revoke Specific Access",
-    "        System.out.println(\"\\n[Example 2: Revoke Specific Access]\");",
-    "        System.out.println(\"-\".repeat(40));",
-    "        ",
+    "        // Test 3: Revoke all with null",
+    "        System.out.println(\"\\n[Test 3] Revoke all with null\");",
     "        manager.grantAccess(\"E1\", \"R1\", AccessType.ADMIN);",
-    "        System.out.println(\"\u2713 Granted E1 ADMIN access to R1\");",
-    "        ",
-    "        System.out.println(\"\u2192 Before revoke: \" + manager.retrieveAccess(\"E1\", \"R1\"));",
-    "        ",
-    "        manager.revokeAccess(\"E1\", \"R1\", AccessType.WRITE);",
-    "        System.out.println(\"\u2713 Revoked WRITE access from E1 for R1\");",
-    "        ",
-    "        System.out.println(\"\u2192 After revoke: \" + manager.retrieveAccess(\"E1\", \"R1\"));",
-    "        ",
-    "        // Example 3: Revoke All Access (null)",
-    "        System.out.println(\"\\n[Example 3: Revoke All Access (null)]\");",
-    "        System.out.println(\"-\".repeat(40));",
-    "        ",
-    "        manager.grantAccess(\"E1\", \"R2\", AccessType.READ);",
-    "        System.out.println(\"\u2713 Granted E1 READ access to R2\");",
-    "        ",
-    "        System.out.println(\"\u2192 E1's resources before: \" + manager.retrieveResources(\"E1\"));",
-    "        ",
     "        manager.revokeAccess(\"E1\", \"R1\", null);",
-    "        System.out.println(\"\u2713 Revoked ALL access from E1 for R1\");",
-    "        ",
-    "        System.out.println(\"\u2192 E1's access to R1 after: \" + manager.retrieveAccess(\"E1\", \"R1\"));",
-    "        System.out.println(\"\u2192 E1's resources after: \" + manager.retrieveResources(\"E1\"));",
-    "        ",
-    "        // Example 4: Edge Cases",
-    "        System.out.println(\"\\n[Example 4: Edge Cases]\");",
-    "        System.out.println(\"-\".repeat(40));",
-    "        ",
-    "        manager.revokeAccess(\"E1\", \"R99\", AccessType.READ);",
-    "        System.out.println(\"\u2713 Revoke on non-existent resource: No error\");",
-    "        ",
-    "        System.out.println(\"\u2192 Non-existent employee access: \" + manager.retrieveAccess(\"E99\", \"R1\"));",
-    "        System.out.println(\"\u2192 Non-existent employee resources: \" + manager.retrieveResources(\"E99\"));",
+    "        System.out.println(\"After revoking all: \" + ",
+    "            manager.retrieveAccess(\"E1\", \"R1\"));",
     "        ",
     "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"                    DEMO COMPLETE\");",
-    "        System.out.println(\"=\".repeat(60) + \"\\n\");",
+    "        System.out.println(\"All tests passed!\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-18",
+      "lines": "1-9",
       "section": "Imports and AccessType Enum",
-      "explanation": "We define the `AccessType` enum with three values: READ, WRITE, ADMIN. Using an enum provides **type safety** - the compiler prevents invalid access types. In Python, we use `Enum` from the standard library."
+      "explanation": "We use Python's Enum for type-safe access types. This prevents typos like 'RAED' and enables IDE autocomplete. The three values READ, WRITE, ADMIN are the only valid access types."
     },
     {
-      "lines": "20-42",
-      "section": "Class Definition and Constructor",
-      "explanation": "The `AccessManager` class uses a **nested HashMap structure**: `Map<String, Map<String, Set<AccessType>>>`. The outer map keys are employee IDs, inner map keys are resource IDs, and values are Sets of access types. This structure enables **O(1) lookup at each level**."
+      "lines": "12-21",
+      "section": "AccessManager Class and __init__",
+      "explanation": "The core data structure is a nested dictionary: `Dict[str, Dict[str, Set[AccessType]]]`. The outer dict maps employee IDs, inner dict maps resource IDs, and Set stores access types. Empty dict means no grants yet."
     },
     {
-      "lines": "44-70",
+      "lines": "23-28",
       "section": "grant_access Method",
-      "explanation": "This is the core grant logic. We use **lazy initialization** with `computeIfAbsent` (Java) or `setdefault` (Python) to create nested structures only when needed. The Set.add operation is **idempotent** - adding a duplicate has no effect. Time: O(1)."
+      "explanation": "The magic is in `setdefault()`. It creates nested structures lazily - if employee doesn't exist, creates empty dict; if resource doesn't exist, creates empty set. Then `add()` is idempotent on sets. All O(1)."
     },
     {
-      "lines": "72-115",
+      "lines": "30-50",
       "section": "revoke_access Method",
-      "explanation": "The revoke logic has two paths: **specific type** (remove one access) and **null type** (remove all). Key features:\n- Early returns if employee or resource doesn't exist\n- Uses `discard` (Python) instead of `remove` to avoid KeyError\n- **Eager cleanup**: removes empty Sets and Maps to prevent memory leaks"
+      "explanation": "Two code paths: (1) If access_type is None, delete entire resource entry. (2) Otherwise, use `discard()` (not `remove()` - discard is silent if not present). Critical: cleanup empty containers after removal to maintain invariants."
     },
     {
-      "lines": "117-145",
+      "lines": "52-58",
       "section": "retrieve_access Method",
-      "explanation": "Returns all access types for a (employee, resource) pair. Key design decisions:\n- Returns **empty list** (not null) if not found\n- Returns a **copy** (`new ArrayList` / `list()`) to protect internal state\n- Time: O(k) where k = number of access types"
+      "explanation": "Simple navigation with null checks at each level. Return empty list if employee or resource not found. Convert set to list for the API. O(k) where k is number of access types (max 3)."
     },
     {
-      "lines": "147-165",
+      "lines": "60-64",
       "section": "retrieve_resources Method",
-      "explanation": "Returns all resources an employee can access by returning the **keys of the inner map**. This is why we chose nested HashMap over flat composite keys - this operation is O(r) instead of O(total_entries)."
-    },
-    {
-      "lines": "167-end",
-      "section": "Demo/Main Function",
-      "explanation": "A comprehensive demo showing all functionality: basic grants, idempotency, specific revoke, revoke-all with null, multiple employees, and edge cases. This **proves correctness** and serves as documentation."
+      "explanation": "Return keys of the resource map. If employee not found, return empty list. O(r) where r is number of resources for this employee."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. Test `grant_access` alone with `retrieve_access`\n2. Test idempotent grant (same access twice)\n3. Test `retrieve_resources` \n4. Test specific `revoke_access`\n5. Test `revoke_access` with null\n6. Test edge cases: non-existent employee/resource",
+    "how_to_test_incrementally": "1. Test grant + retrieve first (happy path). 2. Test idempotent grant. 3. Test revoke specific. 4. Test revoke with None. 5. Test non-existent employee/resource. 6. Test cleanup after revoke all.",
     "what_to_print_or_assert": [
-      "assert len(manager.retrieve_access('E1', 'R1')) == 0  # Before any grant",
-      "manager.grant_access('E1', 'R1', AccessType.READ)",
-      "assert AccessType.READ in manager.retrieve_access('E1', 'R1')",
-      "print(f\"Internal state: {manager._access_map}\")  # Inspect structure"
+      "print(f'access_map state: {self.access_map}') after each operation",
+      "assert len(manager.retrieve_access('E1', 'R1')) == 2 after two grants",
+      "assert manager.retrieve_resources('E1') == [] after revoke all"
     ],
     "common_failure_modes": [
-      "**NullPointerException/KeyError**: Forgot to check if employee or resource exists before accessing",
-      "**State not updated**: Forgot to add access type to Set, or used wrong variable",
-      "**Memory leak**: Forgot to cleanup empty Sets/Maps after revoke",
-      "**Wrong return type**: Returned Set instead of List, or returned internal reference instead of copy"
+      "KeyError when accessing nested dicts without checking existence",
+      "Not cleaning up empty containers (retrieve_resources returns empty resource)",
+      "Using remove() instead of discard() causes KeyError",
+      "Forgetting to handle None in revoke_access"
     ],
-    "how_to_fix_fast": "1. Add print statements at each HashMap access\n2. Verify the nested structure exists before accessing\n3. Use defensive checks: `if employee_id not in self._access_map: return []`\n4. Test the simplest case first: one grant, one retrieve"
+    "how_to_fix_fast": "If KeyError: add existence checks. If wrong output: print state after each operation. If revoke fails silently but shouldn't: check the access_type None case. Draw the data structure on paper."
   },
   "complexity_analysis": {
     "time": {
       "grant_access": {
         "complexity": "O(1)",
-        "explanation": "HashMap.computeIfAbsent is O(1) amortized, Set.add is O(1)"
+        "explanation": "HashMap lookup + HashMap lookup + Set add - all O(1) average"
       },
       "revoke_access_specific": {
         "complexity": "O(1)",
-        "explanation": "Two HashMap lookups + Set.remove, all O(1)"
+        "explanation": "HashMap lookups + Set remove - all O(1)"
       },
-      "revoke_access_null": {
+      "revoke_access_all": {
         "complexity": "O(1)",
-        "explanation": "HashMap lookup + remove entire entry, O(1)"
+        "explanation": "HashMap lookups + delete entry - O(1) (we don't iterate set)"
       },
       "retrieve_access": {
         "complexity": "O(k)",
-        "explanation": "Convert Set to List requires iterating k access types"
+        "explanation": "Navigate O(1), then convert set to list O(k) where k \u2264 3"
       },
       "retrieve_resources": {
         "complexity": "O(r)",
-        "explanation": "Convert Map keys to List requires iterating r resources"
+        "explanation": "Navigate O(1), then get keys O(r) where r = resources for employee"
       },
-      "overall": "All operations meet the required complexity bounds"
+      "overall": "O(1) for all mutations, O(k) or O(r) for queries"
     },
     "space": {
-      "complexity": "O(E \u00d7 R \u00d7 K) worst case",
-      "breakdown": "- Outer HashMap: O(E) entries for E employees\n- Inner HashMaps: O(R) entries per employee for R resources\n- Sets: O(K) access types per resource (max 3: READ, WRITE, ADMIN)\n- In practice: O(total_grants) since most employees don't have access to all resources",
-      "note": "With eager cleanup, we only store active grants. No empty containers accumulate."
+      "complexity": "O(E \u00d7 R \u00d7 A) worst case, typically O(total grants)",
+      "breakdown": "- Outer HashMap: O(E) entries\n- Each employee's HashMap: O(R) entries\n- Each resource's Set: O(A) where A \u2264 3\n- In practice, sparse - most employees don't have access to all resources",
+      "note": "The nested structure uses slightly more memory than flat storage but provides much better time complexity"
     },
-    "can_we_do_better": "No - we've achieved O(1) for all required operations. Space is proportional to actual data stored, which is optimal. The nested HashMap structure is the canonical solution for this problem."
+    "can_we_do_better": "No - O(1) is optimal for mutations. For queries, O(k) and O(r) are necessary since we must return all elements. Space is already minimal."
   },
   "dry_run": {
-    "example": "grant('E1','R1',READ), grant('E1','R1',WRITE), grant('E1','R2',READ), revoke('E1','R1',READ), retrieve_access('E1','R1'), retrieve_resources('E1')",
-    "trace_table": "| # | Operation | accessMap State | Return |\n|---|-----------|-----------------|--------|\n| 1 | `__init__()` | `{}` | - |\n| 2 | `grant('E1','R1',READ)` | `{'E1': {'R1': {READ}}}` | - |\n| 3 | `grant('E1','R1',WRITE)` | `{'E1': {'R1': {READ,WRITE}}}` | - |\n| 4 | `grant('E1','R2',READ)` | `{'E1': {'R1': {READ,WRITE}, 'R2': {READ}}}` | - |\n| 5 | `revoke('E1','R1',READ)` | `{'E1': {'R1': {WRITE}, 'R2': {READ}}}` | - |\n| 6 | `retrieve_access('E1','R1')` | (unchanged) | `[WRITE]` |\n| 7 | `retrieve_resources('E1')` | (unchanged) | `['R1','R2']` |",
-    "final_answer": "retrieve_access returns [WRITE], retrieve_resources returns ['R1', 'R2']"
+    "example": "grant(E1,R1,READ), grant(E1,R1,WRITE), grant(E1,R2,READ), revoke(E1,R1,READ), revoke(E1,R2,None), retrieve_access(E1,R1), retrieve_resources(E1)",
+    "trace_table": "| Step | Operation | access_map State | Result |\n|------|-----------|------------------|--------|\n| 0 | Initialize | `{}` | - |\n| 1 | grant(E1,R1,READ) | `{E1: {R1: {READ}}}` | void |\n| 2 | grant(E1,R1,WRITE) | `{E1: {R1: {READ,WRITE}}}` | void |\n| 3 | grant(E1,R2,READ) | `{E1: {R1: {READ,WRITE}, R2: {READ}}}` | void |\n| 4 | revoke(E1,R1,READ) | `{E1: {R1: {WRITE}, R2: {READ}}}` | void |\n| 5 | revoke(E1,R2,None) | `{E1: {R1: {WRITE}}}` | void |\n| 6 | retrieve_access(E1,R1) | unchanged | [WRITE] |\n| 7 | retrieve_resources(E1) | unchanged | [R1] |",
+    "final_answer": "retrieve_access returns [WRITE], retrieve_resources returns [R1]"
   },
   "test_cases": [
     {
-      "name": "Basic - Single grant and retrieve",
+      "name": "Basic grant and retrieve",
       "category": "Happy Path",
-      "input": "grant('E1','R1',READ), retrieve_access('E1','R1')",
-      "expected": "[READ]",
-      "explanation": "Simplest case: grant one access, retrieve it"
-    },
-    {
-      "name": "Multiple access types same resource",
-      "category": "Happy Path",
-      "input": "grant('E1','R1',READ), grant('E1','R1',WRITE), grant('E1','R1',ADMIN), retrieve_access('E1','R1')",
-      "expected": "[READ, WRITE, ADMIN] (any order)",
-      "explanation": "Employee can have all three access types on same resource"
+      "input": "grant(E1,R1,READ), grant(E1,R1,WRITE), retrieve_access(E1,R1)",
+      "expected": "[READ, WRITE]",
+      "explanation": "Two grants to same employee-resource pair result in both access types"
     },
     {
       "name": "Idempotent grant",
       "category": "Edge Case",
-      "input": "grant('E1','R1',READ), grant('E1','R1',READ), retrieve_access('E1','R1')",
-      "expected": "[READ] (not [READ, READ])",
-      "explanation": "Set prevents duplicates - idempotency is automatic"
+      "input": "grant(E1,R1,READ), grant(E1,R1,READ), retrieve_access(E1,R1)",
+      "expected": "[READ]",
+      "explanation": "Duplicate grant doesn't create duplicate entry - Set handles this"
     },
     {
       "name": "Revoke specific access",
       "category": "Core Functionality",
-      "input": "grant('E1','R1',READ), grant('E1','R1',WRITE), revoke('E1','R1',READ), retrieve_access('E1','R1')",
+      "input": "grant(E1,R1,READ), grant(E1,R1,WRITE), revoke(E1,R1,READ), retrieve_access(E1,R1)",
       "expected": "[WRITE]",
-      "explanation": "Only READ is removed, WRITE remains"
+      "explanation": "Only READ is revoked, WRITE remains"
     },
     {
       "name": "Revoke all with null",
       "category": "Core Functionality",
-      "input": "grant('E1','R1',READ), grant('E1','R1',WRITE), revoke('E1','R1',None), retrieve_access('E1','R1')",
+      "input": "grant(E1,R1,READ), grant(E1,R1,WRITE), revoke(E1,R1,None), retrieve_access(E1,R1)",
       "expected": "[]",
-      "explanation": "Null removes all access types for the resource"
+      "explanation": "null revokes all access types for the resource"
     },
     {
       "name": "Revoke non-existent access",
       "category": "Edge Case",
-      "input": "revoke('E1','R1',READ)",
-      "expected": "No error, no effect",
-      "explanation": "Should handle gracefully without throwing"
+      "input": "revoke(E1,R1,READ)",
+      "expected": "No error, silent no-op",
+      "explanation": "Revoking access that doesn't exist should not throw"
     },
     {
-      "name": "Retrieve for non-existent employee",
+      "name": "Retrieve from non-existent employee",
       "category": "Edge Case",
-      "input": "retrieve_access('E99','R1')",
+      "input": "retrieve_access(E99,R1)",
       "expected": "[]",
       "explanation": "Return empty list, not null or error"
     },
     {
-      "name": "retrieve_resources after partial revoke",
-      "category": "Core Functionality",
-      "input": "grant('E1','R1',READ), grant('E1','R2',WRITE), revoke('E1','R1',None), retrieve_resources('E1')",
-      "expected": "['R2']",
-      "explanation": "R1 is removed entirely, R2 remains"
+      "name": "Multiple employees multiple resources",
+      "category": "Integration",
+      "input": "grant(E1,R1,READ), grant(E1,R2,WRITE), grant(E2,R1,ADMIN), retrieve_resources(E1)",
+      "expected": "[R1, R2]",
+      "explanation": "Each employee has independent access, E1 has two resources"
     },
     {
-      "name": "Complex multi-employee scenario",
-      "category": "Integration",
-      "input": "Multiple grants to E1,E2 for R1,R2,R3; partial revokes; verify each employee's access",
-      "expected": "Each employee sees only their own access, revokes don't affect others",
-      "explanation": "Isolation between employees is maintained"
+      "name": "Cleanup after revoke all",
+      "category": "Invariant",
+      "input": "grant(E1,R1,READ), revoke(E1,R1,None), retrieve_resources(E1)",
+      "expected": "[]",
+      "explanation": "After revoking all access to only resource, retrieve_resources returns empty"
     }
   ],
   "common_mistakes": [
     {
       "mistake": "Using List instead of Set for access types",
-      "why_wrong": "List allows duplicates, so idempotent grants would create multiple entries",
-      "correct_approach": "Use Set<AccessType> which automatically handles deduplication",
-      "code_wrong": "employee_resources[resource_id] = []  # List\nemployee_resources[resource_id].append(access_type)  # Allows duplicate!",
-      "code_correct": "employee_resources[resource_id] = set()  # Set\nemployee_resources[resource_id].add(access_type)  # Ignores duplicate"
+      "why_wrong": "List doesn't handle duplicates - granting READ twice creates [READ, READ]",
+      "correct_approach": "Use Set - add() is idempotent, no duplicates possible",
+      "code_wrong": "self.access_map[emp][res] = []\nself.access_map[emp][res].append(access_type)",
+      "code_correct": "self.access_map[emp][res] = set()\nself.access_map[emp][res].add(access_type)"
     },
     {
-      "mistake": "Not handling null in revoke_access",
-      "why_wrong": "Calling remove(None) on Set will try to remove None literal, not remove all",
-      "correct_approach": "Check if access_type is None explicitly and handle specially",
-      "code_wrong": "access_set.remove(access_type)  # Fails when access_type is None",
-      "code_correct": "if access_type is None:\n    del employee_resources[resource_id]\nelse:\n    access_set.discard(access_type)"
+      "mistake": "Not handling None in revoke_access",
+      "why_wrong": "Missing the 'revoke all' case means API contract is broken",
+      "correct_approach": "Check if access_type is None first, delete entire resource entry",
+      "code_wrong": "def revoke_access(self, emp, res, access_type):\n    self.access_map[emp][res].remove(access_type)",
+      "code_correct": "if access_type is None:\n    del self.access_map[emp][res]\nelse:\n    self.access_map[emp][res].discard(access_type)"
     },
     {
       "mistake": "Not cleaning up empty containers",
-      "why_wrong": "Memory grows unbounded after many grant/revoke cycles",
-      "correct_approach": "After removing, check if container is empty and delete it",
-      "code_wrong": "access_set.discard(access_type)\n# No cleanup - empty set stays in map",
-      "code_correct": "access_set.discard(access_type)\nif not access_set:\n    del employee_resources[resource_id]\nif not employee_resources:\n    del self._access_map[employee_id]"
+      "why_wrong": "retrieve_resources would return resources with no access types",
+      "correct_approach": "After every revoke, check if containers are empty and delete them",
+      "code_wrong": "self.access_map[emp][res].discard(access_type)\n# Done, no cleanup",
+      "code_correct": "self.access_map[emp][res].discard(access_type)\nif not self.access_map[emp][res]:\n    del self.access_map[emp][res]\nif not self.access_map[emp]:\n    del self.access_map[emp]"
     },
     {
-      "mistake": "Returning internal reference instead of copy",
-      "why_wrong": "Caller can modify internal state: manager.retrieve_access('E1','R1').clear()",
-      "correct_approach": "Return new List copy of the Set/keys",
-      "code_wrong": "return employee_resources[resource_id]  # Returns actual Set!",
-      "code_correct": "return list(employee_resources[resource_id])  # Returns copy"
+      "mistake": "Using remove() instead of discard()",
+      "why_wrong": "remove() raises KeyError if element not present",
+      "correct_approach": "Use discard() which is silent if element not present",
+      "code_wrong": "self.access_map[emp][res].remove(access_type)  # Raises if not present",
+      "code_correct": "self.access_map[emp][res].discard(access_type)  # Silent if not present"
     },
     {
-      "mistake": "Using flat HashMap with composite key",
-      "why_wrong": "retrieve_resources becomes O(n) - must scan all keys",
-      "correct_approach": "Use nested HashMap for O(r) retrieve_resources",
-      "code_wrong": "key = f'{emp_id}_{res_id}'\naccess_map[key] = set()  # Can't efficiently get all resources for emp",
-      "code_correct": "access_map[emp_id][res_id] = set()  # O(1) to get all resources"
+      "mistake": "Not initializing nested structures lazily",
+      "why_wrong": "KeyError when accessing employee or resource for first time",
+      "correct_approach": "Use setdefault() or computeIfAbsent() for lazy init",
+      "code_wrong": "self.access_map[emp][res].add(access_type)  # KeyError if emp not in map",
+      "code_correct": "self.access_map.setdefault(emp, {}).setdefault(res, set()).add(access_type)"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. Before I start coding, I'd like to clarify a few things about the requirements and edge cases...",
+    "opening": "Thank you for the problem. Before I start coding, let me make sure I understand the requirements and clarify a few things...",
     "clarifying_questions_to_ask": [
-      "Should I assume employee_id and resource_id are always valid non-null strings?",
-      "For retrieve operations, should I return a copy or is it okay to return a view of internal state?",
-      "Is thread-safety a concern, or can I assume single-threaded access?",
-      "When I revoke access that doesn't exist, should I throw an exception or silently succeed?",
-      "Is there any access hierarchy (e.g., ADMIN implies READ+WRITE), or are they independent?"
+      "Are access types hierarchical (does ADMIN imply READ/WRITE)?",
+      "Should revoke_access fail silently if the access doesn't exist?",
+      "Is thread-safety a concern for this implementation?",
+      "For retrieve methods, does the order of returned items matter?",
+      "Are employee and resource IDs guaranteed to be valid strings?"
     ],
     "what_to_mention_proactively": [
       "I'll use a nested HashMap structure for O(1) lookups at each level",
-      "I'll use a Set for access types to handle idempotency automatically",
-      "I'll handle the null case in revoke specially to remove all access",
-      "I'll clean up empty containers to prevent memory leaks",
-      "I'll return copies from retrieve methods to protect internal state"
+      "Set for access types gives us idempotency for free",
+      "I'll use lazy initialization to avoid wasting memory",
+      "Let me trace through an example after coding to verify"
     ],
     "communication_during_coding": [
-      "I'm using computeIfAbsent here for lazy initialization...",
-      "Notice I'm using discard instead of remove - discard doesn't throw if element is missing",
-      "I'm checking if the set is empty after removal for cleanup...",
-      "Returning a new ArrayList here to avoid exposing internal state"
+      "I'm using setdefault here for lazy initialization of nested structures",
+      "Using discard instead of remove because it's silent if element doesn't exist",
+      "I need to cleanup empty containers after revoke to maintain invariants",
+      "The None case in revoke deletes the entire resource entry"
     ],
     "if_stuck": [
-      "Let me step back - what data structure gives O(1) lookup? HashMap.",
-      "I need O(1) for employee AND resource - so nested HashMaps.",
-      "For idempotency - Set handles that automatically.",
-      "Let me trace through an example to verify my logic."
+      "Draw the data structure: employee -> resource -> set of access types",
+      "What lookup operations do I need? That determines the data structure",
+      "Think about invariants: when should an employee/resource entry exist?"
     ],
-    "time_management": "0-5min: Clarify requirements | 5-10min: Explain approach | 10-25min: Implement | 25-30min: Test with examples | 30-45min: Follow-up parts"
+    "time_management": "0-5min: Clarify requirements | 5-10min: Explain approach, draw structure | 10-25min: Code all 4 methods | 25-35min: Test with examples | 35-45min: Discuss complexity, follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Nested HashMap / Multi-dimensional Index",
+    "pattern_name": "Nested HashMap / Multi-level Mapping",
     "indicators": [
-      "O(1) lookup by multiple keys (employee AND resource)",
-      "One-to-many-to-many relationship",
-      "Need to query by first key alone (retrieve_resources)",
-      "Set of values at the leaf level"
+      "O(1) lookup requirement with multiple keys",
+      "Hierarchical data model (A has many B, B has many C)",
+      "Need to retrieve at different levels (all B for A, all C for A+B)"
     ],
     "similar_problems": [
-      "LC 146 - LRU Cache: HashMap + LinkedList for O(1) operations",
-      "LC 981 - Time Based Key-Value Store: HashMap<key, TreeMap<time, value>>",
-      "Design File System: Nested HashMap for directory structure",
-      "Design In-Memory Database: Multi-level indexing",
-      "Permission/ACL systems in Okta, AWS IAM, Kubernetes RBAC"
+      "Design a file system (path -> metadata)",
+      "Design Twitter (userId -> tweets, userId -> followers)",
+      "Design rate limiter (userId -> timestamp -> count)",
+      "LC 588 - Design In-Memory File System"
     ],
-    "template": "When you need O(1) lookup by multiple dimensions with the ability to query by prefix, use nested HashMap: `Map<Key1, Map<Key2, Value>>`"
+    "template": "Use nested HashMap: outer level for top entity, inner level(s) for relationships. Use appropriate collection at leaf (Set for unique items, List for ordered, TreeMap for sorted)."
   },
   "follow_up_preparation": {
-    "part_2_hint": "**Part 2: Role-Based Access Control** - Employees belong to groups, groups have access. You'll need to add: `addEmployeeToGroup()`, `grantGroupAccess()`. retrieve_access must merge individual + group access. Consider: How do you efficiently check group membership?",
-    "part_3_hint": "**Part 3: Time-Based Access Control** - Access can expire. Extend the data model to include `expirationTime`. retrieve_access must filter out expired entries. Consider: TreeMap for efficient cleanup of expired entries.",
-    "part_4_hint": "**Part 4: Access Audit Log** - Log all grant/revoke operations with timestamps. Add `getAuditLog(employeeId, startTime, endTime)`. Consider: Append-only log structure, possibly with indexing.",
-    "data_structure_evolution": "Part 1: `Map<emp, Map<res, Set<access>>>` \u2192 Part 2: Add `Map<group, Map<res, Set<access>>>` + `Map<emp, Set<group>>` \u2192 Part 3: Change Set<access> to `Map<access, expiration>` \u2192 Part 4: Add `List<AuditEntry>`"
+    "part_2_hint": "Part 2 adds groups/roles. You'll need to add a mapping from employee to groups, and groups to (resource, access) pairs. The check becomes: direct access OR inherited from group.",
+    "part_3_hint": "Part 3 adds time-based access with expiry. The Set<AccessType> becomes Set<AccessGrant> where AccessGrant has type + expiry timestamp. On retrieve, filter out expired grants.",
+    "part_4_hint": "Part 4 adds audit logging. Add a log list and append entries on grant/revoke. May need efficient queries like 'all changes by employee' or 'all changes to resource'.",
+    "data_structure_evolution": "Part 1: HashMap<emp, HashMap<res, Set<AccessType>>> \u2192 Part 2: Add HashMap<group, HashMap<res, Set<AccessType>>> and HashMap<emp, Set<group>> \u2192 Part 3: Set<AccessType> becomes TreeMap<AccessType, expiryTime> \u2192 Part 4: Add List<AuditEntry>"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. This looks like an access control system design - similar to what Rippling, Okta, or AWS IAM would need to handle. Before I dive into coding, let me make sure I understand the requirements correctly...",
-    "after_clarification": "Great, so to summarize: I need to support grant, revoke (with null for remove-all), retrieve access for a specific resource, and retrieve all resources for an employee. All grant/revoke should be O(1), with Sets handling idempotency. Sound right?",
+    "opening_verbatim": "Thank you for this problem. Before I start coding, let me make sure I understand the requirements. We're building an access control system where employees can have multiple access types (READ, WRITE, ADMIN) for multiple resources. I need to implement grant, revoke, and retrieve operations efficiently.",
+    "after_clarification": "Great, so to summarize: access types are independent (not hierarchical), revoke should be silent on non-existent access, and null in revoke means revoke all. My approach will be using nested HashMaps with Sets for O(1) operations. Does that sound right before I start coding?",
     "while_coding": [
-      "I'm starting with the data structure - a nested HashMap gives me O(1) at each level...",
-      "For grant, I'll use computeIfAbsent for safe initialization...",
-      "The key decision in revoke is handling null specially...",
-      "Notice I'm cleaning up empty containers to prevent memory leaks..."
+      "I'm using setdefault for lazy initialization...",
+      "Using discard instead of remove to be safe...",
+      "Don't forget to cleanup empty containers..."
     ],
-    "after_coding": "Let me trace through Example 2 to verify: grant READ, WRITE, ADMIN on R1, then revoke WRITE... After revoke, I should have READ and ADMIN remaining. Let me walk through my code...",
-    "when_stuck_verbatim": "Hmm, I'm thinking about how to handle the null case efficiently. Let me consider: if access_type is None, I want to remove the entire resource entry, not just clear the set...",
-    "after_mistake": "Actually, I see an issue here - I'm not checking if the employee exists before accessing. Let me add that check to handle the edge case gracefully.",
-    "before_moving_on": "This completes Part 1. Time complexity is O(1) for grant and revoke, O(k) for retrieve_access, O(r) for retrieve_resources. Space is O(total grants). Ready for Part 2 - role-based access?"
+    "after_coding": "Let me trace through Example 1: grant E1 READ on R1, grant E1 WRITE on R1. After these, access_map is {E1: {R1: {READ, WRITE}}}. retrieve_access returns [READ, WRITE]. Looks correct!",
+    "when_stuck_verbatim": "I'm thinking about the best way to handle the revoke with null case. Let me draw out what should happen to the data structure...",
+    "after_mistake": "Actually, I see I forgot to clean up empty containers. Let me add that check after the discard call.",
+    "before_moving_on": "This handles Part 1. Time complexity is O(1) for all mutations, O(k) for retrieve. Space is O(total grants). Ready for Part 2 if you'd like to continue."
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Data Structure Choice**: Did they choose nested HashMap? Did they explain why?",
-      "**Edge Case Handling**: How do they handle null, non-existent employee, empty states?",
-      "**Clean Code**: Are variable names clear? Is logic easy to follow?",
-      "**Communication**: Do they explain their thinking? Do they ask good questions?",
-      "**Testing Instinct**: Do they trace through examples? Do they consider edge cases?"
+      "Understanding of HashMap/Set operations and their time complexity",
+      "Handling edge cases (null, non-existent entries)",
+      "Code organization and naming",
+      "Ability to maintain invariants (cleanup empty containers)",
+      "Testing and verification"
     ],
     "bonus_points": [
-      "Mentioning Set for idempotency before being asked",
-      "Proactively discussing cleanup of empty containers",
-      "Mentioning thread-safety considerations",
-      "Drawing a quick data structure diagram",
-      "Considering the API design (return copy vs view)",
-      "Connecting to real-world systems (IAM, Okta, RBAC)"
+      "Drawing the data structure before coding",
+      "Mentioning the invariant about empty containers unprompted",
+      "Using setdefault/computeIfAbsent for elegant lazy init",
+      "Distinguishing remove vs discard",
+      "Considering thread-safety even if not implementing it"
     ],
     "red_flags": [
-      "Using List instead of Set without realizing the idempotency issue",
-      "Forgetting to handle null in revoke_access",
-      "Not checking for existence before accessing nested maps",
-      "Returning internal references instead of copies",
-      "Not cleaning up empty containers",
-      "Silent coding for more than 30 seconds"
+      "Not handling the null case in revoke",
+      "Using List instead of Set",
+      "KeyError from not checking existence",
+      "Not understanding why Set gives O(1)",
+      "Overcomplicating the solution"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the nested HashMap + Set pattern. They proactively mention edge cases (null handling, cleanup), explain tradeoffs (copy vs view), and write clean, production-quality code. They treat this as a real system design, not just a coding exercise."
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the nested HashMap pattern, handle edge cases naturally, write clean code with good variable names, and verify their solution with a dry run. They think about invariants and explain WHY their design choices work."
   },
   "time_milestones": {
-    "by_5_min": "Understand problem, ask clarifying questions, identify it's a HashMap + Set problem",
-    "by_10_min": "Explain nested HashMap approach, get interviewer agreement, start coding",
-    "by_20_min": "grant_access and retrieve_access implemented and tested",
-    "by_25_min": "revoke_access with null handling done",
-    "by_30_min": "All methods done, tracing through example, discussing complexity",
-    "warning_signs": "If at 10min you haven't identified the data structure, or at 20min you're still on grant_access, you're behind. Simplify and move faster."
+    "by_5_min": "Understand problem, ask clarifying questions, identify nested HashMap pattern",
+    "by_10_min": "Draw data structure, explain approach, get interviewer agreement",
+    "by_20_min": "Implement all 4 methods with proper null handling",
+    "by_25_min": "Test with examples, fix any bugs found",
+    "by_30_min": "Discuss complexity, edge cases, ready for Part 2",
+    "warning_signs": "If still clarifying at 10min or debugging at 30min, you're behind. Simplify."
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Don't panic. Say: 'I see an issue - I'm not checking if the employee exists before accessing the map. Let me add that.' Fix it cleanly and move on.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember the exact method name - is it computeIfAbsent or putIfAbsent? I'll use computeIfAbsent which returns the value.' This is fine.",
-    "when_approach_is_wrong": "Say: 'Actually, I realize using a flat HashMap makes retrieve_resources O(n). Let me switch to a nested structure for O(r).' Pivoting shows flexibility.",
-    "when_completely_stuck": "Say: 'I'm stuck on how to efficiently handle the null case in revoke. Could you give me a hint about whether I should remove the entire key or just clear the set?' Asking specific questions shows self-awareness.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on getting grant and retrieve working correctly, then describe how revoke would work.'"
+    "when_you_make_a_bug": "Stay calm. Say: 'I see the issue - I forgot to handle the case when access_type is None. Let me fix that.' Fix cleanly and continue.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember if it's discard or remove that's silent. Let me use the safe one... actually, I'll check - discard doesn't throw.' Thinking out loud is fine.",
+    "when_approach_is_wrong": "Say: 'Actually, using a flat list won't give O(1). Let me reconsider - I need nested HashMaps for multi-level lookup.'",
+    "when_completely_stuck": "Say: 'I'm stuck on how to efficiently handle retrieve_resources. Could you give me a hint about the expected approach?'",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on completing grant and retrieve, and I'll explain how revoke would work.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them strategically but demonstrate YOUR understanding.",
+    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them wisely - they're evaluating YOUR understanding, not the AI's.",
     "what_to_do": [
-      "Let AI generate boilerplate (imports, class skeleton)",
-      "Use AI for syntax you forgot (computeIfAbsent signature)",
-      "Let AI autocomplete obvious patterns",
-      "Use AI to generate test cases"
+      "Use AI for boilerplate like enum definition",
+      "Use for generating test cases after you write the logic",
+      "Use for syntax you forgot (setdefault vs get with default)",
+      "Let it autocomplete obvious patterns"
     ],
     "what_not_to_do": [
-      "Don't paste the entire problem and ask for solution",
-      "Don't accept suggestions without understanding them",
-      "Don't let AI drive design decisions - YOU decide the data structure"
+      "Don't paste the problem and ask for solution",
+      "Don't accept suggestions without understanding",
+      "Don't let AI design the data structure - that's the core insight",
+      "Don't rely on AI for edge case handling"
     ],
-    "how_to_demonstrate_understanding": "When AI suggests something, explain WHY it works: 'AI suggested using Set here, which is correct because Sets handle idempotency automatically and provide O(1) operations.'",
-    "expectation_adjustment": "With AI, you should complete MORE parts or write cleaner code. If AI slows you down, turn it off."
+    "how_to_demonstrate_understanding": "If AI suggests something, explain why it works: 'It's using setdefault here because we need lazy initialization of nested dictionaries.'",
+    "expectation_adjustment": "With AI, you should complete Part 1 + Part 2 in 45 minutes. If you're slower with AI, don't use it."
   },
   "signal_points": {
     "wow_factors": [
-      "Drawing a quick ASCII diagram of the data structure unprompted",
-      "Mentioning 'This is similar to how AWS IAM or Kubernetes RBAC works'",
-      "Proactively discussing thread-safety considerations",
-      "Clean code with meaningful names on first pass",
-      "Identifying the Set-for-idempotency pattern immediately",
-      "Mentioning memory cleanup without being asked"
+      "Drawing a quick ASCII diagram of the data structure before coding",
+      "Mentioning 'cleanup empty containers to maintain invariants' unprompted",
+      "One-liner grant_access using setdefault chaining",
+      "Distinguishing discard vs remove without prompting",
+      "Mentioning you'd add thread-safety for production"
     ],
     "subtle_signals_of_experience": [
-      "Using discard instead of remove (Python) to avoid exceptions",
-      "Returning copies from getters to protect internal state",
-      "Using computeIfAbsent for safe initialization",
-      "Considering what happens after 10,000 operations (memory)",
-      "Asking about the read/write ratio for optimization direction"
+      "Asking about whether access types are hierarchical",
+      "Checking error handling expectations before coding",
+      "Using meaningful variable names (access_map not m)",
+      "Testing edge cases without being asked",
+      "Mentioning the invariants explicitly"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Staying silent for more than 30 seconds while thinking",
-      "Getting defensive when interviewer points out edge case",
-      "Rushing to code without explaining approach",
-      "Not asking any clarifying questions"
+      "Coding silently for more than 60 seconds",
+      "Getting defensive when interviewer points out the null case",
+      "Not asking any clarifying questions",
+      "Rushing to code without explaining approach"
     ],
     "technical": [
-      "Using List instead of Set for access types",
+      "Using O(n) operations when O(1) is required",
       "Forgetting null handling in revoke",
-      "Not initializing nested structures safely",
-      "Hardcoding values like access type strings",
-      "Using flat HashMap when nested is needed"
+      "Not cleaning up empty containers",
+      "Returning null instead of empty list"
     ],
     "communication": [
-      "Using jargon without explanation",
+      "Using 'HashMap' without explaining why (O(1))",
       "Not summarizing approach before coding",
-      "Not tracing through an example after coding",
-      "Not mentioning complexity"
+      "Not testing with an example after coding",
+      "Going on tangents about production concerns before solving the problem"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "\u2705 grant_access: O(1), handles new employee/resource, idempotent",
-      "\u2705 revoke_access: O(1), handles specific type, handles null (all), handles non-existent",
-      "\u2705 retrieve_access: Returns list, returns empty if not found, returns copy",
-      "\u2705 retrieve_resources: Returns list, returns empty if not found, returns copy",
-      "\u2705 Cleanup: Empty sets and maps are removed",
-      "\u2705 Traced through at least one example",
-      "\u2705 Stated time and space complexity"
+      "Did I handle null in revoke_access?",
+      "Did I clean up empty containers?",
+      "Did I return empty list (not null) from retrieve methods?",
+      "Did I trace through at least one example?",
+      "Did I state time and space complexity?",
+      "Is my code using meaningful variable names?"
     ],
     "quick_code_review": [
-      "No magic strings - using AccessType enum",
-      "Consistent naming (snake_case Python, camelCase Java)",
-      "Proper null/None checks before accessing",
-      "Returning copies, not internal references",
-      "Comments for non-obvious logic (null handling)"
+      "No KeyError possible (all accesses guarded)",
+      "Set used for access types (not List)",
+      "setdefault or explicit checks for lazy init",
+      "discard() used instead of remove()",
+      "Cleanup after revoke operations"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "**Input validation**: Check for null/empty employee_id, resource_id",
-      "**Logging**: Log all grants and revokes for audit trail",
-      "**Thread-safety**: ConcurrentHashMap for multi-threaded access",
-      "**Metrics**: Count operations, measure latencies",
-      "**Persistence**: Store to database, not just in-memory",
-      "**Caching**: If reads >> writes, add caching layer"
+      "Thread-safety with locks or concurrent data structures",
+      "Input validation (non-empty IDs, valid enum values)",
+      "Logging for audit trail and debugging",
+      "Persistence layer (database backing)",
+      "Metrics (grant rate, revoke rate, lookup latency)"
     ],
-    "why_not_in_interview": "Keep interview code focused. Mention these verbally to show senior thinking, but don't over-engineer the solution.",
-    "how_to_mention": "Say: 'In production, I'd add logging for audit compliance, use ConcurrentHashMap for thread-safety, and persist to a database. But for this interview, I'll focus on the core logic.'"
+    "why_not_in_interview": "Keep interview code focused on the algorithm. Mention these verbally to show senior thinking: 'In production, I'd add locking here for thread-safety.'",
+    "how_to_mention": "Say: 'For this interview, I'm focusing on correctness and complexity. In production, I'd add input validation, thread-safety, and persistence, but those are orthogonal to the core algorithm.'"
   },
-  "generated_at": "2026-01-18T21:05:45.656071",
+  "generated_at": "2026-01-19T03:59:14.385222",
   "_meta": {
     "problem_id": "employee_access_management",
     "part_number": null,

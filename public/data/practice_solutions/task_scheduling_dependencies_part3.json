@@ -4,1019 +4,917 @@
   "builds_on": "Part 2",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "Part 2 focused on scheduling tasks with limited workers (a scheduling/simulation problem). Part 3 shifts focus to identifying the **critical path** - the longest sequence of dependent tasks that determines the minimum project duration. This is a graph analysis problem requiring us to track not just completion times, but also which predecessor determined each task's start time.",
+    "what_changes": "Part 3 extends the solution to identify the **critical path** - the specific sequence of tasks that determines the minimum project duration. While Parts 1-2 calculated the minimum time, Part 3 must also return which tasks form the longest dependency chain. This requires tracking predecessors during topological sort and backtracking to reconstruct the path.",
     "new_requirements": [
-      "Return the critical path as a list of task IDs in execution order",
-      "Track which predecessor task determined each task's earliest start time",
-      "Backtrack from the task with maximum completion time to reconstruct the path"
+      "Track which predecessor determined each task's earliest start time",
+      "Backtrack from the task with maximum completion time to build the critical path",
+      "Return both the duration AND the path (not just duration)"
     ],
     "new_constraints": [
-      "Must return ANY valid critical path if multiple exist with same length",
-      "Path must be returned in correct execution order (start to end)",
-      "Must still handle disconnected components and edge cases"
+      "Must return a valid path (sequence of connected tasks)",
+      "Path must start from a task with no prerequisites",
+      "Path must end at a task with no dependents",
+      "If multiple critical paths exist, return any one"
     ],
-    "key_insight": "During topological processing, for each task record which single predecessor gave it the maximum pre-requisite completion time. This creates a 'predecessor chain' that we can traverse backwards from the endpoint to reconstruct the critical path. It's essentially computing the longest path in a DAG."
+    "key_insight": "During topological processing, when we compute max(completion_time[prereq]), we also record WHICH prerequisite gave us that maximum. This creates a 'predecessor chain' we can follow backwards from the final task to reconstruct the critical path."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Return minimum total duration",
-        "how_met": "Track completion_time[task] = max(completion_time[predecessors]) + duration[task] during topological sort",
+        "requirement": "Find critical path (longest dependency chain)",
+        "how_met": "Track predecessor for each task during topo sort, then backtrack from max completion task",
         "gotchas": [
-          "Must handle tasks with no predecessors (their completion time = just their duration)"
+          "Tasks with no prereqs have None/null predecessor",
+          "Must reverse the backtracked path"
         ]
       },
       {
-        "requirement": "Return critical path task IDs in order",
-        "how_met": "Maintain critical_predecessor map, backtrack from max completion time task, reverse the result",
+        "requirement": "Return both duration and path",
+        "how_met": "Return tuple (max_completion_time, critical_path_list)",
         "gotchas": [
-          "Don't forget to reverse after backtracking",
-          "Handle single-task case where predecessor is None"
+          "Empty task list returns (0, [])",
+          "Cycle returns (-1, [])"
         ]
       },
       {
-        "requirement": "Handle multiple valid critical paths",
-        "how_met": "Return any one valid path - our algorithm naturally picks one based on processing order",
+        "requirement": "Handle independent tasks",
+        "how_met": "Independent tasks each form their own 1-task critical path; return any with max duration",
         "gotchas": [
-          "Don't try to find ALL critical paths unless asked"
+          "Multiple valid answers possible - any is acceptable"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "findCriticalPath",
-        "target": "O(V + E)",
-        "achieved": "O(V + E)",
-        "why": "Single topological sort pass with O(1) work per edge/vertex, O(V) backtracking"
+        "operation": "find_critical_path",
+        "target": "O(V+E)",
+        "achieved": "O(V+E)",
+        "why": "Topo sort is O(V+E), backtracking is O(V)"
       }
     ],
     "non_goals": [
-      "Finding ALL critical paths (only need one)",
-      "Computing slack time for non-critical tasks",
-      "Handling worker constraints (that was Part 2)"
+      "Finding ALL critical paths (just need one)",
+      "Calculating slack times for non-critical tasks"
     ]
   },
   "assumptions": [
-    "Task IDs are unique positive integers",
-    "Duration values are positive integers",
-    "Dependencies form a valid DAG (no cycles)",
-    "If multiple critical paths exist, any one is acceptable",
-    "Empty input returns (0, [])"
+    "If multiple critical paths exist with same length, returning any one is acceptable",
+    "Task IDs in dependencies exist in task_list (validated by Part 1 behavior)",
+    "No duplicate tasks in task_list",
+    "Durations are positive integers"
   ],
   "tradeoffs": [
     {
-      "decision": "Track single critical predecessor vs all predecessors with same max time",
-      "chosen": "Single critical predecessor",
-      "why": "We only need ONE critical path, not all of them",
-      "alternative": "List of all critical predecessors",
-      "when_to_switch": "If requirement changes to find all critical paths or count them"
+      "decision": "Single predecessor map vs storing all predecessors",
+      "chosen": "Single predecessor (the one that determines start time)",
+      "why": "We only need ONE critical path, not all of them. Storing one predecessor per task is O(V) space and sufficient.",
+      "alternative": "Store all predecessors with same max time",
+      "when_to_switch": "If requirement changes to 'find all critical paths' or 'count critical paths'"
     },
     {
-      "decision": "Backtrack to build path vs forward-build during processing",
-      "chosen": "Backtrack approach",
-      "why": "Simpler logic - we don't know what's on critical path until we find max completion time",
-      "alternative": "Mark critical edges during forward pass",
-      "when_to_switch": "If we need to annotate the graph with critical edges"
+      "decision": "Inline predecessor tracking vs separate pass",
+      "chosen": "Inline during topo sort",
+      "why": "O(V+E) single pass instead of O(V+E) topo sort + O(V+E) separate predecessor calculation",
+      "alternative": "Run topo sort first, then compute predecessors in second pass",
+      "when_to_switch": "If code needs to be more modular or predecessor logic is complex"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Topological sort core logic",
-      "Completion time calculation formula",
-      "Graph representation (adjacency lists)"
+      "schedule_tasks signature",
+      "schedule_tasks_with_workers signature",
+      "Graph building pattern"
     ],
     "what_to_change": [
-      "Added: critical_predecessor map to track path",
-      "Added: backtracking logic for path reconstruction",
-      "Return type now includes the path list"
+      "Add predecessor map during topo sort",
+      "Add backtracking logic after topo sort"
     ],
-    "interfaces_and_boundaries": "The findCriticalPath method is self-contained. For Part 4 (if adding slack time analysis), the completion_time and critical_predecessor maps are stored as instance variables for potential reuse.",
+    "interfaces_and_boundaries": "find_critical_path is independent of Part 2 (doesn't use workers). It's a variant of Part 1 with additional tracking.",
     "invariants": [
-      "completion_time[task] >= duration[task] always",
-      "critical_predecessor[task] is None only for source nodes",
-      "The path length equals max(completion_time)"
+      "predecessor[task] is either None (no prereqs) or a valid task ID that is a direct prerequisite",
+      "Following predecessor chain always leads to a task with predecessor=None",
+      "Critical path length equals max(completion_time)"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 2 output):          AFTER (Part 3 output):\n- Execution schedule              - Same minimum duration\n- Task assignments to workers     + Critical path identification\n- Completion time                 + Path: [1, 3, 4]\n\nPart 2:                           Part 3:\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 scheduleWithWorkers()       \u2502   \u2502 findCriticalPath()          \u2502\n\u2502 Returns: completion time    \u2502   \u2502 Returns: (time, path)       \u2502\n\u2502 Focus: WHO does WHAT WHEN   \u2502   \u2502 Focus: WHICH path is longest\u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\nSTEP 1: Build Graph               STEP 2: Topological Sort with Tracking\n\u250c\u2500\u2500\u2500\u2510                            \u250c\u2500\u2500\u2500\u2510 completion=3\n\u2502 1 \u2502\u2500\u2500\u252c\u2500\u2500\u2192 2                    \u2502 1 \u2502 predecessor=None\n\u2514\u2500\u2500\u2500\u2518  \u2502                         \u2514\u2500\u252c\u2500\u2518\n       \u2502                           \u2502\n       \u2514\u2500\u2500\u2192 3                    \u250c\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n            \u2502                    \u2502                   \u2502\n            \u2514\u2500\u2500\u2192 4             \u250c\u2500\u25bc\u2500\u2510               \u250c\u2500\u25bc\u2500\u2510\n                               \u2502 2 \u2502 c=5, p=1     \u2502 3 \u2502 c=8, p=1\n                               \u2514\u2500\u252c\u2500\u2518               \u2514\u2500\u252c\u2500\u2518 \u2190 max!\n                                 \u2502                   \u2502\n                                 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                                        \u250c\u2500\u25bc\u2500\u2510\n                                        \u2502 4 \u2502 c=11, p=3\n                                        \u2514\u2500\u2500\u2500\u2518\n\nSTEP 3: Find Max Completion       STEP 4: Backtrack\n                                  4 \u2192 predecessor[4]=3\nmax(completion) = 11 at task 4    3 \u2192 predecessor[3]=1\n                                  1 \u2192 predecessor[1]=None\n                                  \n                                  Reverse: [1, 3, 4] \u2713\n```"
+    "before_after": "```\nBEFORE (Part 1/2): Just compute completion times\n  completion_time = {1: 3, 2: 5, 3: 8, 4: 11}\n  Result: min_time = 11\n\nAFTER (Part 3): Also track predecessors\n  completion_time = {1: 3, 2: 5, 3: 8, 4: 11}\n  predecessor = {1: None, 2: 1, 3: 1, 4: 3}  \u2190 NEW!\n  \n  Backtrack from task 4 (max completion):\n    4 \u2192 predecessor[4]=3 \u2192 predecessor[3]=1 \u2192 predecessor[1]=None \u2192 STOP\n  \n  Critical Path: [1, 3, 4] (reversed)\n  Result: (11, [1, 3, 4])\n```",
+    "algorithm_flow": "```\nStep 1: Build graph (same as Part 1)\n        1(3) \u2192 2(2) \u2192 4(3)\n          \u2514\u2500\u2500\u2192 3(5) \u2500\u2500\u2518\n\nStep 2: Topo sort with predecessor tracking\n        Process 1: completion=3, pred=None\n        Process 2: completion=5, pred=1 (only prereq)\n        Process 3: completion=8, pred=1 (only prereq)\n        Process 4: completion=11, pred=3 (3 gives max: 8 > 5)\n\nStep 3: Find max completion \u2192 task 4 (11)\n\nStep 4: Backtrack: 4\u21923\u21921\u2192None\n        Path: [1, 3, 4]\n```"
   },
   "approaches": [
     {
       "name": "Naive: Enumerate All Paths",
-      "description": "Use DFS to enumerate all paths from sources to sinks, calculate each path's total duration, return the longest",
-      "time_complexity": "O(2^V) in worst case (exponential paths)",
-      "space_complexity": "O(V) for recursion stack",
-      "why_not_optimal": "Exponentially many paths possible in dense DAGs. Wasteful because we recalculate completion times repeatedly."
+      "description": "DFS to enumerate all paths from sources to sinks, compute length of each, return longest",
+      "time_complexity": "O(V! or 2^V)",
+      "space_complexity": "O(V) for recursion",
+      "why_not_optimal": "Exponential time - a DAG can have exponentially many paths. For V=20 tasks, this could mean millions of paths."
     },
     {
-      "name": "Optimal: Topological Sort with Predecessor Tracking",
-      "description": "Process tasks in topological order, computing completion time and tracking the predecessor that determined it. Backtrack from max to build path.",
-      "time_complexity": "O(V + E)",
-      "space_complexity": "O(V + E)",
-      "key_insight": "Each task's critical predecessor is determined locally (the one with max completion time). We don't need to see the whole path during forward pass - just record enough to reconstruct it later."
+      "name": "Optimal: Predecessor Tracking + Backtrack",
+      "description": "During topological sort, record which predecessor gave max completion time. After finding task with max completion, backtrack through predecessors.",
+      "time_complexity": "O(V+E)",
+      "space_complexity": "O(V) additional for predecessor map",
+      "key_insight": "We already compute max(completion_time[prereq]) - we just need to remember WHICH prereq gave that max. This is the classic 'parent pointer' technique for path reconstruction."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "The solution uses **Kahn's algorithm** for topological sorting while simultaneously tracking critical path information.\n\n**Key Data Structures:**\n1. `completion_time[task]` - When task finishes (earliest possible)\n2. `critical_predecessor[task]` - Which predecessor determined this task's start time\n\n**Algorithm:**\n1. **Build graph** with forward edges (graph) and backward edges (predecessors_map)\n2. **Initialize sources** - tasks with in_degree=0 start immediately, completion_time = duration\n3. **Process topologically** - when a task becomes ready (in_degree=0), find the predecessor with maximum completion time. That predecessor is on the critical path to this task.\n4. **Find endpoint** - the task with maximum completion_time is the end of the critical path\n5. **Backtrack** - follow critical_predecessor pointers from endpoint to source\n\n**Why This Works:**\n- In a DAG, the longest path to any node is determined by a single predecessor (the one finishing latest)\n- By recording this predecessor, we create a chain we can traverse backwards\n- Total time complexity is O(V+E) since each edge and vertex is processed once",
+    "explanation_md": "The optimal solution leverages **dynamic programming on DAG** with **predecessor tracking**:\n\n1. **During topo sort**: When computing `completion_time[task] = max(completion_time[prereq]) + duration[task]`, also record `predecessor[task] = argmax(completion_time[prereq])`\n\n2. **Find endpoint**: The task with maximum completion time is the end of the critical path\n\n3. **Backtrack**: Follow predecessor pointers from end task until reaching a task with no predecessor (None)\n\n4. **Reverse**: The backtracked path is in reverse order; reverse it to get start\u2192end order\n\n**Why this works**: The predecessor chain captures the \"longest path prefix\" for each task. The maximum completion task must be at the end of SOME longest path, and its predecessors trace back along that path.",
     "data_structures": [
       {
-        "structure": "HashMap<task_id, completion_time>",
-        "purpose": "Track earliest completion time for each task"
+        "structure": "HashMap (predecessor)",
+        "purpose": "Map each task to the prerequisite that determined its start time"
       },
       {
-        "structure": "HashMap<task_id, predecessor_id>",
-        "purpose": "Track which predecessor determined start time (for path reconstruction)"
-      },
-      {
-        "structure": "HashMap<task_id, List<successor_ids>>",
-        "purpose": "Forward adjacency list for topological sort"
-      },
-      {
-        "structure": "HashMap<task_id, List<predecessor_ids>>",
-        "purpose": "Reverse adjacency list for finding max predecessor"
+        "structure": "List (critical_path)",
+        "purpose": "Collect tasks during backtracking, then reverse"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Parse input to build duration map and task set",
-      "Step 2: Build forward graph (successors) and reverse graph (predecessors)",
-      "Step 3: Calculate in-degrees for all tasks",
-      "Step 4: Initialize queue with source nodes (in-degree = 0), set their completion_time = duration",
-      "Step 5: Process queue: for each task, update successors' in-degrees",
-      "Step 6: When a successor's in-degree becomes 0, find its predecessor with max completion time",
-      "Step 7: Set successor's completion_time = max_pred_completion + duration, record critical_predecessor",
-      "Step 8: After processing all, find task with maximum completion_time",
-      "Step 9: Backtrack through critical_predecessor chain to build path",
-      "Step 10: Reverse the path and return (max_time, path)"
+      "Step 1: Build graph and reverse_graph (same as Part 1)",
+      "Step 2: Initialize predecessor map (all tasks map to None initially)",
+      "Step 3: During topo sort, for each task find the prereq with max completion time",
+      "Step 4: Record that prereq as predecessor[task]",
+      "Step 5: After topo sort, find task with maximum completion_time",
+      "Step 6: Backtrack through predecessor pointers until None",
+      "Step 7: Reverse the collected path and return (max_time, path)"
     ]
   },
   "solution_python_lines": [
-    "from typing import List, Tuple, Dict, Optional",
-    "from collections import deque, defaultdict",
-    "",
+    "from collections import defaultdict, deque",
+    "from typing import List, Tuple",
+    "import heapq",
     "",
     "class TaskScheduler:",
-    "    \"\"\"",
-    "    Task scheduling system with dependency handling and critical path analysis.",
+    "    \"\"\"Task scheduling with dependencies, workers, and critical path.\"\"\"",
     "    ",
-    "    The critical path is the longest sequence of dependent tasks that",
-    "    determines the minimum project duration. Any delay in critical path",
-    "    tasks will delay the entire project.",
-    "    \"\"\"",
-    "    ",
-    "    def __init__(self):",
-    "        \"\"\"Initialize the task scheduler with empty state.\"\"\"",
-    "        self._completion_time: Dict[int, int] = {}",
-    "        self._critical_predecessor: Dict[int, Optional[int]] = {}",
-    "    ",
-    "    def find_critical_path(",
-    "        self,",
-    "        task_list: List[List[int]],",
-    "        dependency_list: List[List[int]]",
-    "    ) -> Tuple[int, List[int]]:",
-    "        \"\"\"",
-    "        Find the critical path - the longest sequence of dependent tasks.",
-    "        ",
-    "        Args:",
-    "            task_list: Each row is [task_id, duration]",
-    "            dependency_list: Each row is [task_a, task_b] meaning task_a",
-    "                           must complete before task_b can start",
-    "        ",
-    "        Returns:",
-    "            Tuple of (total_duration, critical_path_task_ids)",
-    "            ",
-    "        Time Complexity: O(V + E) where V = tasks, E = dependencies",
-    "        Space Complexity: O(V + E) for graph storage",
-    "        ",
-    "        Example:",
-    "            >>> scheduler = TaskScheduler()",
-    "            >>> tasks = [[1, 3], [2, 2], [3, 5], [4, 3]]",
-    "            >>> deps = [[1, 2], [1, 3], [2, 4], [3, 4]]",
-    "            >>> scheduler.find_critical_path(tasks, deps)",
-    "            (11, [1, 3, 4])",
-    "        \"\"\"",
-    "        # Handle empty input",
+    "    def schedule_tasks(self, task_list: List[List[int]], dependency_list: List[List[int]]) -> Tuple[int, List[int]]:",
+    "        \"\"\"Part 1: Unlimited workers. Returns (min_time, order) or (-1, []) if cycle.\"\"\"",
     "        if not task_list:",
     "            return (0, [])",
     "        ",
-    "        # Build task duration map",
-    "        duration: Dict[int, int] = {}",
-    "        for task_id, dur in task_list:",
-    "            duration[task_id] = dur",
-    "        ",
-    "        all_tasks = set(duration.keys())",
-    "        ",
-    "        # Build graph structures",
-    "        # graph: task -> list of tasks that depend on it (successors)",
-    "        graph: Dict[int, List[int]] = defaultdict(list)",
-    "        # predecessors_map: task -> list of tasks it depends on",
-    "        predecessors_map: Dict[int, List[int]] = defaultdict(list)",
-    "        # in_degree: number of unprocessed dependencies",
-    "        in_degree: Dict[int, int] = {task_id: 0 for task_id in all_tasks}",
+    "        duration = {task_id: dur for task_id, dur in task_list}",
+    "        graph = defaultdict(list)",
+    "        reverse_graph = defaultdict(list)",
+    "        in_degree = {task_id: 0 for task_id in duration}",
     "        ",
     "        for task_a, task_b in dependency_list:",
     "            graph[task_a].append(task_b)",
-    "            predecessors_map[task_b].append(task_a)",
+    "            reverse_graph[task_b].append(task_a)",
     "            in_degree[task_b] += 1",
     "        ",
-    "        # Initialize tracking structures",
-    "        completion_time: Dict[int, int] = {}",
-    "        critical_predecessor: Dict[int, Optional[int]] = {}",
-    "        ",
-    "        # Kahn's algorithm with critical path tracking",
-    "        queue: deque = deque()",
-    "        ",
-    "        # Start with source nodes (no dependencies)",
-    "        for task_id in all_tasks:",
-    "            if in_degree[task_id] == 0:",
-    "                queue.append(task_id)",
-    "                # Source nodes complete at their duration, no predecessor",
-    "                completion_time[task_id] = duration[task_id]",
-    "                critical_predecessor[task_id] = None",
-    "        ",
-    "        processed_count = 0",
+    "        queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "        order = []",
+    "        completion_time = {}",
     "        ",
     "        while queue:",
-    "            current = queue.popleft()",
-    "            processed_count += 1",
-    "            ",
-    "            # Process all successors",
-    "            for next_task in graph[current]:",
-    "                in_degree[next_task] -= 1",
-    "                ",
-    "                # When all predecessors are processed, we can schedule this task",
-    "                if in_degree[next_task] == 0:",
-    "                    # Find the predecessor with maximum completion time",
-    "                    # This predecessor is on the critical path to next_task",
-    "                    max_pred_completion = 0",
-    "                    max_pred: Optional[int] = None",
-    "                    ",
-    "                    for pred in predecessors_map[next_task]:",
-    "                        if completion_time[pred] > max_pred_completion:",
-    "                            max_pred_completion = completion_time[pred]",
-    "                            max_pred = pred",
-    "                    ",
-    "                    # This task starts after max predecessor, adds its duration",
-    "                    completion_time[next_task] = max_pred_completion + duration[next_task]",
-    "                    critical_predecessor[next_task] = max_pred",
-    "                    queue.append(next_task)",
+    "            task = queue.popleft()",
+    "            order.append(task)",
+    "            max_prereq_time = max((completion_time[p] for p in reverse_graph[task]), default=0)",
+    "            completion_time[task] = max_prereq_time + duration[task]",
+    "            for dependent in graph[task]:",
+    "                in_degree[dependent] -= 1",
+    "                if in_degree[dependent] == 0:",
+    "                    queue.append(dependent)",
     "        ",
-    "        # Cycle detection - if not all tasks processed, there's a cycle",
-    "        if processed_count != len(all_tasks):",
-    "            raise ValueError(\"Cycle detected in task dependencies\")",
-    "        ",
-    "        # Find the task with maximum completion time (end of critical path)",
-    "        max_time = 0",
-    "        end_task: Optional[int] = None",
-    "        for task_id, time in completion_time.items():",
-    "            if time > max_time:",
-    "                max_time = time",
-    "                end_task = task_id",
-    "        ",
-    "        # Handle edge case: might happen with single task",
-    "        if end_task is None and all_tasks:",
-    "            end_task = next(iter(all_tasks))",
-    "            max_time = duration[end_task]",
-    "        ",
-    "        # Backtrack to reconstruct the critical path",
-    "        critical_path: List[int] = []",
-    "        current_task: Optional[int] = end_task",
-    "        ",
-    "        while current_task is not None:",
-    "            critical_path.append(current_task)",
-    "            current_task = critical_predecessor.get(current_task)",
-    "        ",
-    "        # Reverse to get start-to-end order",
-    "        critical_path.reverse()",
-    "        ",
-    "        # Store for potential reuse (e.g., slack analysis in Part 4)",
-    "        self._completion_time = completion_time",
-    "        self._critical_predecessor = critical_predecessor",
-    "        ",
-    "        return (max_time, critical_path)",
+    "        if len(order) != len(duration):",
+    "            return (-1, [])",
+    "        return (max(completion_time.values()), order)",
     "    ",
-    "    def get_completion_times(self) -> Dict[int, int]:",
-    "        \"\"\"Return completion times from last analysis (for debugging/extension).\"\"\"",
-    "        return self._completion_time.copy()",
+    "    def schedule_tasks_with_workers(self, task_list: List[List[int]], dependency_list: List[List[int]], k: int) -> int:",
+    "        \"\"\"Part 2: Schedule with k limited workers. Returns min time or -1 if cycle.\"\"\"",
+    "        if not task_list:",
+    "            return 0",
+    "        ",
+    "        duration = {task_id: dur for task_id, dur in task_list}",
+    "        graph = defaultdict(list)",
+    "        reverse_graph = defaultdict(list)",
+    "        in_degree = {task_id: 0 for task_id in duration}",
+    "        ",
+    "        for task_a, task_b in dependency_list:",
+    "            graph[task_a].append(task_b)",
+    "            reverse_graph[task_b].append(task_a)",
+    "            in_degree[task_b] += 1",
+    "        ",
+    "        queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "        order = []",
+    "        completion_time = {}",
+    "        worker_heap = [0] * k",
+    "        ",
+    "        while queue:",
+    "            task = queue.popleft()",
+    "            order.append(task)",
+    "            prereq_done = max((completion_time[p] for p in reverse_graph[task]), default=0)",
+    "            worker_free = heapq.heappop(worker_heap)",
+    "            start_time = max(prereq_done, worker_free)",
+    "            completion_time[task] = start_time + duration[task]",
+    "            heapq.heappush(worker_heap, completion_time[task])",
+    "            for dependent in graph[task]:",
+    "                in_degree[dependent] -= 1",
+    "                if in_degree[dependent] == 0:",
+    "                    queue.append(dependent)",
+    "        ",
+    "        if len(order) != len(duration):",
+    "            return -1",
+    "        return max(completion_time.values())",
+    "    ",
+    "    def find_critical_path(self, task_list: List[List[int]], dependency_list: List[List[int]]) -> Tuple[int, List[int]]:",
+    "        \"\"\"",
+    "        Part 3: Find critical path - longest dependency chain.",
+    "        Track predecessor during topo sort, then backtrack from max completion task.",
+    "        Time: O(V+E), Space: O(V+E)",
+    "        \"\"\"",
+    "        if not task_list:",
+    "            return (0, [])",
+    "        ",
+    "        # Build graph (same as Part 1)",
+    "        duration = {task_id: dur for task_id, dur in task_list}",
+    "        graph = defaultdict(list)",
+    "        reverse_graph = defaultdict(list)",
+    "        in_degree = {task_id: 0 for task_id in duration}",
+    "        ",
+    "        for task_a, task_b in dependency_list:",
+    "            graph[task_a].append(task_b)",
+    "            reverse_graph[task_b].append(task_a)",
+    "            in_degree[task_b] += 1",
+    "        ",
+    "        queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "        order = []",
+    "        completion_time = {}",
+    "        predecessor = {}  # NEW: task -> prereq that determined its start time",
+    "        ",
+    "        while queue:",
+    "            task = queue.popleft()",
+    "            order.append(task)",
+    "            ",
+    "            # Find max prereq AND which task gave it",
+    "            max_prereq_time = 0",
+    "            max_prereq_task = None",
+    "            for p in reverse_graph[task]:",
+    "                if completion_time[p] > max_prereq_time:",
+    "                    max_prereq_time = completion_time[p]",
+    "                    max_prereq_task = p",
+    "            ",
+    "            predecessor[task] = max_prereq_task",
+    "            completion_time[task] = max_prereq_time + duration[task]",
+    "            ",
+    "            for dependent in graph[task]:",
+    "                in_degree[dependent] -= 1",
+    "                if in_degree[dependent] == 0:",
+    "                    queue.append(dependent)",
+    "        ",
+    "        if len(order) != len(duration):",
+    "            return (-1, [])",
+    "        ",
+    "        # Find task with max completion time",
+    "        end_task = max(completion_time, key=completion_time.get)",
+    "        ",
+    "        # Backtrack to build critical path",
+    "        critical_path = []",
+    "        current = end_task",
+    "        while current is not None:",
+    "            critical_path.append(current)",
+    "            current = predecessor[current]",
+    "        ",
+    "        critical_path.reverse()",
+    "        return (max(completion_time.values()), critical_path)",
     "",
     "",
-    "def main():",
-    "    \"\"\"Demonstrate the critical path finding functionality.\"\"\"",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"Part 3: Find Critical Path Demo\")",
+    "    print(\"=\" * 60)",
+    "    ",
     "    scheduler = TaskScheduler()",
     "    ",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"TASK SCHEDULING - CRITICAL PATH ANALYSIS\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    # Example 1: Diamond dependency graph",
-    "    print(\"\\n--- Example 1: Diamond Dependency ---\")",
-    "    print(\"\"\"",
-    "    Task Graph:",
-    "         1(3)",
-    "        /    \\\\",
-    "      2(2)   3(5)  <- Task 3 takes longer!",
-    "        \\\\    /",
-    "         4(3)",
-    "    \"\"\")",
-    "    ",
+    "    # Example 1: Diamond pattern",
     "    tasks1 = [[1, 3], [2, 2], [3, 5], [4, 3]]",
     "    deps1 = [[1, 2], [1, 3], [2, 4], [3, 4]]",
+    "    print(\"\\nDiamond Pattern:\")",
+    "    print(f\"  Tasks: {tasks1}\")",
+    "    print(f\"  Deps: {deps1}\")",
+    "    result1 = scheduler.find_critical_path(tasks1, deps1)",
+    "    print(f\"  Critical Path: {result1}\")",
+    "    print(\"  Expected: (11, [1, 3, 4])\")",
+    "    print(\"  Paths: 1->2->4 = 3+2+3=8, 1->3->4 = 3+5+3=11\")",
     "    ",
-    "    duration, path = scheduler.find_critical_path(tasks1, deps1)",
-    "    print(f\"Minimum project duration: {duration}\")",
-    "    print(f\"Critical path: {' -> '.join(map(str, path))}\")",
-    "    ",
-    "    # Verify path duration",
-    "    task_durations = {t[0]: t[1] for t in tasks1}",
-    "    path_sum = sum(task_durations[t] for t in path)",
-    "    print(f\"Path duration check: {' + '.join(str(task_durations[t]) for t in path)} = {path_sum}\")",
-    "    assert duration == 11, f\"Expected 11, got {duration}\"",
-    "    assert path == [1, 3, 4], f\"Expected [1, 3, 4], got {path}\"",
-    "    print(\"\u2713 Test passed!\")",
-    "    ",
-    "    # Example 2: Independent tasks (no dependencies)",
-    "    print(\"\\n--- Example 2: Independent Tasks ---\")",
+    "    # Example 2: Independent tasks",
     "    tasks2 = [[1, 5], [2, 5]]",
     "    deps2 = []",
+    "    print(\"\\nIndependent Tasks:\")",
+    "    result2 = scheduler.find_critical_path(tasks2, deps2)",
+    "    print(f\"  Critical Path: {result2}\")",
+    "    print(\"  Expected: (5, [1]) or (5, [2]) - either valid\")",
     "    ",
-    "    duration2, path2 = scheduler.find_critical_path(tasks2, deps2)",
-    "    print(f\"Tasks: {tasks2}\")",
-    "    print(f\"Dependencies: none\")",
-    "    print(f\"Duration: {duration2}, Critical path: {path2}\")",
-    "    print(f\"Note: Either [1] or [2] is valid since both have duration 5\")",
-    "    assert duration2 == 5",
-    "    assert len(path2) == 1 and path2[0] in [1, 2]",
-    "    print(\"\u2713 Test passed!\")",
+    "    # Example 3: Linear chain",
+    "    tasks3 = [[1, 2], [2, 3], [3, 4]]",
+    "    deps3 = [[1, 2], [2, 3]]",
+    "    print(\"\\nLinear Chain:\")",
+    "    result3 = scheduler.find_critical_path(tasks3, deps3)",
+    "    print(f\"  Critical Path: {result3}\")",
+    "    print(\"  Expected: (9, [1, 2, 3])\")",
     "    ",
-    "    # Example 3: Linear chain (all tasks on critical path)",
-    "    print(\"\\n--- Example 3: Linear Chain ---\")",
-    "    tasks3 = [[1, 2], [2, 3], [3, 4], [4, 1]]",
-    "    deps3 = [[1, 2], [2, 3], [3, 4]]",
-    "    ",
-    "    duration3, path3 = scheduler.find_critical_path(tasks3, deps3)",
-    "    print(f\"Chain: 1(2) -> 2(3) -> 3(4) -> 4(1)\")",
-    "    print(f\"Duration: {duration3}, Critical path: {path3}\")",
-    "    assert duration3 == 10",
-    "    assert path3 == [1, 2, 3, 4]",
-    "    print(\"\u2713 Test passed!\")",
-    "    ",
-    "    # Example 4: Complex graph with multiple paths",
-    "    print(\"\\n--- Example 4: Complex Graph ---\")",
-    "    print(\"\"\"",
-    "    Graph:   1(2) --> 2(3) --> 4(2)",
-    "               \\\\             /",
-    "                --> 3(4) ---",
-    "    ",
-    "    Paths: 1->2->4 = 2+3+2 = 7",
-    "           1->3->4 = 2+4+2 = 8  <- Critical!",
-    "    \"\"\")",
-    "    ",
-    "    tasks4 = [[1, 2], [2, 3], [3, 4], [4, 2]]",
-    "    deps4 = [[1, 2], [1, 3], [2, 4], [3, 4]]",
-    "    ",
-    "    duration4, path4 = scheduler.find_critical_path(tasks4, deps4)",
-    "    print(f\"Duration: {duration4}, Critical path: {path4}\")",
-    "    assert duration4 == 8",
-    "    assert path4 == [1, 3, 4]",
-    "    print(\"\u2713 Test passed!\")",
+    "    # Example 4: Cycle detection",
+    "    tasks4 = [[1, 2], [2, 3], [3, 1]]",
+    "    deps4 = [[1, 2], [2, 3], [3, 1]]",
+    "    print(\"\\nCycle Detection:\")",
+    "    result4 = scheduler.find_critical_path(tasks4, deps4)",
+    "    print(f\"  Critical Path: {result4}\")",
+    "    print(\"  Expected: (-1, [])\")",
     "    ",
     "    # Example 5: Single task",
-    "    print(\"\\n--- Example 5: Single Task ---\")",
-    "    tasks5 = [[42, 7]]",
+    "    tasks5 = [[42, 10]]",
     "    deps5 = []",
+    "    print(\"\\nSingle Task:\")",
+    "    result5 = scheduler.find_critical_path(tasks5, deps5)",
+    "    print(f\"  Critical Path: {result5}\")",
+    "    print(\"  Expected: (10, [42])\")",
     "    ",
-    "    duration5, path5 = scheduler.find_critical_path(tasks5, deps5)",
-    "    print(f\"Duration: {duration5}, Critical path: {path5}\")",
-    "    assert duration5 == 7",
-    "    assert path5 == [42]",
-    "    print(\"\u2713 Test passed!\")",
-    "    ",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"ALL TESTS PASSED!\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"\\n\" + \"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Task Scheduler with Critical Path Analysis.",
-    " * ",
-    " * Finds the critical path - the longest sequence of dependent tasks",
-    " * that determines the minimum project duration.",
-    " */",
     "public class TaskScheduler {",
     "    ",
-    "    private Map<Integer, Integer> completionTime;",
-    "    private Map<Integer, Integer> criticalPredecessor;",
+    "    /** Part 1: Unlimited workers. Returns [totalTime, order...] or [-1] if cycle. */",
+    "    public int[] scheduleTasks(int[][] taskList, int[][] dependencyList) {",
+    "        if (taskList == null || taskList.length == 0) return new int[]{0};",
+    "        ",
+    "        Map<Integer, Integer> duration = new HashMap<>();",
+    "        Map<Integer, List<Integer>> graph = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
+    "        Map<Integer, Integer> inDegree = new HashMap<>();",
+    "        ",
+    "        for (int[] task : taskList) {",
+    "            duration.put(task[0], task[1]);",
+    "            graph.put(task[0], new ArrayList<>());",
+    "            reverseGraph.put(task[0], new ArrayList<>());",
+    "            inDegree.put(task[0], 0);",
+    "        }",
+    "        ",
+    "        for (int[] dep : dependencyList) {",
+    "            graph.get(dep[0]).add(dep[1]);",
+    "            reverseGraph.get(dep[1]).add(dep[0]);",
+    "            inDegree.merge(dep[1], 1, Integer::sum);",
+    "        }",
+    "        ",
+    "        Queue<Integer> queue = new LinkedList<>();",
+    "        for (int id : duration.keySet()) if (inDegree.get(id) == 0) queue.offer(id);",
+    "        ",
+    "        List<Integer> order = new ArrayList<>();",
+    "        Map<Integer, Integer> completionTime = new HashMap<>();",
+    "        ",
+    "        while (!queue.isEmpty()) {",
+    "            int task = queue.poll();",
+    "            order.add(task);",
+    "            int maxPrereq = reverseGraph.get(task).stream()",
+    "                .mapToInt(completionTime::get).max().orElse(0);",
+    "            completionTime.put(task, maxPrereq + duration.get(task));",
+    "            for (int dep : graph.get(task)) {",
+    "                inDegree.merge(dep, -1, Integer::sum);",
+    "                if (inDegree.get(dep) == 0) queue.offer(dep);",
+    "            }",
+    "        }",
+    "        ",
+    "        if (order.size() != duration.size()) return new int[]{-1};",
+    "        int total = Collections.max(completionTime.values());",
+    "        int[] result = new int[order.size() + 1];",
+    "        result[0] = total;",
+    "        for (int i = 0; i < order.size(); i++) result[i + 1] = order.get(i);",
+    "        return result;",
+    "    }",
     "    ",
-    "    public TaskScheduler() {",
-    "        this.completionTime = new HashMap<>();",
-    "        this.criticalPredecessor = new HashMap<>();",
+    "    /** Part 2: Schedule with k limited workers. Returns min time or -1 if cycle. */",
+    "    public int scheduleTasksWithWorkers(int[][] taskList, int[][] dependencyList, int k) {",
+    "        if (taskList == null || taskList.length == 0) return 0;",
+    "        ",
+    "        Map<Integer, Integer> duration = new HashMap<>();",
+    "        Map<Integer, List<Integer>> graph = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
+    "        Map<Integer, Integer> inDegree = new HashMap<>();",
+    "        ",
+    "        for (int[] task : taskList) {",
+    "            duration.put(task[0], task[1]);",
+    "            graph.put(task[0], new ArrayList<>());",
+    "            reverseGraph.put(task[0], new ArrayList<>());",
+    "            inDegree.put(task[0], 0);",
+    "        }",
+    "        ",
+    "        for (int[] dep : dependencyList) {",
+    "            graph.get(dep[0]).add(dep[1]);",
+    "            reverseGraph.get(dep[1]).add(dep[0]);",
+    "            inDegree.merge(dep[1], 1, Integer::sum);",
+    "        }",
+    "        ",
+    "        Queue<Integer> queue = new LinkedList<>();",
+    "        for (int id : duration.keySet()) if (inDegree.get(id) == 0) queue.offer(id);",
+    "        ",
+    "        List<Integer> order = new ArrayList<>();",
+    "        Map<Integer, Integer> completionTime = new HashMap<>();",
+    "        PriorityQueue<Integer> workerHeap = new PriorityQueue<>();",
+    "        for (int i = 0; i < k; i++) workerHeap.offer(0);",
+    "        ",
+    "        while (!queue.isEmpty()) {",
+    "            int task = queue.poll();",
+    "            order.add(task);",
+    "            int prereqDone = reverseGraph.get(task).stream()",
+    "                .mapToInt(completionTime::get).max().orElse(0);",
+    "            int workerFree = workerHeap.poll();",
+    "            int startTime = Math.max(prereqDone, workerFree);",
+    "            completionTime.put(task, startTime + duration.get(task));",
+    "            workerHeap.offer(completionTime.get(task));",
+    "            for (int dep : graph.get(task)) {",
+    "                inDegree.merge(dep, -1, Integer::sum);",
+    "                if (inDegree.get(dep) == 0) queue.offer(dep);",
+    "            }",
+    "        }",
+    "        ",
+    "        if (order.size() != duration.size()) return -1;",
+    "        return Collections.max(completionTime.values());",
     "    }",
     "    ",
     "    /**",
-    "     * Find the critical path in the task dependency graph.",
-    "     * ",
-    "     * @param taskList Each row is [task_id, duration]",
-    "     * @param dependencyList Each row is [task_a, task_b] (a before b)",
-    "     * @return Object array: [Integer totalDuration, List<Integer> path]",
-    "     * ",
-    "     * Time Complexity: O(V + E)",
-    "     * Space Complexity: O(V + E)",
+    "     * Part 3: Find critical path - longest dependency chain.",
+    "     * Track predecessor during topo sort, then backtrack from max completion task.",
+    "     * Time: O(V+E), Space: O(V+E)",
+    "     * @return Object[] where [0]=totalTime (Integer), [1]=criticalPath (int[])",
     "     */",
     "    public Object[] findCriticalPath(int[][] taskList, int[][] dependencyList) {",
-    "        // Handle empty input",
     "        if (taskList == null || taskList.length == 0) {",
-    "            return new Object[]{0, new ArrayList<Integer>()};",
+    "            return new Object[]{0, new int[]{}};",
     "        }",
     "        ",
-    "        // Build duration map and task set",
+    "        // Build graph (same as Part 1)",
     "        Map<Integer, Integer> duration = new HashMap<>();",
-    "        Set<Integer> allTasks = new HashSet<>();",
-    "        for (int[] task : taskList) {",
-    "            duration.put(task[0], task[1]);",
-    "            allTasks.add(task[0]);",
-    "        }",
-    "        ",
-    "        // Build graph structures",
     "        Map<Integer, List<Integer>> graph = new HashMap<>();",
-    "        Map<Integer, List<Integer>> predecessorsMap = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
     "        Map<Integer, Integer> inDegree = new HashMap<>();",
     "        ",
-    "        // Initialize all tasks",
-    "        for (int taskId : allTasks) {",
-    "            graph.put(taskId, new ArrayList<>());",
-    "            predecessorsMap.put(taskId, new ArrayList<>());",
-    "            inDegree.put(taskId, 0);",
+    "        for (int[] task : taskList) {",
+    "            duration.put(task[0], task[1]);",
+    "            graph.put(task[0], new ArrayList<>());",
+    "            reverseGraph.put(task[0], new ArrayList<>());",
+    "            inDegree.put(task[0], 0);",
     "        }",
     "        ",
-    "        // Build edges",
     "        for (int[] dep : dependencyList) {",
-    "            int taskA = dep[0], taskB = dep[1];",
-    "            graph.get(taskA).add(taskB);",
-    "            predecessorsMap.get(taskB).add(taskA);",
-    "            inDegree.put(taskB, inDegree.get(taskB) + 1);",
+    "            graph.get(dep[0]).add(dep[1]);",
+    "            reverseGraph.get(dep[1]).add(dep[0]);",
+    "            inDegree.merge(dep[1], 1, Integer::sum);",
     "        }",
     "        ",
-    "        // Initialize tracking structures",
-    "        completionTime = new HashMap<>();",
-    "        criticalPredecessor = new HashMap<>();",
-    "        ",
-    "        // Kahn's algorithm with critical path tracking",
     "        Queue<Integer> queue = new LinkedList<>();",
-    "        ",
-    "        // Start with source nodes",
-    "        for (int taskId : allTasks) {",
-    "            if (inDegree.get(taskId) == 0) {",
-    "                queue.offer(taskId);",
-    "                completionTime.put(taskId, duration.get(taskId));",
-    "                criticalPredecessor.put(taskId, null);",
-    "            }",
+    "        for (int id : duration.keySet()) {",
+    "            if (inDegree.get(id) == 0) queue.offer(id);",
     "        }",
     "        ",
-    "        int processedCount = 0;",
+    "        List<Integer> order = new ArrayList<>();",
+    "        Map<Integer, Integer> completionTime = new HashMap<>();",
+    "        Map<Integer, Integer> predecessor = new HashMap<>();  // NEW: track critical predecessor",
     "        ",
     "        while (!queue.isEmpty()) {",
-    "            int current = queue.poll();",
-    "            processedCount++;",
+    "            int task = queue.poll();",
+    "            order.add(task);",
     "            ",
-    "            for (int nextTask : graph.get(current)) {",
-    "                inDegree.put(nextTask, inDegree.get(nextTask) - 1);",
-    "                ",
-    "                if (inDegree.get(nextTask) == 0) {",
-    "                    // Find predecessor with max completion time",
-    "                    int maxPredCompletion = 0;",
-    "                    Integer maxPred = null;",
-    "                    ",
-    "                    for (int pred : predecessorsMap.get(nextTask)) {",
-    "                        if (completionTime.get(pred) > maxPredCompletion) {",
-    "                            maxPredCompletion = completionTime.get(pred);",
-    "                            maxPred = pred;",
-    "                        }",
-    "                    }",
-    "                    ",
-    "                    completionTime.put(nextTask, ",
-    "                        maxPredCompletion + duration.get(nextTask));",
-    "                    criticalPredecessor.put(nextTask, maxPred);",
-    "                    queue.offer(nextTask);",
+    "            // Find max prereq AND which task gave it",
+    "            int maxPrereqTime = 0;",
+    "            Integer maxPrereqTask = null;",
+    "            for (int p : reverseGraph.get(task)) {",
+    "                if (completionTime.get(p) > maxPrereqTime) {",
+    "                    maxPrereqTime = completionTime.get(p);",
+    "                    maxPrereqTask = p;",
     "                }",
     "            }",
-    "        }",
-    "        ",
-    "        // Cycle detection",
-    "        if (processedCount != allTasks.size()) {",
-    "            throw new IllegalArgumentException(",
-    "                \"Cycle detected in task dependencies\");",
-    "        }",
-    "        ",
-    "        // Find end of critical path (max completion time)",
-    "        int maxTime = 0;",
-    "        Integer endTask = null;",
-    "        for (Map.Entry<Integer, Integer> entry : completionTime.entrySet()) {",
-    "            if (entry.getValue() > maxTime) {",
-    "                maxTime = entry.getValue();",
-    "                endTask = entry.getKey();",
+    "            ",
+    "            predecessor.put(task, maxPrereqTask);",
+    "            completionTime.put(task, maxPrereqTime + duration.get(task));",
+    "            ",
+    "            for (int dep : graph.get(task)) {",
+    "                inDegree.merge(dep, -1, Integer::sum);",
+    "                if (inDegree.get(dep) == 0) queue.offer(dep);",
     "            }",
     "        }",
+    "        ",
+    "        if (order.size() != duration.size()) {",
+    "            return new Object[]{-1, new int[]{}};",
+    "        }",
+    "        ",
+    "        // Find task with max completion time",
+    "        int endTask = Collections.max(completionTime.entrySet(),",
+    "            Map.Entry.comparingByValue()).getKey();",
     "        ",
     "        // Backtrack to build critical path",
     "        List<Integer> criticalPath = new ArrayList<>();",
     "        Integer current = endTask;",
     "        while (current != null) {",
     "            criticalPath.add(current);",
-    "            current = criticalPredecessor.get(current);",
+    "            current = predecessor.get(current);",
     "        }",
     "        Collections.reverse(criticalPath);",
     "        ",
-    "        return new Object[]{maxTime, criticalPath};",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Get completion times from last analysis.",
-    "     */",
-    "    public Map<Integer, Integer> getCompletionTimes() {",
-    "        return new HashMap<>(completionTime);",
+    "        int[] pathArray = criticalPath.stream().mapToInt(i -> i).toArray();",
+    "        return new Object[]{Collections.max(completionTime.values()), pathArray};",
     "    }",
     "    ",
     "    public static void main(String[] args) {",
-    "        TaskScheduler scheduler = new TaskScheduler();",
+    "        TaskScheduler s = new TaskScheduler();",
     "        ",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"TASK SCHEDULING - CRITICAL PATH ANALYSIS\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        // Diamond pattern",
+    "        int[][] t1 = {{1,3}, {2,2}, {3,5}, {4,3}};",
+    "        int[][] d1 = {{1,2}, {1,3}, {2,4}, {3,4}};",
+    "        Object[] r1 = s.findCriticalPath(t1, d1);",
+    "        System.out.println(\"Diamond: time=\" + r1[0] + \", path=\" + Arrays.toString((int[])r1[1]));",
+    "        System.out.println(\"Expected: time=11, path=[1, 3, 4]\");",
     "        ",
-    "        // Example 1: Diamond dependency",
-    "        System.out.println(\"\\n--- Example 1: Diamond Dependency ---\");",
-    "        int[][] tasks1 = {{1, 3}, {2, 2}, {3, 5}, {4, 3}};",
-    "        int[][] deps1 = {{1, 2}, {1, 3}, {2, 4}, {3, 4}};",
+    "        // Independent tasks",
+    "        int[][] t2 = {{1,5}, {2,5}};",
+    "        int[][] d2 = {};",
+    "        Object[] r2 = s.findCriticalPath(t2, d2);",
+    "        System.out.println(\"\\nIndependent: time=\" + r2[0] + \", path=\" + Arrays.toString((int[])r2[1]));",
+    "        System.out.println(\"Expected: time=5, path=[1] or [2]\");",
     "        ",
-    "        Object[] result1 = scheduler.findCriticalPath(tasks1, deps1);",
-    "        System.out.println(\"Duration: \" + result1[0]);",
-    "        System.out.println(\"Critical Path: \" + result1[1]);",
-    "        assert (Integer) result1[0] == 11;",
-    "        System.out.println(\"\u2713 Test passed!\");",
-    "        ",
-    "        // Example 2: Independent tasks",
-    "        System.out.println(\"\\n--- Example 2: Independent Tasks ---\");",
-    "        int[][] tasks2 = {{1, 5}, {2, 5}};",
-    "        int[][] deps2 = {};",
-    "        ",
-    "        Object[] result2 = scheduler.findCriticalPath(tasks2, deps2);",
-    "        System.out.println(\"Duration: \" + result2[0]);",
-    "        System.out.println(\"Critical Path: \" + result2[1]);",
-    "        assert (Integer) result2[0] == 5;",
-    "        System.out.println(\"\u2713 Test passed!\");",
-    "        ",
-    "        // Example 3: Linear chain",
-    "        System.out.println(\"\\n--- Example 3: Linear Chain ---\");",
-    "        int[][] tasks3 = {{1, 2}, {2, 3}, {3, 4}, {4, 1}};",
-    "        int[][] deps3 = {{1, 2}, {2, 3}, {3, 4}};",
-    "        ",
-    "        Object[] result3 = scheduler.findCriticalPath(tasks3, deps3);",
-    "        System.out.println(\"Duration: \" + result3[0]);",
-    "        System.out.println(\"Critical Path: \" + result3[1]);",
-    "        assert (Integer) result3[0] == 10;",
-    "        System.out.println(\"\u2713 Test passed!\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"ALL TESTS PASSED!\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        // Linear chain",
+    "        int[][] t3 = {{1,2}, {2,3}, {3,4}};",
+    "        int[][] d3 = {{1,2}, {2,3}};",
+    "        Object[] r3 = s.findCriticalPath(t3, d3);",
+    "        System.out.println(\"\\nLinear: time=\" + r3[0] + \", path=\" + Arrays.toString((int[])r3[1]));",
+    "        System.out.println(\"Expected: time=9, path=[1, 2, 3]\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
       "lines": "1-5",
-      "explanation": "Import required collections: deque for BFS queue, defaultdict for convenient graph building"
+      "explanation": "Imports and class definition - extends existing TaskScheduler"
     },
     {
-      "lines": "8-15",
-      "explanation": "Class docstring explaining the critical path concept and its importance"
+      "lines": "7-36",
+      "explanation": "Part 1: schedule_tasks - unchanged from previous solution"
     },
     {
-      "lines": "17-20",
-      "explanation": "Constructor initializes instance variables to store completion times and predecessors for potential reuse"
+      "lines": "38-67",
+      "explanation": "Part 2: schedule_tasks_with_workers - unchanged from previous solution"
     },
     {
-      "lines": "22-45",
-      "explanation": "Method signature with comprehensive docstring including example, complexity, and parameter descriptions"
+      "lines": "69-77",
+      "explanation": "Part 3 docstring and edge case handling for empty input"
     },
     {
-      "lines": "47-48",
-      "explanation": "Edge case handling: empty input returns (0, [])"
+      "lines": "79-94",
+      "explanation": "Graph building - identical to Part 1, creates forward/reverse edges and in-degrees"
     },
     {
-      "lines": "50-55",
-      "explanation": "Build duration map from task_list for O(1) duration lookups"
+      "lines": "96-99",
+      "explanation": "Initialize topo sort structures PLUS new predecessor map"
     },
     {
-      "lines": "57-68",
-      "explanation": "Build graph structures: forward edges (graph), backward edges (predecessors_map), and in-degrees"
+      "lines": "101-115",
+      "explanation": "Core change: During topo sort, explicitly loop through prereqs to find BOTH the max time AND which task gave it"
     },
     {
-      "lines": "70-72",
-      "explanation": "Initialize completion_time and critical_predecessor tracking dictionaries"
+      "lines": "117-125",
+      "explanation": "Standard topo sort continuation - process dependents"
     },
     {
-      "lines": "74-82",
-      "explanation": "Initialize BFS queue with source nodes (in_degree=0). These have no predecessors so critical_predecessor=None"
+      "lines": "127-128",
+      "explanation": "Cycle detection - if not all tasks processed, return failure"
     },
     {
-      "lines": "86-107",
-      "explanation": "Main Kahn's algorithm loop: process each node, update successors' in-degrees, and when a successor is ready, find its critical predecessor"
+      "lines": "130-131",
+      "explanation": "Find endpoint - task with maximum completion time"
     },
     {
-      "lines": "97-106",
-      "explanation": "KEY LOGIC: When a task becomes ready, scan all its predecessors to find the one with maximum completion time. This predecessor is on the critical path."
+      "lines": "133-139",
+      "explanation": "Backtrack through predecessor chain until None"
     },
     {
-      "lines": "109-110",
-      "explanation": "Cycle detection: if we didn't process all tasks, there must be a cycle"
-    },
-    {
-      "lines": "112-119",
-      "explanation": "Find the endpoint of the critical path: the task with maximum completion time"
-    },
-    {
-      "lines": "121-130",
-      "explanation": "Backtrack from endpoint through critical_predecessor chain to build the path, then reverse it"
-    },
-    {
-      "lines": "132-135",
-      "explanation": "Store results for potential reuse (extensibility for Part 4)"
+      "lines": "141-142",
+      "explanation": "Reverse path (was built backwards) and return result tuple"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "findCriticalPath": {
+        "find_critical_path": {
           "complexity": "O(V + E)",
-          "explanation": "Topological sort visits each vertex once O(V) and each edge once O(E). Finding max predecessor for each task is amortized O(E) total. Backtracking is O(V)."
+          "explanation": "Topo sort is O(V+E). Finding max prereq per task visits all edges once (total O(E)). Backtracking is O(V) worst case. Overall: O(V+E)."
         }
       },
-      "overall_change": "This part is O(V+E) same as Part 1 basic topological sort, but with additional tracking"
+      "overall_change": "No change to overall complexity compared to Part 1. Part 3 is O(V+E), same as Part 1."
     },
     "space": {
       "additional_space": "O(V)",
-      "explanation": "New structures: completion_time map O(V), critical_predecessor map O(V), critical_path list O(V). Graph storage remains O(V+E)."
+      "explanation": "predecessor map stores one entry per task. critical_path list is at most O(V). Total additional: O(V)."
     }
   },
   "dry_run": {
-    "example_input": "tasks=[[1,3],[2,2],[3,5],[4,3]], deps=[[1,2],[1,3],[2,4],[3,4]]",
+    "example_input": "tasks=[[1,3], [2,2], [3,5], [4,3]], deps=[[1,2], [1,3], [2,4], [3,4]]",
     "steps": [
       {
         "step": 1,
-        "action": "Build duration map",
-        "state": "duration={1:3, 2:2, 3:5, 4:3}",
-        "explanation": "Map each task ID to its duration"
+        "action": "Build graph",
+        "state": "graph={1:[2,3], 2:[4], 3:[4], 4:[]}, reverse_graph={1:[], 2:[1], 3:[1], 4:[2,3]}, in_degree={1:0, 2:1, 3:1, 4:2}",
+        "explanation": "Standard graph construction"
       },
       {
         "step": 2,
-        "action": "Build graph",
-        "state": "graph={1:[2,3], 2:[4], 3:[4], 4:[]}",
-        "explanation": "Forward adjacency list"
+        "action": "Init queue with in_degree=0",
+        "state": "queue=[1], completion_time={}, predecessor={}",
+        "explanation": "Task 1 has no prereqs"
       },
       {
         "step": 3,
-        "action": "Build predecessors",
-        "state": "pred={1:[], 2:[1], 3:[1], 4:[2,3]}",
-        "explanation": "Reverse adjacency for finding max"
+        "action": "Process task 1",
+        "state": "completion_time={1:3}, predecessor={1:None}",
+        "explanation": "No prereqs, so max_prereq_time=0, predecessor=None"
       },
       {
         "step": 4,
-        "action": "Compute in-degrees",
-        "state": "in_degree={1:0, 2:1, 3:1, 4:2}",
-        "explanation": "Count incoming edges"
+        "action": "Queue update",
+        "state": "queue=[2,3], in_degree={2:0, 3:0, 4:2}",
+        "explanation": "Decrement in_degree for tasks 2,3; both become 0"
       },
       {
         "step": 5,
-        "action": "Initialize queue with sources",
-        "state": "queue=[1], completion={1:3}, crit_pred={1:None}",
-        "explanation": "Task 1 has no deps"
+        "action": "Process task 2",
+        "state": "completion_time={1:3, 2:5}, predecessor={1:None, 2:1}",
+        "explanation": "Prereq 1 has completion=3, so predecessor=1, completion=3+2=5"
       },
       {
         "step": 6,
-        "action": "Process task 1",
-        "state": "in_degree={2:0, 3:0, 4:2}, queue=[2,3]",
-        "explanation": "Decrement successors' in-degrees, add ready tasks"
+        "action": "Process task 3",
+        "state": "completion_time={1:3, 2:5, 3:8}, predecessor={..., 3:1}",
+        "explanation": "Prereq 1 has completion=3, so predecessor=1, completion=3+5=8"
       },
       {
         "step": 7,
-        "action": "Process task 2",
-        "state": "max_pred=1 (time 3), completion[2]=3+2=5, crit_pred[2]=1",
-        "explanation": "Only predecessor is 1"
+        "action": "Process task 4",
+        "state": "completion_time={1:3, 2:5, 3:8, 4:11}, predecessor={..., 4:3}",
+        "explanation": "Prereqs: 2(5), 3(8). Max=8 from task 3, so predecessor=3, completion=8+3=11"
       },
       {
         "step": 8,
-        "action": "Process task 3",
-        "state": "max_pred=1 (time 3), completion[3]=3+5=8, crit_pred[3]=1",
-        "explanation": "Only predecessor is 1"
+        "action": "Find max completion",
+        "state": "end_task=4 (completion=11)",
+        "explanation": "Task 4 has highest completion time"
       },
       {
         "step": 9,
-        "action": "Task 4 ready",
-        "state": "in_degree[4]=0, queue=[4]",
-        "explanation": "Both predecessors processed"
+        "action": "Backtrack",
+        "state": "4\u2192predecessor[4]=3\u2192predecessor[3]=1\u2192predecessor[1]=None",
+        "explanation": "Follow predecessor chain until None"
       },
       {
         "step": 10,
-        "action": "Process task 4",
-        "state": "pred[4]=[2,3], times=[5,8], max=3(time 8)",
-        "explanation": "Compare completion times of all predecessors"
-      },
-      {
-        "step": 11,
-        "action": "Set task 4 times",
-        "state": "completion[4]=8+3=11, crit_pred[4]=3",
-        "explanation": "Task 3 determines start time"
-      },
-      {
-        "step": 12,
-        "action": "Find max completion",
-        "state": "max_time=11, end_task=4",
-        "explanation": "Scan all completion times"
-      },
-      {
-        "step": 13,
-        "action": "Backtrack",
-        "state": "path=[4,3,1]",
-        "explanation": "4->pred[4]=3->pred[3]=1->pred[1]=None"
-      },
-      {
-        "step": 14,
-        "action": "Reverse path",
-        "state": "path=[1,3,4]",
-        "explanation": "Return in execution order"
+        "action": "Build and reverse path",
+        "state": "path=[4,3,1] \u2192 reversed \u2192 [1,3,4]",
+        "explanation": "Collected backwards, so reverse for correct order"
       }
     ],
     "final_output": "(11, [1, 3, 4])"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single task: [[1, 5]], [] should return (5, [1])",
-      "Two independent: [[1, 3], [2, 5]], [] should return (5, [2]) or similar",
-      "Simple chain: [[1, 1], [2, 1]], [[1, 2]] should return (2, [1, 2])"
+      "Single task [[1, 5]] with no deps \u2192 should return (5, [1])",
+      "Two independent tasks [[1, 5], [2, 3]] \u2192 should return (5, [1]) since 1 has longer duration"
     ],
     "likely_bugs": [
-      "Forgetting to reverse the backtracked path",
-      "Not handling source nodes (no predecessors) correctly",
-      "Off-by-one in completion time (forgetting to add own duration)",
-      "Using wrong direction for predecessor tracking (should be reverse edges)"
+      "Forgetting to initialize predecessor[task] = None for tasks with no prereqs",
+      "Not reversing the backtracked path",
+      "Using >= instead of > when finding max prereq (could affect which path is returned)",
+      "Off-by-one in completion time calculation"
     ],
     "recommended_logs_or_asserts": [
-      "assert all(completion_time[t] >= duration[t] for t in all_tasks)",
-      "log: f'Processing {task}: completion={completion_time[task]}, pred={critical_predecessor[task]}'",
-      "assert len(path) > 0 when task_list is non-empty",
-      "log: f'Path sum: {sum(duration[t] for t in path)} should equal {max_time}'"
+      "assert len(predecessor) == len(duration) after topo sort",
+      "log predecessor map after topo sort to verify chain",
+      "log backtrack steps: 'current={}, predecessor={}'",
+      "assert critical_path[0] has predecessor[critical_path[0]] == None"
     ],
-    "how_to_localize": "1. Print completion times after topological sort. 2. Verify max task is correct. 3. Print each step of backtracking. 4. Check if path sum equals reported duration."
+    "how_to_localize": "If path is wrong: 1) Check predecessor map - is each predecessor correct? 2) Check backtracking - does it follow chain correctly? 3) Check reversal."
   },
   "edge_cases": [
     {
-      "case": "Empty input",
+      "case": "Empty task list",
       "handling": "Return (0, [])",
-      "gotcha": "Don't throw exception on empty input"
+      "gotcha": "Don't try to find max of empty completion_time"
     },
     {
       "case": "Single task",
       "handling": "Return (duration, [task_id])",
-      "gotcha": "Ensure predecessor is None, not causing KeyError"
+      "gotcha": "Predecessor is None, path has one element"
     },
     {
-      "case": "No dependencies (all independent)",
-      "handling": "Any task with max duration is valid critical path",
-      "gotcha": "Path should be single task, not all tasks"
-    },
-    {
-      "case": "Linear chain",
-      "handling": "All tasks are on critical path",
-      "gotcha": "Verify path order matches dependency order"
-    },
-    {
-      "case": "Multiple paths same length",
-      "handling": "Return any one valid path",
-      "gotcha": "Don't try to return all - just one is fine"
+      "case": "All independent tasks",
+      "handling": "Return (max_duration, [task_with_max])",
+      "gotcha": "Any single task with max duration is valid"
     },
     {
       "case": "Cycle in dependencies",
-      "handling": "Raise ValueError",
-      "gotcha": "Detect via processed_count != len(all_tasks)"
+      "handling": "Return (-1, [])",
+      "gotcha": "Same detection as Part 1 - order length != task count"
+    },
+    {
+      "case": "Multiple critical paths of same length",
+      "handling": "Return any one",
+      "gotcha": "Algorithm naturally picks one based on processing order"
     }
   ],
   "test_cases": [
     {
-      "name": "Diamond dependency (main example)",
-      "input": "tasks=[[1,3],[2,2],[3,5],[4,3]], deps=[[1,2],[1,3],[2,4],[3,4]]",
+      "name": "Diamond pattern",
+      "input": "tasks=[[1,3], [2,2], [3,5], [4,3]], deps=[[1,2], [1,3], [2,4], [3,4]]",
       "expected": "(11, [1, 3, 4])",
-      "explanation": "Path through task 3 (longer) is critical"
+      "explanation": "Path 1\u21923\u21924 = 3+5+3 = 11 is longest"
     },
     {
       "name": "Independent tasks",
-      "input": "tasks=[[1,5],[2,5]], deps=[]",
+      "input": "tasks=[[1,5], [2,5]], deps=[]",
       "expected": "(5, [1]) or (5, [2])",
-      "explanation": "Either single task is valid since both are independent with same duration"
+      "explanation": "Either single task is a valid critical path"
     },
     {
       "name": "Linear chain",
-      "input": "tasks=[[1,2],[2,3],[3,4],[4,1]], deps=[[1,2],[2,3],[3,4]]",
-      "expected": "(10, [1, 2, 3, 4])",
-      "explanation": "All tasks are on the critical path"
+      "input": "tasks=[[1,2], [2,3], [3,4]], deps=[[1,2], [2,3]]",
+      "expected": "(9, [1, 2, 3])",
+      "explanation": "Only one path exists, it's critical"
     },
     {
-      "name": "Single task",
-      "input": "tasks=[[42,7]], deps=[]",
-      "expected": "(7, [42])",
-      "explanation": "Minimal valid input"
+      "name": "Cycle detection",
+      "input": "tasks=[[1,2], [2,3], [3,1]], deps=[[1,2], [2,3], [3,1]]",
+      "expected": "(-1, [])",
+      "explanation": "Cycle means no valid schedule"
     },
     {
-      "name": "Wide then narrow",
-      "input": "tasks=[[1,1],[2,5],[3,2],[4,1]], deps=[[1,2],[1,3],[2,4],[3,4]]",
-      "expected": "(7, [1, 2, 4])",
-      "explanation": "Path 1->2->4 = 1+5+1 = 7 > 1->3->4 = 1+2+1 = 4"
+      "name": "Wide diamond (multiple mid-level tasks)",
+      "input": "tasks=[[1,1], [2,5], [3,2], [4,3], [5,1]], deps=[[1,2], [1,3], [1,4], [2,5], [3,5], [4,5]]",
+      "expected": "(7, [1, 2, 5])",
+      "explanation": "Path 1\u21922\u21925 = 1+5+1 = 7 is longest"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Forgetting to reverse the path after backtracking",
-      "why_wrong": "Backtracking produces path in end-to-start order",
-      "correct_approach": "Always reverse() after building path by backtracking",
-      "code_example_wrong": "# Returns [4, 3, 1] instead of [1, 3, 4]",
-      "code_example_correct": "critical_path.reverse()  # Now [1, 3, 4]"
+      "mistake": "Using max() with default but not tracking which element gave max",
+      "why_wrong": "max(completion_time[p] for p in prereqs) gives the value but not which p gave it",
+      "correct_approach": "Explicit loop to track both max value and corresponding task",
+      "code_example_wrong": "max_prereq = max((completion_time[p] for p in reverse_graph[task]), default=0)  # Lost which p!",
+      "code_example_correct": "max_prereq_time, max_prereq_task = 0, None\\nfor p in reverse_graph[task]:\\n    if completion_time[p] > max_prereq_time:\\n        max_prereq_time, max_prereq_task = completion_time[p], p"
     },
     {
-      "mistake": "Computing max predecessor completion before all predecessors processed",
-      "why_wrong": "Some predecessor completion times might not be computed yet",
-      "correct_approach": "Only compute when in_degree becomes 0 (all predecessors done)",
-      "code_example_wrong": "# Computing max inside the decrement loop",
-      "code_example_correct": "if in_degree[next_task] == 0:  # All predecessors done"
+      "mistake": "Forgetting to reverse the backtracked path",
+      "why_wrong": "Backtracking builds path from end to start",
+      "correct_approach": "Always reverse after collecting via predecessor chain",
+      "code_example_wrong": "return (max_time, critical_path)  # Path is reversed!",
+      "code_example_correct": "critical_path.reverse()\\nreturn (max_time, critical_path)"
     },
     {
-      "mistake": "Using forward edges to find predecessors",
-      "why_wrong": "Forward edges give successors, not predecessors",
-      "correct_approach": "Maintain a separate predecessors_map (reverse adjacency)",
-      "code_example_wrong": "for pred in graph[next_task]:  # Wrong! These are successors",
-      "code_example_correct": "for pred in predecessors_map[next_task]:  # Correct"
-    },
-    {
-      "mistake": "Not handling disconnected components",
-      "why_wrong": "Some tasks may not be reachable from the initial sources",
-      "correct_approach": "Initialize queue with ALL source nodes, not just one",
-      "code_example_wrong": "queue.append(next(iter(sources)))  # Only one source",
-      "code_example_correct": "for task in all_tasks: if in_degree[task] == 0: queue.append(task)"
+      "mistake": "Not handling tasks with no prerequisites",
+      "why_wrong": "These tasks have predecessor=None and are potential path starts",
+      "correct_approach": "Initialize predecessor to None, backtrack loop terminates on None",
+      "code_example_wrong": "predecessor[task] = max_prereq_task  # Undefined if no prereqs!",
+      "code_example_correct": "max_prereq_task = None\\nfor p in reverse_graph[task]: ...\\npredecessor[task] = max_prereq_task  # Correctly None if no prereqs"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by explaining the concept: 'The critical path is like finding the longest path in a DAG - it determines the minimum project duration.' Then explain the key insight about predecessor tracking.",
+    "how_to_present": "Start by recognizing this is 'longest path in DAG' - a classic DP problem. Explain that you'll leverage the existing topo sort but add predecessor tracking. Emphasize O(V+E) stays same.",
     "what_to_mention": [
-      "This is essentially longest path in DAG (which is tractable, unlike general graphs)",
-      "Classic application in project management (CPM - Critical Path Method)",
-      "O(V+E) is optimal since we must examine all tasks and dependencies",
-      "The predecessor tracking is the key extension from basic topological sort"
+      "This is essentially 'path reconstruction' pattern - common in DP",
+      "Critical path analysis is fundamental in project management (PERT/CPM)",
+      "Single predecessor per task is sufficient since we need ONE critical path"
     ],
-    "time_allocation": "2 min understand, 3 min design, 5 min code, 2 min test = ~12 min total",
+    "time_allocation": "2 min to explain approach, 5 min to implement, 3 min to test/verify",
     "if_stuck": [
-      "Think about what information you need to reconstruct the path",
-      "When would you know which predecessor is on the critical path?",
-      "Consider: for each task, only ONE predecessor matters for critical path"
+      "Think: 'How do I reconstruct paths in DP?' \u2192 Parent pointers!",
+      "Ask: 'I want to record which prereq determined start time - is that the right direction?'",
+      "Draw the example graph and manually trace which task 'caused' each completion time"
     ]
   },
-  "connection_to_next_part": "Part 4 might ask for **slack time analysis** - how much each non-critical task can be delayed. This builds on the completion_time data we're already computing. Could also extend to finding ALL critical paths, or to handle dynamic updates.",
+  "connection_to_next_part": "Part 4 might ask for: finding ALL critical paths, calculating slack/float for non-critical tasks, or handling task priorities. The predecessor tracking infrastructure sets up for slack calculation (slack = latest_start - earliest_start).",
   "communication_script": {
-    "transition_from_previous": "Great, so Part 2 handled limited workers. Part 3 shifts focus to identifying the critical path - the longest chain of dependencies that determines minimum duration. This is actually a different type of analysis.",
-    "explaining_changes": "The key change is I need to track, for each task, which predecessor determined its start time. Then I can backtrack from the end to reconstruct the path.",
+    "transition_from_previous": "Great, Part 2 handles limited workers. For Part 3, I need to find the critical path - which specific sequence of tasks determines the minimum duration. The key insight is to track predecessors during topo sort.",
+    "explaining_changes": "The change is minimal: when I find max(completion_time[prereq]), I also record WHICH prereq gave that max. Then I backtrack from the end task to reconstruct the path.",
     "while_extending_code": [
-      "I'm adding a critical_predecessor map to track the predecessor that gave max completion time...",
-      "For source nodes, predecessor is None...",
-      "When finding max, I also record which predecessor gave that max...",
-      "Finally, backtrack from max completion task to build path..."
+      "Adding a predecessor map to track which prereq determined each task's start",
+      "Changing from one-liner max() to explicit loop to capture both value and source",
+      "Adding backtracking logic after topo sort completes"
     ],
-    "after_completing": "This finds the critical path in O(V+E) time. The key insight was that each task's critical predecessor is determined locally. Ready for any extensions?"
+    "after_completing": "This returns both duration and path in O(V+E). The predecessor chain efficiently captures the critical path without enumerating all paths."
   },
   "time_milestones": {
-    "time_budget": "10-15 minutes for this part",
-    "by_2_min": "Understand critical path concept, identify need for predecessor tracking",
-    "by_5_min": "Explain algorithm, start coding graph construction",
-    "by_10_min": "Core algorithm done, working on backtracking",
-    "warning_signs": "If struggling with backtracking concept at 7 min, ask for hint about predecessor tracking"
+    "time_budget": "8-12 minutes for Part 3",
+    "by_2_min": "Recognize 'path reconstruction' pattern, explain predecessor tracking approach",
+    "by_5_min": "Modify topo sort loop to track predecessors, start backtracking logic",
+    "by_10_min": "Complete implementation, trace through diamond example to verify",
+    "warning_signs": "If struggling with how to track predecessors at 4 min, simplify: 'I'll loop through prereqs explicitly instead of using max()'"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "Critical path doesn't depend on Part 2's worker scheduling. Can implement independently.",
-    "if_new_requirement_unclear": "Ask: 'For the critical path, should I return any valid path, or is there a preference when multiple exist?'",
-    "if_running_behind": "Focus on getting the duration correct first. Path reconstruction can be added after."
+    "if_part_builds_wrong": "Part 3 uses same graph building as Part 1. If Part 1 works, Part 3 should work. Isolate the new code (predecessor tracking + backtracking).",
+    "if_new_requirement_unclear": "Ask: 'For the critical path, do you want start\u2192end order or end\u2192start? And if multiple paths exist, any one is acceptable?'",
+    "if_running_behind": "Focus on: (1) predecessor map, (2) find max completion task, (3) simple while loop backtrack. Skip fancy edge case handling."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Mentioning CPM (Critical Path Method) from project management",
-      "Noting this is longest path in DAG which is solvable in polynomial time",
-      "Proactively mentioning how to extend for slack time analysis",
-      "Discussing how to handle multiple critical paths if needed"
+      "Mentioning this is 'longest path in DAG' - shows pattern recognition",
+      "Connecting to PERT/CPM from operations research",
+      "Noting that slack calculation would be a natural extension",
+      "Discussing how to find ALL critical paths if needed"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Longest Path in DAG via Topological Sort + Parent Tracking",
+    "pattern": "Path Reconstruction in Dynamic Programming",
     "indicators": [
-      "Find 'critical' or 'longest' path in dependency graph",
-      "DAG structure (dependencies are acyclic)",
-      "Need to reconstruct the path, not just its length"
+      "Need to find not just optimal VALUE but optimal SOLUTION",
+      "DP on DAG structure (topological order)",
+      "Longest path instead of shortest path"
     ],
     "similar_problems": [
-      "LC 2050 - Parallel Courses III",
-      "LC 1857 - Largest Color Value in a Directed Graph",
-      "LC 329 - Longest Increasing Path in a Matrix (uses DP on DAG)"
+      "LC 1857 - Largest Color Value in Directed Graph",
+      "LC 329 - Longest Increasing Path in Matrix",
+      "Classic PERT/CPM in project management"
     ],
-    "template": "1. Build graph + reverse graph\n2. Topological sort with DP computation\n3. Track parent/predecessor during DP\n4. Find optimal endpoint\n5. Backtrack to reconstruct path"
+    "template": "# Path reconstruction template\\nparent = {}\\nfor node in topo_order:\\n    best_val, best_parent = find_best(predecessors)\\n    parent[node] = best_parent\\n    value[node] = best_val + ...\\n# Backtrack\\npath = []\\ncurr = end_node\\nwhile curr:\\n    path.append(curr)\\n    curr = parent[curr]\\npath.reverse()"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'critical path', I think longest path in DAG",
-      "why": "Critical path in project management is the bottleneck - the longest dependency chain"
+      "thought": "When I see 'find the path' not just 'find the length', I immediately think parent pointers",
+      "why": "It's the standard way to reconstruct solutions in DP"
     },
     {
       "step": 2,
-      "thought": "Need to track predecessors during topological sort",
-      "why": "To reconstruct path, I need to know which edge I came from"
+      "thought": "Critical path = longest path in DAG = can be solved with topo sort",
+      "why": "DAGs allow linear-time longest path via DP"
     },
     {
       "step": 3,
-      "thought": "Only track the SINGLE best predecessor, not all",
-      "why": "Only one predecessor per task is on the critical path to that task"
-    },
-    {
-      "step": 4,
-      "thought": "Find endpoint first, then backtrack",
-      "why": "We don't know the end of critical path until all tasks processed"
+      "thought": "I already have topo sort from Part 1 - just need to add predecessor tracking",
+      "why": "Minimal code change, same complexity"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Understanding of critical path concept",
-      "Ability to extend topological sort for path tracking",
-      "Clean handling of the backtracking step"
+      "Can you recognize the path reconstruction pattern?",
+      "Can you extend existing code cleanly without rewriting?",
+      "Do you understand the algorithm well enough to modify it?"
     ],
     "bonus_points": [
-      "Mentioning real-world applications (project management, build systems)",
-      "Discussing how to extend for slack time",
-      "Handling edge cases proactively"
+      "Mentioning this is a classic DP pattern",
+      "Noting O(V+E) complexity stays same",
+      "Discussing extensions (all paths, slack times)"
     ],
     "red_flags": [
       "Trying to enumerate all paths (exponential)",
-      "Not understanding why we need reverse edges",
-      "Confusion about when to compute predecessor"
+      "Rewriting topo sort from scratch",
+      "Not understanding why backtracking works"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Let AI help with boilerplate (building adjacency lists)",
-      "Use AI for generating test cases"
+      "Use AI for the backtracking boilerplate",
+      "Let it help with the max-finding loop syntax"
     ],
     "what_not_to_do": [
-      "Don't let AI write the predecessor tracking logic without understanding it",
-      "Verify the backtracking direction is correct"
+      "Don't accept exponential path enumeration solutions",
+      "Verify the predecessor map initialization is correct"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without explaining the predecessor tracking approach",
-      "Not drawing the example graph to verify understanding"
+      "Spending too long on approach without starting code",
+      "Not testing with the diamond example"
     ],
     "technical": [
-      "Using DFS path enumeration (exponential)",
-      "Forgetting to reverse the backtracked path"
+      "Enumerating all paths (exponential time)",
+      "Forgetting to handle no-predecessor case",
+      "Not reversing the backtracked path"
     ],
     "communication": [
-      "Not explaining why you need both forward and reverse edges",
-      "Skipping the verification that path sum equals reported duration"
+      "Not explaining why predecessor tracking gives the critical path",
+      "Forgetting to mention complexity stays O(V+E)"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Path is returned in correct order (start to end)?",
-      "Sum of durations in path equals returned total duration?",
-      "Edge cases handled (empty, single task, no deps)?",
-      "Cycle detection in place?"
+      "Does find_critical_path return (int, list) tuple?",
+      "Is predecessor map correctly populated for all tasks?",
+      "Did I test with diamond example: (11, [1,3,4])?",
+      "Did I handle empty input and cycle cases?"
     ],
     "quick_code_review": [
-      "critical_path.reverse() is called?",
-      "Both graph and predecessors_map are built?",
-      "completion_time initialized for source nodes?"
+      "predecessor initialized before loop",
+      "Backtrack loop terminates on None",
+      "Path is reversed before return",
+      "Type hints on new method"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Logging for critical path decisions",
-      "Metrics for project duration tracking",
-      "Validation that all referenced tasks exist",
-      "Method to get slack time for non-critical tasks"
+      "Logging for debugging path reconstruction",
+      "Option to return all critical paths",
+      "Slack time calculation for non-critical tasks"
     ],
-    "why_not_in_interview": "Focus on core algorithm; these are mentioned verbally",
-    "how_to_mention": "Say: 'In production, I'd add a getSlackTime(taskId) method that returns how much a task can be delayed.'"
+    "why_not_in_interview": "Focus on core algorithm; mention these as extensions",
+    "how_to_mention": "Say: 'In production, I'd add options to find all critical paths and calculate slack times for resource planning.'"
   },
-  "generated_at": "2026-01-18T18:58:04.572023",
+  "generated_at": "2026-01-19T05:10:25.719943",
   "_meta": {
     "problem_id": "task_scheduling_dependencies",
     "part_number": 3,

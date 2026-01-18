@@ -4,541 +4,406 @@
   "builds_on": "Part 1",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "Part 2 introduces **temporal tracking** of play events. While Part 1 focused on unique listeners (deduplication), Part 2 requires maintaining the **full chronological history** of all plays INCLUDING duplicates. This is a fundamental shift from set-based thinking to list-based thinking.",
+    "what_changes": "Part 1 tracked UNIQUE listeners per song (deduplicating plays). Part 2 adds a new requirement: track the FULL play history with duplicates, so we can answer 'what were the N most recent plays?'. This requires a completely separate data structure from the Set-based listener tracking.",
     "new_requirements": [
-      "Track every play event in chronological order",
-      "Allow and preserve duplicate plays (same song played multiple times)",
-      "Return most recent plays in reverse chronological order",
-      "Return song NAMES, not IDs",
-      "Handle cases where fewer plays exist than requested"
+      "Track every play event in chronological order (duplicates allowed)",
+      "Return most recent N plays in reverse chronological order (newest first)",
+      "Return song names, not IDs",
+      "Handle case where fewer than N plays exist gracefully"
     ],
     "new_constraints": [
-      "Must maintain O(1) for play_song operation",
-      "get_recent_plays should be O(count) time complexity",
-      "Play history must preserve insertion order"
+      "Must maintain O(1) for play_song",
+      "get_recent_plays should be O(count)"
     ],
-    "key_insight": "The 'AHA!' moment: Part 1 uses Sets for deduplication, but Part 2 needs a List to preserve order AND allow duplicates. We need BOTH data structures working together - Sets for unique counting, List for history tracking."
+    "key_insight": "The existing Set-based listener tracking is for UNIQUE users per song. For recent plays with duplicates, we need a separate List that appends EVERY valid play. Two parallel data structures serving different purposes."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Track plays in chronological order",
-        "how_met": "ArrayList/List that appends song name on each play_song call",
+        "requirement": "Track play history with duplicates",
+        "how_met": "New `recent_plays` List[str] that appends song name on every valid play",
         "gotchas": [
-          "Must append song NAME not ID",
-          "Must append even for duplicate user plays"
+          "Only append on VALID plays (after song existence check)",
+          "Store name not ID to avoid lookup later"
         ]
       },
       {
-        "requirement": "Return most recent first (reverse order)",
-        "how_met": "Iterate backwards from end of list or slice-then-reverse",
+        "requirement": "Return in reverse chronological order",
+        "how_met": "Slice from end of list, then reverse the slice",
         "gotchas": [
-          "Off-by-one errors in slicing",
-          "Forgetting to reverse the result"
+          "Don't reverse in-place, return a new list",
+          "Slice with [-count:] handles count > size gracefully"
         ]
       },
       {
-        "requirement": "Handle count > available plays",
-        "how_met": "Use min(count, len(history)) to avoid index errors",
+        "requirement": "Handle fewer plays than requested",
+        "how_met": "Python slice [-count:] returns up to count elements, never fails",
         "gotchas": [
-          "Returning error instead of partial results",
-          "Empty list handling"
+          "Don't throw exception for count > size"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "play_song (modified)",
+        "operation": "play_song",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "List append is amortized O(1)"
+        "why": "List append is O(1) amortized"
       },
       {
         "operation": "get_recent_plays",
         "target": "O(count)",
         "achieved": "O(count)",
-        "why": "Only iterate through requested number of elements"
+        "why": "Slice and reverse of count elements"
       }
     ],
     "non_goals": [
-      "Limiting history size (no memory cap specified)",
-      "User-specific recent plays (system-wide only)",
-      "Deduplication in recent plays (duplicates required)"
+      "Limiting history size (unbounded growth)",
+      "Filtering by user or time range",
+      "Efficient removal of old plays"
     ]
   },
   "assumptions": [
-    "Play history has no size limit (ask interviewer about memory constraints for production)",
-    "All valid play_song calls should be recorded (no filtering by user/song combination)",
-    "count parameter is expected to be non-negative (clarify handling of negative/zero)",
-    "Thread-safety is not required (single-threaded environment assumed)"
+    "Play history can grow unbounded (no limit on total plays)",
+    "count parameter is non-negative (0 or positive)",
+    "Memory is sufficient to store all play events",
+    "No need to persist history across restarts"
   ],
   "tradeoffs": [
     {
-      "decision": "ArrayList vs Deque for history",
-      "chosen": "ArrayList",
-      "why": "Simpler API, random access for slicing, sufficient for this use case",
-      "alternative": "Deque/LinkedList",
-      "when_to_switch": "If we needed to limit history size (remove oldest), Deque with fixed capacity would be better"
+      "decision": "Store song names vs song IDs in history",
+      "chosen": "Store names directly",
+      "why": "Avoid O(1) lookup per item in get_recent_plays; names are immutable anyway",
+      "alternative": "Store IDs and lookup names",
+      "when_to_switch": "If songs could be renamed, storing IDs would be safer"
     },
     {
-      "decision": "Store song names vs song IDs in history",
-      "chosen": "Song names directly",
-      "why": "Avoids ID-to-name lookup on every get_recent_plays call; output requires names",
-      "alternative": "Store IDs and lookup names",
-      "when_to_switch": "If songs could be renamed, storing IDs would ensure consistency"
+      "decision": "List vs Deque for history",
+      "chosen": "Simple List/ArrayList",
+      "why": "Both have O(1) append; List is simpler and sufficient since we never remove from front",
+      "alternative": "Deque with max size",
+      "when_to_switch": "If we needed to limit history to last N plays to bound memory"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Public method signatures from Part 1",
-      "Song ID assignment logic",
-      "Unique listener tracking mechanism"
+      "Song class (unchanged)",
+      "All Part 1 method signatures",
+      "HashMap for song lookup"
     ],
     "what_to_change": [
-      "Add playHistory list to constructor",
-      "Modify play_song to also append to history"
+      "Added recent_plays list to SongAnalytics",
+      "Modified play_song to also append to history"
     ],
-    "interfaces_and_boundaries": "The play_song method becomes a coordination point - it updates BOTH the listener set AND the play history. Future parts may add more tracking here.",
+    "interfaces_and_boundaries": "recent_plays is private implementation detail; public API is get_recent_plays(count)",
     "invariants": [
-      "playHistory.length >= sum of all listener set sizes (every unique listen is also in history)",
-      "playHistory only contains valid song names (names that exist in songs map)",
-      "Chronological order is always preserved (newest at end)"
+      "recent_plays.length == total number of valid play_song calls",
+      "recent_plays contains only names of songs that existed at play time",
+      "Order in recent_plays matches chronological play order"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    PART 1 STATE (Before)                     \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502  songs: {1: \"Alpha\", 2: \"Beta\"}                              \u2502\n\u2502  listeners: {1: {user1, user2}, 2: {user1}}                 \u2502\n\u2502                                                              \u2502\n\u2502  Only tracks WHO listened, not WHEN or HOW MANY TIMES       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                              \u2502\n                              \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    PART 2 STATE (After)                      \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502  songs: {1: \"Alpha\", 2: \"Beta\"}                              \u2502\n\u2502  listeners: {1: {user1, user2}, 2: {user1}}                 \u2502\n\u2502                                                              \u2502\n\u2502  \u2605 NEW: playHistory: [\"Alpha\", \"Beta\", \"Alpha\", \"Alpha\"]    \u2502\n\u2502                         \u2191        \u2191        \u2191        \u2191         \u2502\n\u2502                      play 1   play 2   play 3   play 4      \u2502\n\u2502                      oldest                     newest       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502           get_recent_plays(3) Algorithm Flow                  \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                               \u2502\n\u2502  playHistory: [\"Alpha\", \"Beta\", \"Alpha\", \"Alpha\"]            \u2502\n\u2502                  [0]      [1]     [2]      [3]               \u2502\n\u2502                                                               \u2502\n\u2502  Step 1: Calculate start index                                \u2502\n\u2502          start = max(0, len(4) - count(3)) = 1               \u2502\n\u2502                                                               \u2502\n\u2502  Step 2: Slice from start to end                              \u2502\n\u2502          slice = [\"Beta\", \"Alpha\", \"Alpha\"]                  \u2502\n\u2502                    [1]      [2]      [3]                     \u2502\n\u2502                                                               \u2502\n\u2502  Step 3: Reverse for most-recent-first                        \u2502\n\u2502          result = [\"Alpha\", \"Alpha\", \"Beta\"]                 \u2502\n\u2502                    newest   2nd      3rd                     \u2502\n\u2502                                                               \u2502\n\u2502  Return: [\"Alpha\", \"Alpha\", \"Beta\"]                          \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (Part 1 only):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 songs: {1: Song(A), 2: Song(B)}         \u2502\n\u2502   Song A: listeners = {1, 2}            \u2502\n\u2502   Song B: listeners = {1}               \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nAFTER (Part 2 added):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 songs: {1: Song(A), 2: Song(B)}         \u2502\n\u2502   Song A: listeners = {1, 2}            \u2502  \u2190 Same as before\n\u2502   Song B: listeners = {1}               \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 recent_plays: [A, B, A, A]              \u2502  \u2190 NEW! All plays\n\u2502                \u2191        \u2191               \u2502\n\u2502             oldest   newest             \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "algorithm_flow": "```\nget_recent_plays(3):\n\nrecent_plays = [\"A\", \"B\", \"A\", \"A\"]\n                        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                        last 3: [\"B\", \"A\", \"A\"]\n                        reverse: [\"A\", \"A\", \"B\"]\n                                  \u2193\n                        return [\"A\", \"A\", \"B\"]\n```"
   },
   "approaches": [
     {
-      "name": "Naive Extension",
-      "description": "Store song IDs in history, then look up names on every get_recent_plays call",
-      "time_complexity": "O(count) with extra map lookups",
-      "space_complexity": "O(total plays)",
-      "why_not_optimal": "Unnecessary indirection through IDs; names are stable and we need names in output anyway. The extra lookup adds no value."
+      "name": "Naive: Iterate all plays and filter",
+      "description": "Store full play event objects with timestamps, then filter/sort on each query",
+      "time_complexity": "O(P) per query where P is total plays",
+      "space_complexity": "O(P)",
+      "why_not_optimal": "Unnecessary overhead; we just need order, not timestamps"
     },
     {
-      "name": "Optimal Approach",
-      "description": "Store song NAMES directly in play history list. On play_song, append the song name. On get_recent_plays, slice from end and reverse.",
-      "time_complexity": "O(1) for play, O(count) for retrieval",
-      "space_complexity": "O(total plays) for history",
-      "key_insight": "Direct storage of names eliminates lookups; List preserves order and allows duplicates naturally - exactly what we need."
+      "name": "Optimal: Simple List Append",
+      "description": "Append song name to a list on each play. For recent N, slice from end and reverse.",
+      "time_complexity": "O(1) play, O(count) query",
+      "space_complexity": "O(P) for history",
+      "key_insight": "List maintains insertion order naturally; slicing from end gives most recent"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution Explanation\n\nThe key insight is that **Part 1 and Part 2 have fundamentally different data modeling needs**:\n\n- **Part 1 (Unique Listeners)**: Needs **deduplication** \u2192 Use `Set`\n- **Part 2 (Recent Plays)**: Needs **order preservation** AND **duplicates** \u2192 Use `List`\n\n### Why This Works\n\n1. **Append song NAME on each play**: Store the name directly to avoid lookups later\n2. **List naturally preserves insertion order**: Oldest at index 0, newest at end\n3. **Slice and reverse for recent plays**: Get last N elements, reverse for most-recent-first\n\n### Code Flow\n\n```\nplay_song(songId, userId):\n  1. Validate songId exists\n  2. Add userId to listeners set (Part 1 logic - unchanged)\n  3. \u2605 Append songs[songId] to playHistory (Part 2 addition)\n\nget_recent_plays(count):\n  1. Handle edge case: count <= 0 \u2192 return []\n  2. Get last min(count, len(history)) elements\n  3. Reverse to get most-recent-first\n  4. Return result\n```\n\n### Why Store Names Not IDs?\n\n- Output requires names anyway\n- Songs can't be deleted/renamed (per problem constraints)\n- Eliminates O(count) map lookups on retrieval",
+    "explanation_md": "The solution is elegantly simple:\n\n1. **Add a `recent_plays` list** to `SongAnalytics.__init__`\n2. **Modify `play_song`** to append the song's **name** (not ID) after validation\n3. **Implement `get_recent_plays(count)`** using list slicing:\n   - `recent_plays[-count:]` gets the last `count` elements\n   - `[::-1]` reverses to get newest-first order\n\n**Why store names not IDs?**\nAvoids extra lookup in get_recent_plays. Since song names are immutable in this design, storing names directly is both correct and efficient.\n\n**Edge case handling:**\n- Python slice `[-count:]` gracefully handles `count > len(list)` by returning all elements\n- `count = 0` returns empty list\n- No plays yet returns empty list",
     "data_structures": [
       {
-        "structure": "List<String> playHistory",
-        "purpose": "Chronologically ordered list of all song plays (by name), allowing duplicates"
-      },
-      {
-        "structure": "Map<Integer, String> songs (from Part 1)",
-        "purpose": "Lookup song name by ID when recording to history"
-      },
-      {
-        "structure": "Map<Integer, Set<Integer>> listeners (from Part 1)",
-        "purpose": "Track unique listeners per song (unchanged from Part 1)"
+        "structure": "List<String> recent_plays",
+        "purpose": "Maintain chronological order of all plays with duplicates"
       }
     ],
     "algorithm_steps": [
-      "Step 1: On play_song, after updating listeners set, append song NAME to playHistory",
-      "Step 2: On get_recent_plays(count), calculate effective count as min(count, history length)",
-      "Step 3: Extract the last 'effective count' elements from playHistory",
-      "Step 4: Reverse the extracted elements to get most-recent-first order",
-      "Step 5: Return the reversed list"
+      "1. On play_song(song_id, user_id): validate song exists",
+      "2. Add user to song's listener Set (Part 1 logic)",
+      "3. NEW: Append song.name to recent_plays list",
+      "4. On get_recent_plays(count): slice last 'count' items from list",
+      "5. Reverse the slice to get newest-first order",
+      "6. Return the reversed list"
     ]
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Song Play Analytics System - Part 2: Recent Plays (With Duplicates)",
+    "from typing import Set, List",
     "",
-    "Extends Part 1 with chronological play history tracking.",
-    "Duplicates ARE allowed - captures every play event.",
-    "\"\"\"",
     "",
-    "from typing import List, Dict, Set",
+    "class Song:",
+    "    \"\"\"Song with unique listener tracking via Set.\"\"\"",
+    "    ",
+    "    def __init__(self, name: str) -> None:",
+    "        self.name = name",
+    "        self.listeners: Set[int] = set()",
+    "    ",
+    "    def add_listener(self, user_id: int) -> None:",
+    "        self.listeners.add(user_id)",
+    "    ",
+    "    def get_listener_count(self) -> int:",
+    "        return len(self.listeners)",
     "",
     "",
     "class SongAnalytics:",
     "    \"\"\"",
-    "    Music streaming analytics system that tracks song plays",
-    "    and generates insights based on unique listeners and play history.",
-    "    ",
-    "    Part 1: Song management + unique listener tracking",
-    "    Part 2: Recent plays with duplicates allowed",
+    "    Music streaming analytics system.",
+    "    Tracks unique listeners AND recent play history (with duplicates).",
     "    \"\"\"",
-    "",
+    "    ",
     "    def __init__(self) -> None:",
-    "        \"\"\"Initialize the analytics system with empty collections.\"\"\"",
-    "        # Part 1 data structures",
-    "        self._songs: Dict[int, str] = {}           # songId -> songName",
-    "        self._listeners: Dict[int, Set[int]] = {}  # songId -> set of userIds",
-    "        self._next_id: int = 1                     # Auto-increment song ID",
-    "        ",
-    "        # Part 2 data structure - NEW",
-    "        self._play_history: List[str] = []  # Chronological list of song names",
-    "",
+    "        self.songs: dict[int, Song] = {}",
+    "        self.next_id = 1",
+    "        self.recent_plays: List[str] = []  # Part 2: chronological play history",
+    "    ",
     "    def add_song(self, name: str) -> int:",
-    "        \"\"\"",
-    "        Add a new song to the library.",
-    "        ",
-    "        Args:",
-    "            name: The name of the song",
-    "            ",
-    "        Returns:",
-    "            Auto-assigned unique song ID (starts from 1, increments)",
-    "            ",
-    "        Time Complexity: O(1)",
-    "        \"\"\"",
-    "        song_id = self._next_id",
-    "        self._next_id += 1",
-    "        self._songs[song_id] = name",
-    "        self._listeners[song_id] = set()",
+    "        \"\"\"Add song with auto-assigned ID. Returns the assigned ID.\"\"\"",
+    "        song_id = self.next_id",
+    "        self.songs[song_id] = Song(name)",
+    "        self.next_id += 1",
     "        return song_id",
-    "",
+    "    ",
     "    def play_song(self, song_id: int, user_id: int) -> None:",
-    "        \"\"\"",
-    "        Record a play event for a song by a user.",
-    "        ",
-    "        Updates both unique listener tracking (Part 1) and",
-    "        play history (Part 2).",
-    "        ",
-    "        Args:",
-    "            song_id: The ID of the song being played",
-    "            user_id: The ID of the user playing the song",
-    "            ",
-    "        Time Complexity: O(1) amortized",
-    "        \"\"\"",
-    "        # Validate song exists",
-    "        if song_id not in self._songs:",
-    "            return  # Silently ignore invalid song IDs",
-    "        ",
-    "        # Part 1: Track unique listener (set handles deduplication)",
-    "        self._listeners[song_id].add(user_id)",
-    "        ",
-    "        # Part 2: Add to play history (store NAME for direct access later)",
-    "        self._play_history.append(self._songs[song_id])",
-    "",
-    "    def get_unique_listeners(self, song_id: int) -> int:",
-    "        \"\"\"",
-    "        Get the number of unique listeners for a song.",
-    "        ",
-    "        Args:",
-    "            song_id: The ID of the song",
-    "            ",
-    "        Returns:",
-    "            Number of unique users who played this song (0 if invalid ID)",
-    "            ",
-    "        Time Complexity: O(1)",
-    "        \"\"\"",
-    "        if song_id not in self._listeners:",
-    "            return 0",
-    "        return len(self._listeners[song_id])",
-    "",
+    "        \"\"\"Record a play event. Updates unique listeners AND play history.\"\"\"",
+    "        if song_id not in self.songs:",
+    "            print(f\"Error: Song ID {song_id} does not exist.\")",
+    "            return",
+    "        song = self.songs[song_id]",
+    "        song.add_listener(user_id)",
+    "        self.recent_plays.append(song.name)  # Part 2: track every play",
+    "    ",
+    "    def print_analytics(self) -> None:",
+    "        \"\"\"Print songs sorted by unique listeners (desc), then name (asc).\"\"\"",
+    "        sorted_songs = sorted(",
+    "            self.songs.values(),",
+    "            key=lambda s: (-s.get_listener_count(), s.name)",
+    "        )",
+    "        for song in sorted_songs:",
+    "            print(f\"{song.name} ({song.get_listener_count()} unique listeners)\")",
+    "    ",
     "    def get_recent_plays(self, count: int) -> List[str]:",
     "        \"\"\"",
-    "        Get the most recently played songs across all users.",
-    "        ",
-    "        Duplicates ARE included - if a song was played 3 times consecutively,",
-    "        it will appear 3 times in the result.",
-    "        ",
-    "        Args:",
-    "            count: Maximum number of recent plays to return",
-    "            ",
-    "        Returns:",
-    "            List of song names in REVERSE chronological order (most recent first).",
-    "            If fewer than 'count' plays exist, returns all available plays.",
-    "            Returns empty list if count <= 0 or no plays recorded.",
-    "            ",
-    "        Time Complexity: O(count)",
-    "        Space Complexity: O(count) for the result list",
+    "        Return most recent 'count' plays in reverse chronological order.",
+    "        Returns fewer if not enough plays exist.",
     "        \"\"\"",
-    "        # Edge case: invalid count or empty history",
-    "        if count <= 0 or not self._play_history:",
+    "        if count <= 0:",
     "            return []",
-    "        ",
-    "        # Determine how many plays we can actually return",
-    "        effective_count = min(count, len(self._play_history))",
-    "        ",
-    "        # Get the last 'effective_count' plays",
-    "        recent_slice = self._play_history[-effective_count:]",
-    "        ",
-    "        # Reverse to get most recent first",
-    "        return recent_slice[::-1]",
+    "        # Slice last 'count' elements, reverse for newest-first",
+    "        return self.recent_plays[-count:][::-1]",
     "",
     "",
-    "# ============================================================",
-    "# DEMONSTRATION AND TESTING",
-    "# ============================================================",
-    "",
-    "def main():",
-    "    \"\"\"Demonstrate Part 2 functionality with the example from the problem.\"\"\"",
+    "if __name__ == '__main__':",
     "    print(\"=\" * 60)",
-    "    print(\"Song Play Analytics System - Part 2 Demo\")",
+    "    print(\"Part 2 Example 1: Recent Plays with Duplicates\")",
     "    print(\"=\" * 60)",
-    "    ",
     "    analytics = SongAnalytics()",
     "    ",
-    "    # Add songs",
-    "    print(\"\\n--- Adding Songs ---\")",
-    "    alpha_id = analytics.add_song(\"Alpha\")",
-    "    print(f\"Added 'Alpha' with ID: {alpha_id}\")",
-    "    beta_id = analytics.add_song(\"Beta\")",
-    "    print(f\"Added 'Beta' with ID: {beta_id}\")",
+    "    analytics.add_song(\"Alpha\")  # ID: 1",
+    "    analytics.add_song(\"Beta\")   # ID: 2",
     "    ",
-    "    # Play songs (matching the example)",
-    "    print(\"\\n--- Recording Plays ---\")",
-    "    plays = [",
-    "        (1, 1, \"User 1 plays Alpha\"),",
-    "        (2, 1, \"User 1 plays Beta\"),",
-    "        (1, 2, \"User 2 plays Alpha\"),",
-    "        (1, 1, \"User 1 plays Alpha again\"),",
-    "    ]",
+    "    # Play sequence: Alpha -> Beta -> Alpha -> Alpha",
+    "    analytics.play_song(1, 1)  # Alpha by user 1",
+    "    analytics.play_song(2, 1)  # Beta by user 1",
+    "    analytics.play_song(1, 2)  # Alpha by user 2",
+    "    analytics.play_song(1, 1)  # Alpha by user 1 again",
     "    ",
-    "    for song_id, user_id, description in plays:",
-    "        analytics.play_song(song_id, user_id)",
-    "        print(f\"  {description}\")",
-    "    ",
-    "    # Get recent plays",
-    "    print(\"\\n--- Recent Plays ---\")",
-    "    recent_3 = analytics.get_recent_plays(3)",
-    "    print(f\"get_recent_plays(3): {recent_3}\")",
-    "    print(f\"Expected: ['Alpha', 'Alpha', 'Beta']\")",
-    "    ",
-    "    # Test edge cases",
-    "    print(\"\\n--- Edge Cases ---\")",
-    "    print(f\"get_recent_plays(10): {analytics.get_recent_plays(10)}\")",
-    "    print(f\"  (Only 4 plays exist, returns all)\")",
-    "    ",
-    "    print(f\"get_recent_plays(0): {analytics.get_recent_plays(0)}\")",
-    "    print(f\"  (Zero count returns empty)\")",
-    "    ",
-    "    print(f\"get_recent_plays(1): {analytics.get_recent_plays(1)}\")",
-    "    print(f\"  (Most recent only)\")",
-    "    ",
-    "    # Verify Part 1 still works",
-    "    print(\"\\n--- Part 1 Verification ---\")",
-    "    print(f\"Unique listeners for Alpha: {analytics.get_unique_listeners(1)}\")",
-    "    print(f\"  (Expected: 2 - User 1 and User 2)\")",
-    "    print(f\"Unique listeners for Beta: {analytics.get_unique_listeners(2)}\")",
-    "    print(f\"  (Expected: 1 - only User 1)\")",
+    "    print(f\"Recent 3: {analytics.get_recent_plays(3)}\")",
+    "    # Expected: ['Alpha', 'Alpha', 'Beta']",
     "    ",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All tests passed!\")",
+    "    print(\"Part 2 Example 2: Fewer plays than requested\")",
     "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    analytics2 = SongAnalytics()",
+    "    analytics2.add_song(\"Only\")",
+    "    analytics2.play_song(1, 1)",
+    "    print(f\"Request 5, only 1 exists: {analytics2.get_recent_plays(5)}\")",
+    "    # Expected: ['Only']",
+    "    ",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Part 2 Example 3: Edge cases\")",
+    "    print(\"=\" * 60)",
+    "    analytics3 = SongAnalytics()",
+    "    print(f\"No plays, request 3: {analytics3.get_recent_plays(3)}\")",
+    "    print(f\"Request 0: {analytics3.get_recent_plays(0)}\")",
+    "    ",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Verify Part 1 still works\")",
+    "    print(\"=\" * 60)",
+    "    analytics.print_analytics()",
+    "    # Alpha has 2 unique listeners, Beta has 1"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
     "/**",
-    " * Song Play Analytics System - Part 2: Recent Plays (With Duplicates)",
-    " * ",
-    " * Extends Part 1 with chronological play history tracking.",
-    " * Duplicates ARE allowed - captures every play event.",
+    " * Song with unique listener tracking via HashSet.",
     " */",
-    "public class SongAnalytics {",
+    "class Song {",
+    "    private String name;",
+    "    private Set<Integer> listeners;",
     "    ",
-    "    // Part 1 data structures",
-    "    private Map<Integer, String> songs;           // songId -> songName",
-    "    private Map<Integer, Set<Integer>> listeners; // songId -> set of userIds",
-    "    private int nextId;                           // Auto-increment song ID",
-    "    ",
-    "    // Part 2 data structure - NEW",
-    "    private List<String> playHistory;  // Chronological list of song names",
-    "    ",
-    "    /**",
-    "     * Initialize the analytics system with empty collections.",
-    "     */",
-    "    public SongAnalytics() {",
-    "        this.songs = new HashMap<>();",
-    "        this.listeners = new HashMap<>();",
-    "        this.nextId = 1;",
-    "        this.playHistory = new ArrayList<>();  // NEW for Part 2",
+    "    public Song(String name) {",
+    "        this.name = name;",
+    "        this.listeners = new HashSet<>();",
     "    }",
     "    ",
-    "    /**",
-    "     * Add a new song to the library.",
-    "     * ",
-    "     * @param name The name of the song",
-    "     * @return Auto-assigned unique song ID (starts from 1, increments)",
-    "     * ",
-    "     * Time Complexity: O(1)",
-    "     */",
+    "    public void addListener(int userId) {",
+    "        listeners.add(userId);",
+    "    }",
+    "    ",
+    "    public int getListenerCount() {",
+    "        return listeners.size();",
+    "    }",
+    "    ",
+    "    public String getName() {",
+    "        return name;",
+    "    }",
+    "}",
+    "",
+    "/**",
+    " * Music streaming analytics system.",
+    " * Tracks unique listeners AND recent play history (with duplicates).",
+    " */",
+    "public class SongAnalytics {",
+    "    private Map<Integer, Song> songs;",
+    "    private int nextId;",
+    "    private List<String> recentPlays;  // Part 2: chronological play history",
+    "    ",
+    "    public SongAnalytics() {",
+    "        this.songs = new HashMap<>();",
+    "        this.nextId = 1;",
+    "        this.recentPlays = new ArrayList<>();",
+    "    }",
+    "    ",
     "    public int addSong(String name) {",
-    "        int songId = nextId++;",
-    "        songs.put(songId, name);",
-    "        listeners.put(songId, new HashSet<>());",
+    "        int songId = nextId;",
+    "        songs.put(songId, new Song(name));",
+    "        nextId++;",
     "        return songId;",
     "    }",
     "    ",
-    "    /**",
-    "     * Record a play event for a song by a user.",
-    "     * ",
-    "     * Updates both unique listener tracking (Part 1) and",
-    "     * play history (Part 2).",
-    "     * ",
-    "     * @param songId The ID of the song being played",
-    "     * @param userId The ID of the user playing the song",
-    "     * ",
-    "     * Time Complexity: O(1) amortized",
-    "     */",
     "    public void playSong(int songId, int userId) {",
-    "        // Validate song exists",
     "        if (!songs.containsKey(songId)) {",
-    "            return;  // Silently ignore invalid song IDs",
+    "            System.out.println(\"Error: Song ID \" + songId + \" does not exist.\");",
+    "            return;",
     "        }",
+    "        Song song = songs.get(songId);",
+    "        song.addListener(userId);",
+    "        recentPlays.add(song.getName());  // Part 2: track every play",
+    "    }",
+    "    ",
+    "    public void printAnalytics() {",
+    "        List<Song> sortedSongs = new ArrayList<>(songs.values());",
+    "        sortedSongs.sort((a, b) -> {",
+    "            int countCompare = Integer.compare(b.getListenerCount(), a.getListenerCount());",
+    "            if (countCompare != 0) return countCompare;",
+    "            return a.getName().compareTo(b.getName());",
+    "        });",
     "        ",
-    "        // Part 1: Track unique listener",
-    "        listeners.get(songId).add(userId);",
-    "        ",
-    "        // Part 2: Add to play history (store NAME for direct access)",
-    "        playHistory.add(songs.get(songId));",
+    "        for (Song song : sortedSongs) {",
+    "            System.out.println(song.getName() + \" (\" +",
+    "                song.getListenerCount() + \" unique listeners)\");",
+    "        }",
     "    }",
     "    ",
     "    /**",
-    "     * Get the number of unique listeners for a song.",
-    "     * ",
-    "     * @param songId The ID of the song",
-    "     * @return Number of unique users who played this song (0 if invalid)",
-    "     * ",
-    "     * Time Complexity: O(1)",
-    "     */",
-    "    public int getUniqueListeners(int songId) {",
-    "        if (!listeners.containsKey(songId)) {",
-    "            return 0;",
-    "        }",
-    "        return listeners.get(songId).size();",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Get the most recently played songs across all users.",
-    "     * ",
-    "     * Duplicates ARE included - if a song was played 3 times,",
-    "     * it will appear 3 times in the result.",
-    "     * ",
-    "     * @param count Maximum number of recent plays to return",
-    "     * @return List of song names in REVERSE chronological order",
-    "     *         (most recent first). Returns fewer if not enough plays exist.",
-    "     * ",
-    "     * Time Complexity: O(count)",
+    "     * Return most recent 'count' plays in reverse chronological order.",
+    "     * Returns fewer if not enough plays exist.",
     "     */",
     "    public List<String> getRecentPlays(int count) {",
-    "        // Edge case: invalid count or empty history",
-    "        if (count <= 0 || playHistory.isEmpty()) {",
-    "            return new ArrayList<>();",
+    "        List<String> result = new ArrayList<>();",
+    "        int size = recentPlays.size();",
+    "        int start = Math.max(0, size - count);",
+    "        ",
+    "        // Iterate backwards from end to get newest first",
+    "        for (int i = size - 1; i >= start; i--) {",
+    "            result.add(recentPlays.get(i));",
     "        }",
-    "        ",
-    "        int size = playHistory.size();",
-    "        int effectiveCount = Math.min(count, size);",
-    "        ",
-    "        // Build result by iterating backwards (most recent first)",
-    "        List<String> result = new ArrayList<>(effectiveCount);",
-    "        for (int i = size - 1; i >= size - effectiveCount; i--) {",
-    "            result.add(playHistory.get(i));",
-    "        }",
-    "        ",
     "        return result;",
     "    }",
     "    ",
-    "    // ============================================================",
-    "    // DEMONSTRATION AND TESTING",
-    "    // ============================================================",
-    "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"Song Play Analytics System - Part 2 Demo\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"Part 2 Example 1: Recent Plays with Duplicates\");",
+    "        System.out.println(\"============================================================\");",
     "        ",
     "        SongAnalytics analytics = new SongAnalytics();",
+    "        analytics.addSong(\"Alpha\");  // ID: 1",
+    "        analytics.addSong(\"Beta\");   // ID: 2",
     "        ",
-    "        // Add songs",
-    "        System.out.println(\"\\n--- Adding Songs ---\");",
-    "        int alphaId = analytics.addSong(\"Alpha\");",
-    "        System.out.println(\"Added 'Alpha' with ID: \" + alphaId);",
-    "        int betaId = analytics.addSong(\"Beta\");",
-    "        System.out.println(\"Added 'Beta' with ID: \" + betaId);",
-    "        ",
-    "        // Play songs (matching the example)",
-    "        System.out.println(\"\\n--- Recording Plays ---\");",
+    "        // Play sequence: Alpha -> Beta -> Alpha -> Alpha",
     "        analytics.playSong(1, 1);",
-    "        System.out.println(\"  User 1 plays Alpha\");",
     "        analytics.playSong(2, 1);",
-    "        System.out.println(\"  User 1 plays Beta\");",
     "        analytics.playSong(1, 2);",
-    "        System.out.println(\"  User 2 plays Alpha\");",
     "        analytics.playSong(1, 1);",
-    "        System.out.println(\"  User 1 plays Alpha again\");",
     "        ",
-    "        // Get recent plays",
-    "        System.out.println(\"\\n--- Recent Plays ---\");",
-    "        List<String> recent3 = analytics.getRecentPlays(3);",
-    "        System.out.println(\"getRecentPlays(3): \" + recent3);",
-    "        System.out.println(\"Expected: [Alpha, Alpha, Beta]\");",
+    "        System.out.println(\"Recent 3: \" + analytics.getRecentPlays(3));",
+    "        // Expected: [Alpha, Alpha, Beta]",
     "        ",
-    "        // Test edge cases",
-    "        System.out.println(\"\\n--- Edge Cases ---\");",
-    "        System.out.println(\"getRecentPlays(10): \" + analytics.getRecentPlays(10));",
-    "        System.out.println(\"  (Only 4 plays exist, returns all)\");",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"Part 2 Example 2: Fewer plays than requested\");",
+    "        System.out.println(\"============================================================\");",
+    "        SongAnalytics analytics2 = new SongAnalytics();",
+    "        analytics2.addSong(\"Only\");",
+    "        analytics2.playSong(1, 1);",
+    "        System.out.println(\"Request 5, only 1: \" + analytics2.getRecentPlays(5));",
     "        ",
-    "        System.out.println(\"getRecentPlays(0): \" + analytics.getRecentPlays(0));",
-    "        System.out.println(\"  (Zero count returns empty)\");",
-    "        ",
-    "        System.out.println(\"getRecentPlays(1): \" + analytics.getRecentPlays(1));",
-    "        System.out.println(\"  (Most recent only)\");",
-    "        ",
-    "        // Verify Part 1 still works",
-    "        System.out.println(\"\\n--- Part 1 Verification ---\");",
-    "        System.out.println(\"Unique listeners for Alpha: \" + analytics.getUniqueListeners(1));",
-    "        System.out.println(\"  (Expected: 2 - User 1 and User 2)\");",
-    "        System.out.println(\"Unique listeners for Beta: \" + analytics.getUniqueListeners(2));",
-    "        System.out.println(\"  (Expected: 1 - only User 1)\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"All tests passed!\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"Verify Part 1 still works\");",
+    "        System.out.println(\"============================================================\");",
+    "        analytics.printAnalytics();",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-8",
-      "explanation": "**Imports and class docstring**: Set up imports for type hints (Python) or collections (Java). Document that this is Part 2 with duplicates allowed."
+      "lines": "1-2",
+      "explanation": "Imports: Added List to typing imports for the new return type"
     },
     {
-      "lines": "19-26",
-      "explanation": "**Constructor with new field**: Initialize all Part 1 structures PLUS the new `playHistory` list. This is the minimal change needed - just one new data structure."
+      "lines": "23-26",
+      "explanation": "__init__: Added recent_plays list to track chronological play history"
     },
     {
-      "lines": "50-63",
-      "explanation": "**Modified play_song**: The key extension point. After updating the listener set (Part 1 logic), we also append the song NAME to playHistory. Using name directly avoids lookups later."
+      "lines": "35-41",
+      "explanation": "play_song: After validation and adding listener (Part 1), append song name to recent_plays"
     },
     {
-      "lines": "78-98",
-      "explanation": "**New get_recent_plays method**: The core Part 2 feature. Handle edge cases first (empty/zero), then slice from end and reverse. The reverse is crucial - list stores oldest-first but output needs newest-first."
+      "lines": "50-57",
+      "explanation": "get_recent_plays: Slice last 'count' elements, reverse for newest-first order"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "play_song (modified)": {
-          "complexity": "O(1) amortized",
-          "explanation": "Added list append which is O(1) amortized. HashSet add is already O(1). Total remains O(1)."
-        },
         "get_recent_plays": {
           "complexity": "O(count)",
-          "explanation": "Slice operation is O(k) where k=min(count, history_length). Reverse is also O(k). Combined: O(count)."
+          "explanation": "Slice creates list of 'count' elements, reverse is also O(count)"
         }
       },
-      "overall_change": "Part 1 operations unchanged in complexity. New get_recent_plays is optimal at O(count)."
+      "modified_methods": {
+        "play_song": {
+          "complexity": "O(1)",
+          "explanation": "List append is O(1) amortized, no change to overall complexity"
+        }
+      },
+      "overall_change": "add_song and print_analytics unchanged. play_song still O(1). New method is O(count)."
     },
     "space": {
-      "additional_space": "O(P) where P = total number of plays",
-      "explanation": "The playHistory list stores one string per play. In worst case with millions of plays, this grows linearly. No deduplication (by design)."
+      "additional_space": "O(P) where P = total number of valid play events",
+      "explanation": "Each play stores one string reference. P can be >> S*L since same (song, user) pair can have unlimited plays."
     }
   },
   "dry_run": {
@@ -547,305 +412,278 @@
       {
         "step": 1,
         "action": "add_song('Alpha')",
-        "state": "songs={1:'Alpha'}, listeners={1:{}}, playHistory=[], nextId=2",
-        "explanation": "First song added with ID 1"
+        "state": "songs={1:Song(Alpha)}, recent_plays=[]",
+        "explanation": "Song added with ID 1"
       },
       {
         "step": 2,
         "action": "add_song('Beta')",
-        "state": "songs={1:'Alpha',2:'Beta'}, listeners={1:{},2:{}}, playHistory=[], nextId=3",
-        "explanation": "Second song added with ID 2"
+        "state": "songs={1:Song(A), 2:Song(B)}, recent_plays=[]",
+        "explanation": "Song added with ID 2"
       },
       {
         "step": 3,
         "action": "play_song(1, 1)",
-        "state": "listeners={1:{1},2:{}}, playHistory=['Alpha']",
-        "explanation": "User 1 plays Alpha. Added to both listener set AND history."
+        "state": "Alpha.listeners={1}, recent_plays=['Alpha']",
+        "explanation": "User 1 plays Alpha, appended to history"
       },
       {
         "step": 4,
         "action": "play_song(2, 1)",
-        "state": "listeners={1:{1},2:{1}}, playHistory=['Alpha','Beta']",
-        "explanation": "User 1 plays Beta. History grows."
+        "state": "Beta.listeners={1}, recent_plays=['Alpha','Beta']",
+        "explanation": "User 1 plays Beta"
       },
       {
         "step": 5,
         "action": "play_song(1, 2)",
-        "state": "listeners={1:{1,2},2:{1}}, playHistory=['Alpha','Beta','Alpha']",
-        "explanation": "User 2 plays Alpha. New unique listener. 'Alpha' appears AGAIN in history (duplicate!)."
+        "state": "Alpha.listeners={1,2}, recent_plays=['Alpha','Beta','Alpha']",
+        "explanation": "User 2 plays Alpha"
       },
       {
         "step": 6,
         "action": "play_song(1, 1)",
-        "state": "listeners={1:{1,2},2:{1}}, playHistory=['Alpha','Beta','Alpha','Alpha']",
-        "explanation": "User 1 plays Alpha AGAIN. Set unchanged (already has user 1). But history grows - 'Alpha' appears 3rd time."
+        "state": "Alpha.listeners={1,2}, recent_plays=['Alpha','Beta','Alpha','Alpha']",
+        "explanation": "User 1 plays Alpha again (duplicate play, but unique listener unchanged)"
       },
       {
         "step": 7,
         "action": "get_recent_plays(3)",
-        "state": "Slice playHistory[-3:] = ['Beta','Alpha','Alpha'], then reverse",
-        "explanation": "Get last 3: ['Beta','Alpha','Alpha']. Reverse: ['Alpha','Alpha','Beta']. Return this."
+        "state": "Slice: ['Beta','Alpha','Alpha'], Reverse: ['Alpha','Alpha','Beta']",
+        "explanation": "Last 3 elements reversed for newest-first"
       }
     ],
     "final_output": "['Alpha', 'Alpha', 'Beta']"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Add 1 song, play once, get_recent_plays(1) \u2192 should return that song name",
-      "Play same song 3 times, get_recent_plays(3) \u2192 should return same song 3 times"
+      "get_recent_plays(0) should return []",
+      "get_recent_plays(1) after one play should return that song"
     ],
     "likely_bugs": [
-      "Storing song ID instead of name in history \u2192 wrong output type",
-      "Forgetting to reverse the result \u2192 wrong order (oldest-first instead of newest-first)",
-      "Off-by-one in slice indices \u2192 missing first/last element",
-      "Not appending to history on every play \u2192 missing duplicate plays"
+      "Forgetting to reverse - returns oldest-first instead of newest-first",
+      "Using ID instead of name in history",
+      "Appending to history before validation (invalid song adds ghost entry)"
     ],
     "recommended_logs_or_asserts": [
-      "assert len(playHistory) >= 0, 'History should never be negative'",
-      "Log playHistory after each play_song to verify appends",
-      "Log the slice and reversed slice separately to debug order issues"
+      "assert len(recent_plays) == total_valid_plays",
+      "log f'After play: history length = {len(recent_plays)}'"
     ],
-    "how_to_localize": "1. Print playHistory after plays to verify it's growing correctly. 2. Print the slice before reversing. 3. Print final result. Compare at each stage to expected values."
+    "how_to_localize": "Print recent_plays after each play_song call. Verify length increases by 1 for valid plays, unchanged for invalid."
   },
   "edge_cases": [
     {
-      "case": "count > total plays",
-      "handling": "Use min(count, len(history)) to return all available",
-      "gotcha": "Don't throw an error or return empty - return partial results"
-    },
-    {
-      "case": "count = 0 or negative",
+      "case": "count = 0",
       "handling": "Return empty list immediately",
-      "gotcha": "Negative count should be treated same as zero, not as 'all'"
+      "gotcha": "Don't slice with [-0:] which gives full list!"
     },
     {
-      "case": "No plays recorded yet",
-      "handling": "Return empty list",
-      "gotcha": "Don't crash on empty list slice"
+      "case": "count > total plays",
+      "handling": "Python slice gracefully returns all available",
+      "gotcha": "Java needs Math.max(0, size-count) to avoid negative index"
     },
     {
-      "case": "Invalid song ID in play_song",
-      "handling": "Silently ignore (don't add to history)",
-      "gotcha": "Verify this doesn't crash OR add garbage to history"
+      "case": "No plays yet",
+      "handling": "Empty list, slice returns empty",
+      "gotcha": "Don't throw exception"
     },
     {
-      "case": "Same song played many times consecutively",
-      "handling": "Each play adds to history (duplicates allowed)",
-      "gotcha": "Don't accidentally deduplicate in Part 2"
+      "case": "Same song played multiple times",
+      "handling": "Each play appears separately in history",
+      "gotcha": "This is intentional - different from unique listeners"
+    },
+    {
+      "case": "Invalid song_id play attempt",
+      "handling": "Don't add to history (validation happens first)",
+      "gotcha": "Order of operations matters"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic recent plays - Example 1",
-      "input": "add_song(Alpha), add_song(Beta), play(1,1), play(2,1), play(1,2), play(1,1), get_recent_plays(3)",
+      "name": "Basic recent plays",
+      "input": "add(A), add(B), play(1,1), play(2,1), play(1,2), play(1,1), get_recent_plays(3)",
       "expected": "['Alpha', 'Alpha', 'Beta']",
-      "explanation": "Play order: Alpha\u2192Beta\u2192Alpha\u2192Alpha. Last 3 reversed: Alpha, Alpha, Beta"
+      "explanation": "Last 3 plays in reverse order"
     },
     {
-      "name": "Fewer plays than requested - Example 2",
-      "input": "add_song(Only), play(1,1), get_recent_plays(5)",
+      "name": "Request more than available",
+      "input": "add(Only), play(1,1), get_recent_plays(5)",
       "expected": "['Only']",
-      "explanation": "Only 1 play exists, return just that one"
+      "explanation": "Only 1 play exists, return that"
     },
     {
       "name": "Empty history",
-      "input": "add_song(Test), get_recent_plays(3)",
+      "input": "add(A), get_recent_plays(3)",
       "expected": "[]",
-      "explanation": "No plays recorded, return empty list"
+      "explanation": "No plays yet"
     },
     {
-      "name": "Single play request",
-      "input": "add_song(A), add_song(B), play(1,1), play(2,1), get_recent_plays(1)",
-      "expected": "['B']",
-      "explanation": "Only the most recent play (Beta)"
-    },
-    {
-      "name": "Consecutive duplicates",
-      "input": "add_song(Repeat), play(1,1), play(1,1), play(1,1), get_recent_plays(3)",
-      "expected": "['Repeat', 'Repeat', 'Repeat']",
-      "explanation": "Same song 3 times in a row - all appear in result"
+      "name": "Invalid play doesn't affect history",
+      "input": "add(A), play(999,1), get_recent_plays(1)",
+      "expected": "[]",
+      "explanation": "Invalid song ID doesn't add to history"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Storing song IDs instead of names in history",
-      "why_wrong": "Output requires names; would need extra lookup on every retrieval",
-      "correct_approach": "Store song name directly when recording play",
-      "code_example_wrong": "self._play_history.append(song_id)  # WRONG",
-      "code_example_correct": "self._play_history.append(self._songs[song_id])  # CORRECT"
+      "mistake": "Storing song ID instead of name in history",
+      "why_wrong": "Requires extra lookup in get_recent_plays, slows down query",
+      "correct_approach": "Store name directly since it's immutable",
+      "code_example_wrong": "self.recent_plays.append(song_id)",
+      "code_example_correct": "self.recent_plays.append(song.name)"
     },
     {
       "mistake": "Forgetting to reverse the result",
-      "why_wrong": "List stores oldest-first, but output needs newest-first",
-      "correct_approach": "Always reverse the slice before returning",
-      "code_example_wrong": "return self._play_history[-count:]  # WRONG ORDER",
-      "code_example_correct": "return self._play_history[-count:][::-1]  # CORRECT"
+      "why_wrong": "Returns oldest-first instead of newest-first",
+      "correct_approach": "Slice then reverse, or iterate backwards",
+      "code_example_wrong": "return self.recent_plays[-count:]",
+      "code_example_correct": "return self.recent_plays[-count:][::-1]"
     },
     {
-      "mistake": "Not recording plays for repeat user-song combinations",
-      "why_wrong": "Part 2 requires ALL plays including duplicates",
-      "correct_approach": "Always append to history regardless of Set update result",
-      "code_example_wrong": "if user_id not in self._listeners[song_id]:\\n    self._play_history.append(...)  # WRONG",
-      "code_example_correct": "self._listeners[song_id].add(user_id)\\nself._play_history.append(...)  # ALWAYS append"
-    },
-    {
-      "mistake": "Modifying Part 1's unique listener logic",
-      "why_wrong": "Part 1 functionality should still work correctly",
-      "correct_approach": "Only ADD new code, don't change existing logic",
-      "code_example_wrong": "# Replacing Set with List for listeners",
-      "code_example_correct": "# Keep Set for listeners, ADD separate List for history"
+      "mistake": "Adding to history before validation",
+      "why_wrong": "Ghost entries for invalid song IDs",
+      "correct_approach": "Append only after confirming song exists",
+      "code_example_wrong": "self.recent_plays.append(name); if song_id not in self.songs: return",
+      "code_example_correct": "if song_id not in self.songs: return; self.recent_plays.append(song.name)"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by identifying what's DIFFERENT in Part 2 - the need for duplicates and order. Explain why a List (not Set) is needed for history. Show the minimal code change required.",
+    "how_to_present": "Start by noting the key difference: Part 1 tracks UNIQUE listeners (Set), Part 2 tracks ALL plays (List). Explain that these serve different purposes and need separate data structures.",
     "what_to_mention": [
-      "Key insight: Sets deduplicate, Lists preserve order and allow duplicates",
-      "Store names directly to avoid lookups",
-      "Reverse order for most-recent-first",
-      "Part 1 logic unchanged - just added new tracking"
+      "Why a simple List is sufficient (maintains insertion order)",
+      "Why storing names is better than IDs (avoids lookup)",
+      "How Python slice handles edge cases gracefully"
     ],
-    "time_allocation": "2 min understand requirements, 3 min explain approach, 5 min implement, 2 min test",
+    "time_allocation": "2 min understand, 5 min implement, 3 min test",
     "if_stuck": [
-      "Think: what data structure allows duplicates in order? \u2192 List",
-      "Think: what should be stored - IDs or names? \u2192 names (output format)",
-      "Think: list stores oldest-first, output needs newest-first \u2192 reverse"
+      "Think about what data structure maintains order with duplicates",
+      "Consider: where do you get the song name? From the Song object after lookup"
     ]
   },
-  "connection_to_next_part": "Part 2's play history opens the door for time-based analytics. Part 3 might add timestamps, user-specific history, or sliding window analytics. The List structure can be extended to store tuples of (songName, timestamp, userId) if needed.",
+  "connection_to_next_part": "This establishes a pattern of maintaining parallel data structures for different views of the same data. Part 3 might add user-specific history, time-based filtering, or bounded history (keeping only last N plays).",
   "communication_script": {
-    "transition_from_previous": "Great, Part 1's unique listener tracking works. For Part 2, I need to add play history that allows duplicates. The key insight is that Sets won't work here - I need a List to preserve order AND allow the same song to appear multiple times.",
-    "explaining_changes": "The main change is adding a playHistory list. In play_song, after updating the listener set, I'll also append the song NAME to this list. For get_recent_plays, I slice from the end and reverse.",
+    "transition_from_previous": "Great, Part 1 handles unique listeners. For Part 2, I need to track the actual play sequence with duplicates. This is fundamentally different - a Set won't work because I need to preserve order and duplicates.",
+    "explaining_changes": "I'll add a simple list that appends the song name on every valid play. For recent plays, I just slice from the end and reverse.",
     "while_extending_code": [
-      "Adding playHistory list to __init__...",
-      "Modifying play_song to also append song name to history...",
-      "Now implementing get_recent_plays - I'll slice and reverse..."
+      "Adding recent_plays list in init...",
+      "Modifying play_song to append after validation...",
+      "New method slices and reverses..."
     ],
-    "after_completing": "Part 2 is done. play_song remains O(1) since list append is amortized constant. get_recent_plays is O(count) - just slicing and reversing. Part 1's unique listener feature still works unchanged. Ready for Part 3?"
+    "after_completing": "Now we track both unique listeners AND full play history. play_song is still O(1), get_recent_plays is O(count). Ready for the next part?"
   },
   "time_milestones": {
-    "time_budget": "8-12 minutes for this part",
-    "by_2_min": "Understand the new requirement: duplicates allowed, reverse chronological order, return names not IDs",
-    "by_5_min": "Approach explained: add List for history, modify play_song, implement get_recent_plays",
-    "by_10_min": "Implementation complete, traced through example to verify",
-    "warning_signs": "If stuck on data structure choice by 3 min, recall: Set=unique, List=ordered+duplicates"
+    "time_budget": "8-10 minutes for this part",
+    "by_2_min": "Understand that we need a new List for play history, separate from the Set",
+    "by_5_min": "Have the list added and play_song modified",
+    "by_8_min": "get_recent_plays implemented and tested",
+    "warning_signs": "If confused about List vs Set purpose at 3 min, clarify the difference immediately"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If Part 1 has bugs affecting Part 2, fix them first. Say: 'I notice an issue with the song lookup. Let me fix that first before continuing.'",
-    "if_new_requirement_unclear": "Ask: 'To clarify - should get_recent_plays return song names or IDs?' and 'If count is larger than history size, return partial results or error?'",
-    "if_running_behind": "Focus on getting basic get_recent_plays working with slice and reverse. Mention edge cases verbally even if not fully implemented."
+    "if_part_builds_wrong": "If Part 1 has a bug, fix it first. Say: 'Let me verify the song lookup works before adding history.'",
+    "if_new_requirement_unclear": "Ask: 'Just to confirm, duplicates are allowed in the history, and we return newest first?'",
+    "if_running_behind": "Focus on the core: add list, append in play_song, slice and reverse in getter. Edge cases can be mentioned verbally."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing List vs Set trade-off",
-      "Choosing to store names directly to avoid lookups",
-      "Clean separation - only adding, not rewriting Part 1",
-      "Mentioning potential memory concerns with unbounded history",
-      "Proactively discussing thread-safety if applicable"
+      "Immediately recognizing Set vs List for different requirements",
+      "Mentioning that storing names avoids O(count) lookups",
+      "Proactively noting unbounded growth as a production concern",
+      "Suggesting bounded deque for memory-constrained scenarios"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Sliding Window / Recent History Tracking",
+    "pattern": "Parallel Data Structures for Different Views",
     "indicators": [
-      "\"recent\" or \"last N\" in requirements",
-      "Chronological order matters",
-      "Duplicates explicitly allowed",
-      "Reverse order output"
+      "Need both unique count AND ordered history",
+      "Different query patterns on same events"
     ],
     "similar_problems": [
-      "LC 346 - Moving Average from Data Stream",
-      "LC 933 - Number of Recent Calls",
-      "Browser history tracking",
-      "Undo/redo stacks"
+      "LRU Cache (HashMap + Doubly Linked List)",
+      "Twitter feed (user tweets + follower timeline)"
     ],
-    "template": "# Recent history pattern\\nhistory = []  # Append-only list\\n\\ndef add_event(event):\\n    history.append(event)\\n\\ndef get_recent(n):\\n    return history[-n:][::-1]  # Last n, reversed"
+    "template": "Maintain separate structures optimized for each query type; update all on write operations"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'duplicates ARE allowed', I immediately think...",
-      "why": "This rules out Set-based solutions. A List naturally allows duplicates."
+      "thought": "Part 1 uses Set for uniqueness. Part 2 needs duplicates and order.",
+      "why": "Set explicitly removes duplicates, so won't work for this"
     },
     {
       "step": 2,
-      "thought": "When I see 'reverse chronological order', I think...",
-      "why": "List stores in insertion order (oldest first). I'll need to reverse on retrieval."
+      "thought": "List maintains insertion order and allows duplicates.",
+      "why": "Perfect fit for 'recent plays' requirement"
     },
     {
       "step": 3,
-      "thought": "Store names vs IDs? Output is names, so...",
-      "why": "Store names directly to avoid map lookups on every retrieval."
+      "thought": "Store names not IDs to avoid lookup in get_recent_plays.",
+      "why": "Optimizes read path; names are immutable anyway"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you extend existing code cleanly without rewriting?",
-      "Do you recognize List vs Set trade-offs?",
-      "Can you handle slicing and reversing correctly?",
-      "Do you preserve Part 1 functionality?"
+      "Can you identify when Set vs List is appropriate?",
+      "Do you understand that different queries need different data structures?",
+      "Can you extend cleanly without breaking Part 1?"
     ],
     "bonus_points": [
-      "Mentioning unbounded memory growth concern",
-      "Discussing if we should use Deque for bounded history",
-      "Clean code organization with minimal changes"
+      "Mentioning amortized O(1) for list append",
+      "Noting potential memory growth",
+      "Clean slice + reverse idiom"
     ],
     "red_flags": [
-      "Rewriting Part 1 code unnecessarily",
-      "Using Set for history (loses duplicates)",
-      "Forgetting to reverse the output",
-      "Storing IDs instead of names"
+      "Trying to use the same Set for history",
+      "Breaking existing play_song logic",
+      "Not handling edge cases for count"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI for slice syntax if unsure (Python vs Java differences)",
-      "Let AI help with edge case handling boilerplate"
+      "Use AI for Python slice syntax if unsure",
+      "Let it help with Java's backwards iteration"
     ],
     "what_not_to_do": [
-      "Don't let AI change Part 1 code unnecessarily",
-      "Verify the slice/reverse logic yourself - common source of bugs"
+      "Don't blindly accept if it modifies existing working code",
+      "Verify the reverse order logic yourself"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping into code without acknowledging the new requirements",
-      "Not mentioning the key insight (List vs Set)"
+      "Not explaining WHY you need a new data structure",
+      "Jumping to code without planning"
     ],
     "technical": [
-      "Breaking Part 1 functionality",
-      "Wrong order in output (oldest-first instead of newest-first)",
-      "Deduplicating the history (opposite of requirement)"
+      "Modifying Song class unnecessarily",
+      "Using wrong data structure for ordered history"
     ],
     "communication": [
-      "Not explaining WHY you chose a List",
-      "Forgetting to test the new functionality with an example"
+      "Not mentioning how this differs from Part 1",
+      "Not testing the new method"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "get_recent_plays returns names in reverse chronological order?",
-      "Duplicates ARE included in history?",
-      "Handles count > history size gracefully?",
-      "Part 1's get_unique_listeners still works correctly?",
-      "Traced through the given example to verify?"
+      "Does get_recent_plays return newest-first order?",
+      "Does play_song still update unique listeners correctly?",
+      "Are edge cases (count=0, count>size) handled?",
+      "Is print_analytics still working?"
     ],
     "quick_code_review": [
-      "playHistory initialized in constructor",
-      "play_song appends to playHistory (not just updates listeners)",
-      "get_recent_plays slices from END and reverses",
-      "Edge cases handled (count <= 0, empty history)"
+      "List import added",
+      "recent_plays initialized in __init__",
+      "Append happens AFTER validation in play_song",
+      "Slice and reverse in get_recent_plays"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Bounded history size (e.g., last 1M plays) using deque with maxlen",
-      "Timestamp tracking for time-based analytics",
-      "User-specific history in addition to global",
-      "Persistence layer for history (database/cache)"
+      "Bounded history (e.g., last 10000 plays) using collections.deque(maxlen=N)",
+      "Logging for debugging play history",
+      "Metrics on history size"
     ],
-    "why_not_in_interview": "Focus on algorithmic correctness; mention these constraints verbally",
-    "how_to_mention": "Say: 'In production, I'd add a size limit to prevent unbounded memory growth. Could use a deque with maxlen or rotate old entries to cold storage.'"
+    "why_not_in_interview": "Focus on correctness first; mention these as production enhancements",
+    "how_to_mention": "Say: 'In production, I'd use a bounded deque to prevent unbounded memory growth.'"
   },
-  "generated_at": "2026-01-18T18:50:25.726459",
+  "generated_at": "2026-01-19T04:48:51.759964",
   "_meta": {
     "problem_id": "song_play_analytics",
     "part_number": 2,

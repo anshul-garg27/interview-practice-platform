@@ -4,62 +4,61 @@
   "category": "DSA/Trees",
   "estimated_time": "35-45 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic tree traversal problem extending the binary tree LCA concept to N-ary trees. The key difference is handling multiple children instead of just left/right. When I see 'find LCA', I immediately think of post-order DFS traversal where we bubble up information from children to parents.",
-    "pattern_recognition": "**Pattern: Post-order DFS + Information Propagation**\n\nThis uses the 'bubble up' pattern where we:\n1. Process all children first (post-order)\n2. Aggregate results from children\n3. Make decision at current node based on aggregated info\n\nSimilar to: LC 236 (Binary Tree LCA), LC 1676 (LCA IV), LC 559 (Max Depth N-ary)",
+    "first_impressions": "This is a classic tree traversal problem extending the binary tree LCA (LC 236) to N-ary trees. The key difference is handling arbitrary numbers of children instead of just left/right. This is a **depth-first search** problem where we propagate information upward through recursion.",
+    "pattern_recognition": "**DFS + Post-order Traversal + Bottom-up Propagation**. This is the standard LCA pattern: recursively search children, then combine results at each node to determine if current node is the LCA. Key insight: a node is the LCA when (1) it IS one target and another is in its subtree, OR (2) targets are in different subtrees of this node.",
     "key_constraints": [
-      "2 \u2264 n \u2264 10\u2075 nodes - Must be O(n) solution, can't afford O(n\u00b2)",
-      "Both p and q guaranteed to exist - No need to validate if they're in tree",
-      "All node values unique - Can identify nodes by value or reference",
-      "A node can be ancestor of itself - Critical edge case to handle",
-      "Children per node unbounded - Must iterate, not assume left/right"
+      "2 \u2264 n \u2264 10\u2075 - Tree can be large, need O(n) algorithm",
+      "Both p and q guaranteed to exist - No need to handle 'not found' cases",
+      "Node can be ancestor of itself - Critical edge case: if p is ancestor of q, return p",
+      "Unique node values - Simplifies debugging but comparison is by reference, not value",
+      "N-ary tree (variable children) - Must iterate over children list, not just left/right"
     ],
     "clarifying_questions": [
-      "**Are p and q always different nodes?** - Yes, p \u2260 q is guaranteed. Important for edge case handling.",
-      "**Can the tree be empty?** - No, n \u2265 2, so at least root + 1 node exist.",
-      "**Should I compare by reference or value?** - Reference (node == p), but values are unique so both work.",
-      "**Is the tree balanced?** - Not guaranteed. Height h can be up to n (linear chain).",
-      "**Can p be an ancestor of q?** - Yes! This is a critical case. LCA(p, q) = p in this scenario.",
-      "**Are there any cycles?** - No, it's a valid tree structure."
+      "Are p and q always distinct? - Yes per problem statement, simplifies edge cases",
+      "Should I compare nodes by reference or value? - By reference (standard for tree problems)",
+      "Can the tree be empty? - No, minimum 2 nodes guaranteed",
+      "Is the tree balanced? - Not guaranteed, affects space complexity (O(h) could be O(n))",
+      "Can children list be null or should I assume empty list? - Assume empty list ([] not null)",
+      "Should I modify the tree or just read? - Read-only traversal",
+      "Are node references passed in (not values)? - Yes, we receive actual Node objects"
     ],
     "edge_cases_to_consider": [
-      "**p is ancestor of q** - LCA is p itself",
-      "**p and q are siblings** - LCA is their parent",
-      "**p and q in different subtrees of root** - LCA is root",
-      "**Deep tree (linear chain)** - Tests recursion depth/stack",
-      "**Wide tree (all children of root)** - Tests iterating through many children",
-      "**p or q is the root** - LCA is root"
+      "p is direct ancestor of q (e.g., LCA(2, 5) where 5 is child of 2)",
+      "p and q are siblings (same parent)",
+      "p and q are cousins (different parents, same grandparent)",
+      "p and q are at very different depths",
+      "One of p or q is the root itself",
+      "Linear tree (each node has exactly one child) - tests worst-case space"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Find LCA of p and q in O(n) time",
-        "how_met": "Single DFS traversal visits each node at most once",
+        "requirement": "Find LCA of two nodes p and q in N-ary tree",
+        "how_met": "DFS recursively searches all children, returns LCA when both targets found in subtree",
         "gotchas": [
-          "Don't call DFS multiple times on same subtree",
-          "Early termination when LCA found"
+          "Must handle p being ancestor of q by returning p immediately when found"
         ]
       },
       {
-        "requirement": "O(h) space where h is tree height",
-        "how_met": "Recursion stack depth = tree height, no auxiliary data structures",
+        "requirement": "O(n) time complexity",
+        "how_met": "Single DFS pass visiting each node at most once",
         "gotchas": [
-          "Very deep trees may cause stack overflow in some languages"
+          "Don't call DFS multiple times on same subtree"
         ]
       },
       {
-        "requirement": "Handle case where node is ancestor of itself",
-        "how_met": "When we find p or q, we return immediately - if the other target is in subtree, current becomes LCA",
+        "requirement": "O(h) space complexity",
+        "how_met": "Recursion depth is at most tree height h",
         "gotchas": [
-          "Don't continue searching subtree after finding target - it's already handled"
+          "For unbalanced tree, h could be n (worst case O(n) space)"
         ]
       },
       {
-        "requirement": "Handle N-ary structure (variable number of children)",
-        "how_met": "Iterate through children list instead of fixed left/right",
+        "requirement": "Node can be ancestor of itself",
+        "how_met": "When we find p or q, we return it immediately - if other target is in subtree, this node IS the LCA",
         "gotchas": [
-          "Don't assume exactly 2 children",
-          "Empty children list is valid (leaf node)"
+          "Don't continue searching subtree after finding a target"
         ]
       }
     ],
@@ -68,429 +67,312 @@
         "operation": "lowestCommonAncestor",
         "target": "O(n)",
         "achieved": "O(n)",
-        "why": "Visit each node exactly once in worst case"
+        "why": "Visit each node at most once in DFS traversal"
       }
     ],
     "non_goals": [
-      "Finding LCA of more than 2 nodes (Part 2 follow-up)",
-      "Using parent pointers (Part 3 follow-up)",
-      "Computing distance between nodes (Part 4 follow-up)"
+      "Parent pointers - Part 3 handles this variant",
+      "Multiple target nodes - Part 2 handles K nodes",
+      "Path distance calculation - Part 4 handles this",
+      "Building the tree - Assume tree is already constructed"
     ]
   },
   "assumptions": [
-    "Tree is valid and connected (no cycles, single root)",
-    "Node references are valid (not null/None for p and q)",
-    "Both p and q exist in the tree (guaranteed by problem)",
-    "Comparing nodes by reference (node == p) is valid"
+    "p and q are valid references to nodes that exist in the tree (guaranteed by problem)",
+    "children is an empty list (not null) for leaf nodes",
+    "Node comparison uses reference equality (==), not value equality",
+    "Tree structure doesn't change during execution"
   ],
   "tradeoffs": [
     {
-      "decision": "Recursive DFS vs Iterative with explicit stack",
-      "chosen": "Recursive DFS",
-      "why": "Cleaner code, easier to reason about, matches tree structure naturally",
-      "alternative": "Iterative with stack",
-      "when_to_switch": "If tree is extremely deep (h > 10000) to avoid stack overflow"
+      "decision": "Single-pass DFS vs Path Finding approach",
+      "chosen": "Single-pass DFS",
+      "why": "More elegant, doesn't require storing paths, same complexity",
+      "alternative": "Find paths to p and q, compare paths",
+      "when_to_switch": "Path finding is useful if you also need the actual paths for other purposes"
     },
     {
-      "decision": "Single pass vs Two-pass path finding",
-      "chosen": "Single pass bubble-up",
-      "why": "O(n) time, O(h) space. Path finding would need O(h) extra space for storing paths",
-      "alternative": "Find paths then compare",
-      "when_to_switch": "If we need the actual path to LCA (not just the node)"
+      "decision": "Early termination optimization",
+      "chosen": "Standard recursion without global state",
+      "why": "Cleaner code, easier to understand in interview, minimal overhead",
+      "alternative": "Use global flag or exception to stop once LCA found",
+      "when_to_switch": "For very large trees where average LCA is found early"
     },
     {
-      "decision": "Early termination vs Complete traversal",
-      "chosen": "Early termination when both targets found",
-      "why": "Can return as soon as we have enough info, potentially faster",
-      "alternative": "Always complete traversal",
-      "when_to_switch": "If we need to collect additional information about the tree"
+      "decision": "List vs counter for tracking found children",
+      "chosen": "Simple counter with early return",
+      "why": "More efficient (O(1) space per call), cleaner logic",
+      "alternative": "Collect all non-null results in list",
+      "when_to_switch": "Never - counter is strictly better"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "Single responsibility: DFS function only finds LCA, doesn't modify tree",
-      "Clear return contract: Returns LCA if both found in subtree, target node if one found, null if none",
-      "No side effects: Function is pure, doesn't modify any state"
+      "Single recursive function handles all cases cleanly",
+      "Bottom-up information propagation is the key pattern",
+      "Early return optimization when possible"
     ],
-    "why_this_design_scales": "The bubble-up pattern generalizes well:\n- Part 2 (K nodes): Track count of found nodes instead of just boolean\n- Part 3 (Parent pointers): Can use two-pointer technique\n- Part 4 (Distance): Can compute depth during traversal",
+    "why_this_design_scales": "The DFS pattern naturally extends to K nodes (Part 2) by counting found nodes instead of just checking for 2. Parent pointers (Part 3) just changes traversal direction. Distance calculation (Part 4) builds on LCA result.",
     "expected_followup_hooks": [
-      "The found_count variable can track more than 2 nodes for K-node LCA",
-      "Return type could be extended to include depth for distance calculation",
-      "Path reconstruction can be added by storing parent references"
+      "The count of found targets can be generalized to K targets",
+      "Path reconstruction can be added alongside LCA finding",
+      "The recursive structure supports adding parent pointer traversal"
     ],
     "invariants": [
-      "If DFS returns non-null, the target(s) exist in that subtree",
-      "If DFS returns null, neither p nor q exist in that subtree",
-      "LCA is found exactly once during traversal"
+      "If node is returned, it is either a target node or the LCA",
+      "Once LCA is found (count >= 2), it propagates unchanged to root",
+      "If both targets are in tree, exactly one node will have count >= 2"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n              N-ary Tree LCA Problem\n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n                      1 (root)\n                 \u2571    \u2502    \u2572    \u2572\n               2      3      4     5\n             \u2571 \u2502 \u2572          \u2502\n            6  7  8         9\n               \u2502         \u2571  \u2502  \u2572\n              10       11  12  13\n    \n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    Query: LCA(6, 8) = ?\n    \n    Step 1: DFS reaches 6 \u2192 found p, return 6\n    Step 2: DFS reaches 7, 10 \u2192 nothing found\n    Step 3: DFS reaches 8 \u2192 found q, return 8\n    Step 4: At node 2: two children returned non-null!\n            \u2192 Node 2 is the LCA \u2713\n    \n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    Query: LCA(10, 9) = ?\n    \n         Node 10 is under 7 \u2192 2's subtree\n         Node 9 is under 5's subtree\n         Different branches from root!\n         \u2192 LCA is root (node 1) \u2713\n```",
-    "data_structure_state": "```\n    DFS Call Stack Evolution for LCA(6, 8):\n    \n    Time    Call Stack              Return Value Propagation\n    \u2500\u2500\u2500\u2500    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500              \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    t=0     [1]                     -\n    t=1     [1, 2]                  -\n    t=2     [1, 2, 6]               -\n    t=3     [1, 2]                  \u2190 6 returns node(6)\n    t=4     [1, 2, 7]               -\n    t=5     [1, 2, 7, 10]           -\n    t=6     [1, 2, 7]               \u2190 10 returns null\n    t=7     [1, 2]                  \u2190 7 returns null\n    t=8     [1, 2, 8]               -\n    t=9     [1, 2]                  \u2190 8 returns node(8)\n    t=10    [1]                     \u2190 2 returns node(2)  \u2605LCA FOUND\u2605\n    t=11    []                      \u2190 1 returns node(2)\n    \n    Note: After t=10, we found LCA. Early termination!\n```",
+    "problem_visualization": "```\n                    N-ary Tree LCA Visualization\n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n                            1 (root)\n                    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n                    \u2502       \u2502       \u2502       \u2502\n                    2       3       4       5\n                 \u250c\u2500\u2500\u253c\u2500\u2500\u2510            \u2502\n                 \u2502  \u2502  \u2502            \u2502\n                 6  7  8            9\n                    \u2502          \u250c\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2510\n                    \u2502          \u2502         \u2502\n                   10         11        12\n    \n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    LCA Query Examples:\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  LCA(6, 8) = 2                                      \u2502\n    \u2502                                                     \u2502\n    \u2502         [2] \u2190 LCA (both targets in my subtree)     \u2502\n    \u2502      \u250c\u2500\u2500\u253c\u2500\u2500\u2510                                        \u2502\n    \u2502     [6] 7 [8]                                       \u2502\n    \u2502      \u2191     \u2191                                        \u2502\n    \u2502      p     q                                        \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  LCA(6, 9) = 1                                      \u2502\n    \u2502                                                     \u2502\n    \u2502            [1] \u2190 LCA (targets in different subtrees)\u2502\n    \u2502      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2510                                \u2502\n    \u2502      2      ...    5                                \u2502\n    \u2502      \u2502             \u2502                                \u2502\n    \u2502     [6]           [9]                               \u2502\n    \u2502      \u2191             \u2191                                \u2502\n    \u2502      p             q                                \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  LCA(2, 10) = 2                                     \u2502\n    \u2502                                                     \u2502\n    \u2502     [2] \u2190 LCA (p is ancestor of q)                  \u2502\n    \u2502      \u2502                                              \u2502\n    \u2502      7    (2 IS p, so return immediately)           \u2502\n    \u2502      \u2502    (10 is in 2's subtree, so LCA = 2)        \u2502\n    \u2502    [10]                                             \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\n    DFS Call Stack Visualization for LCA(6, 8):\n    \n    Call Stack              Processing          Return Value\n    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    \n    dfs(1)                  Start at root       \u2190 waiting...\n    \u251c\u2500\u2500 dfs(2)              Check node 2        \u2190 waiting...\n    \u2502   \u251c\u2500\u2500 dfs(6)          6 == p? YES!        return 6\n    \u2502   \u251c\u2500\u2500 dfs(7)          7 == p/q? NO        \n    \u2502   \u2502   \u2514\u2500\u2500 dfs(10)     10 == p/q? NO       return null\n    \u2502   \u2502                   No children         return null\n    \u2502   \u2514\u2500\u2500 dfs(8)          8 == q? YES!        return 8\n    \u2502                       \n    \u2502   found = [6, 8]      count=2 \u2192 I am LCA! return 2\n    \u2502\n    \u251c\u2500\u2500 dfs(3)              No targets found    return null\n    \u251c\u2500\u2500 dfs(4)              No targets found    return null  \n    \u2514\u2500\u2500 dfs(5)              No targets found    return null\n    \n    found = [2]             count=1 \u2192 propagate return 2\n    \n    Final Answer: Node 2\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "**Base Cases Check**",
-        "visualization": "```\nif root is None \u2192 return None\nif root == p or root == q \u2192 return root\n\n    Check: Is this null? Is this p or q?\n           \u256d\u2500\u2500\u2500\u2500\u2500\u256e\n           \u2502  X  \u2502 \u2190 Current node\n           \u2570\u2500\u2500\u2500\u2500\u2500\u256f\n              \u2193\n         Is X == p? \u2192 Yes: return X\n         Is X == q? \u2192 Yes: return X\n         Is X None? \u2192 Yes: return None\n```",
-        "key_point": "Finding a target immediately returns it - handles ancestor-of-itself case"
+        "description": "**Base Case Check**: If current node is null, return null",
+        "visualization": "```\n    if root is None:\n        return None   # Nothing to search\n```",
+        "key_point": "Handles leaf children gracefully"
       },
       {
         "step": 2,
-        "description": "**Recursive Search in All Children**",
-        "visualization": "```\nfor child in root.children:\n    result = dfs(child, p, q)\n    if result: found_nodes.append(result)\n\n           \u256d\u2500\u2500\u2500\u2500\u2500\u256e\n           \u2502  X  \u2502 \u2190 Current node\n           \u2570\u2500\u2500\u252c\u2500\u2500\u256f\n         \u2571   \u2502    \u2572\n       \u2571     \u2502      \u2572\n    [C1]   [C2]   [C3] \u2190 Children\n      \u2193      \u2193      \u2193\n   dfs()   dfs()  dfs() \u2190 Recursive calls\n     \u2502       \u2502      \u2502\n     \u2193       \u2193      \u2193\n   res1    res2   res3 \u2190 Results (Node or None)\n```",
-        "key_point": "We collect ALL non-null results from children"
+        "description": "**Target Check**: If current node IS p or q, return it immediately",
+        "visualization": "```\n    if root == p or root == q:\n        return root   # Found target!\n    \n        [2] \u2190 if this is p, return immediately\n       / | \\\n      ?  ?  ?   \u2190 don't need to check subtree\n```",
+        "key_point": "Key insight: if other target is in subtree, THIS node is LCA. If not, we'll combine with sibling result higher up."
       },
       {
         "step": 3,
-        "description": "**Decision: Aggregate Results**",
-        "visualization": "```\nif len(found_nodes) >= 2:\n    return root  # Current node is LCA!\nelif len(found_nodes) == 1:\n    return found_nodes[0]  # Propagate up\nelse:\n    return None  # Neither target in this subtree\n\n    Case A: 2+ children found targets\n           \u256d\u2500\u2500\u2500\u2500\u2500\u256e\n           \u2502 LCA \u2502 \u2190 Return THIS node!\n           \u2570\u2500\u2500\u252c\u2500\u2500\u256f\n         \u2571        \u2572\n       [p]        [q]\n    \n    Case B: 1 child found target\n           \u256d\u2500\u2500\u2500\u2500\u2500\u256e\n           \u2502     \u2502 \u2190 Propagate child result\n           \u2570\u2500\u2500\u252c\u2500\u2500\u256f\n              \u2502\n           [p or q]\n    \n    Case C: No child found anything\n           \u256d\u2500\u2500\u2500\u2500\u2500\u256e\n           \u2502     \u2502 \u2190 Return None\n           \u2570\u2500\u2500\u252c\u2500\u2500\u256f\n              \u2502\n          [neither]\n```",
-        "key_point": "The magic happens when 2+ subtrees return non-null - that's our LCA!"
+        "description": "**Recursive Search**: Search ALL children, count non-null results",
+        "visualization": "```\n    count = 0\n    result = null\n    \n    for child in root.children:\n        found = dfs(child)    # Recursive call\n        if found is not null:\n            count++\n            result = found\n            if count >= 2:\n                return root   # Current node is LCA!\n```",
+        "key_point": "Early return when count reaches 2 - no need to check more children"
+      },
+      {
+        "step": 4,
+        "description": "**Propagate Result**: Return found node (or null if nothing found)",
+        "visualization": "```\n    count == 0: return null     # Neither target in my subtree\n    count == 1: return result   # One target found, propagate up\n    count >= 2: return root     # I am the LCA!\n```",
+        "key_point": "Single non-null result bubbles up until it meets another result"
       }
     ],
-    "dry_run_table": "| Step | Node | Is p/q? | Children Results | Action | Return Value |\n|------|------|---------|------------------|--------|-------------|\n| 1 | 1 | No | \u2192 recurse to children | Enter | - |\n| 2 | 2 | No | \u2192 recurse to children | Enter | - |\n| 3 | 6 | **p found!** | - | Return immediately | **Node(6)** |\n| 4 | 7 | No | \u2192 recurse to 10 | Enter | - |\n| 5 | 10 | No | No children | Return | None |\n| 6 | 7 | No | [None] | No targets | None |\n| 7 | 8 | **q found!** | - | Return immediately | **Node(8)** |\n| 8 | 2 | No | [6, None, 8] \u2192 [6, 8] | **2 found!** | **Node(2) \u2605** |\n| 9 | 1 | No | [2] | 1 found, propagate | Node(2) |\n| **Result** | | | | | **LCA = Node(2)** |"
+    "dry_run_table": "| Node | Is p/q? | Children Results | Count | Return | Explanation |\n|------|---------|------------------|-------|--------|-------------|\n| 6 | p=YES | - | - | **6** | Found p, return immediately |\n| 10 | NO | [] | 0 | null | Leaf, not target |\n| 7 | NO | [null] | 0 | null | Child returned null |\n| 8 | q=YES | - | - | **8** | Found q, return immediately |\n| **2** | NO | [6, null, 8] | **2** | **2** | count\u22652, **I am LCA!** |\n| 3 | NO | [] | 0 | null | No targets in subtree |\n| 4 | NO | [] | 0 | null | No targets in subtree |\n| 5 | NO | [...] | 0 | null | No targets in subtree |\n| 1 | NO | [2, null, null, null] | 1 | 2 | Propagate LCA up |"
   },
   "thinking_process": {
     "step_by_step": [
-      "**When I see 'LCA', I immediately think of post-order DFS** because we need information from children before making a decision at the current node",
-      "**The key insight is 'bubbling up'**: each subtree tells its parent whether it contains p, q, both, or neither",
-      "**For N-ary trees**, I need to iterate through `children` list instead of checking `left` and `right`",
-      "**When do I find the LCA?** When either: (1) current node IS p/q and the other is in subtree, or (2) different children contain p and q",
-      "**Early termination works** because once we find one target, returning it means 'target exists in my subtree' - no need to search further in that subtree",
-      "**The 'ancestor of itself' case is elegant**: if current == p, return p immediately. If q is in subtree, p is the LCA. If not, p propagates up to find q elsewhere"
+      "When I see 'LCA in a tree', I immediately think of the classic binary tree LCA pattern using DFS and post-order traversal",
+      "The key difference here is N-ary: instead of checking left/right, I need to iterate over all children",
+      "The fundamental insight: the LCA is the **deepest** node where targets are in **different subtrees** (or one is the node itself)",
+      "For recursion, I ask: 'What information do I need from my children?' \u2192 Whether each subtree contains a target",
+      "If I find p or q, I return it immediately - this works because if the OTHER target is in my subtree, I'm already the LCA",
+      "At each node, I count how many children found targets. If count >= 2, I'm the LCA. If count == 1, propagate that result up",
+      "The 'count >= 2' check is the magic moment: two different subtrees each contain one target, so I must be their common ancestor"
     ],
-    "key_insight": "**The LCA is the first (deepest) node where targets 'meet' coming up from different subtrees.** When DFS backtracks, it carries information about which target(s) exist below. The node where two different branches each contain a target is the LCA.",
-    "why_this_works": "Post-order traversal guarantees we process all descendants before the current node. By collecting which children found targets, we can identify the exact node where p and q 'converge' - this must be their LCA by definition, as it's the deepest such node."
+    "key_insight": "**A node is the LCA when it's the first node (bottom-up) where both targets are accounted for** - either by being one target with the other in its subtree, or by having targets in two different child subtrees. The recursive nature ensures we find the DEEPEST such node.",
+    "why_this_works": "The algorithm works because of **bottom-up propagation**: we first fully explore subtrees, then combine results. When a node receives non-null from multiple children, those targets must be in different subtrees, making this node their LCA. When a target is found, returning it immediately handles the 'ancestor of itself' case perfectly."
   },
   "approaches": [
     {
       "name": "Brute Force: Path Finding",
-      "description": "Find the path from root to p, find path from root to q, then compare paths to find the last common node.",
-      "pseudocode": "def find_path(root, target, path):\n    if root is None: return False\n    path.append(root)\n    if root == target: return True\n    for child in root.children:\n        if find_path(child, target, path):\n            return True\n    path.pop()  # backtrack\n    return False\n\ndef lca(root, p, q):\n    path_p, path_q = [], []\n    find_path(root, p, path_p)\n    find_path(root, q, path_q)\n    lca = None\n    for i in range(min(len(path_p), len(path_q))):\n        if path_p[i] == path_q[i]:\n            lca = path_p[i]\n        else:\n            break\n    return lca",
-      "time_complexity": "O(n) - two traversals + path comparison",
-      "space_complexity": "O(h) for each path = O(h) total",
+      "description": "Find the path from root to p and root to q separately, then compare paths to find the last common node.",
+      "pseudocode": "def lca_brute_force(root, p, q):\n    path_to_p = find_path(root, p)  # [root, ..., p]\n    path_to_q = find_path(root, q)  # [root, ..., q]\n    \n    lca = root\n    for i in range(min(len(path_to_p), len(path_to_q))):\n        if path_to_p[i] == path_to_q[i]:\n            lca = path_to_p[i]\n        else:\n            break\n    return lca",
+      "time_complexity": "O(n) - two traversals to find paths, O(h) to compare",
+      "space_complexity": "O(h) for storing paths",
       "pros": [
-        "Intuitive to understand",
-        "Paths can be reused for other queries",
-        "Easy to debug"
+        "Conceptually simple",
+        "Easy to debug - can print paths",
+        "Paths useful for distance calculation"
       ],
       "cons": [
-        "Two passes instead of one",
-        "Stores entire paths",
-        "More code complexity"
+        "Two traversals of tree",
+        "Extra space for storing paths",
+        "Less elegant than single-pass"
       ],
-      "when_to_use": "When you need the actual paths, not just the LCA. Good for interviews if struggling with single-pass."
+      "when_to_use": "When you also need the actual paths, or for Part 4 (distance calculation)"
     },
     {
-      "name": "Optimal: Single-Pass DFS with Bubble-Up",
-      "description": "Single DFS traversal that returns found targets, identifying LCA when two different subtrees each contain a target.",
-      "pseudocode": "def lca(root, p, q):\n    if root is None: return None\n    if root == p or root == q: return root\n    \n    found = []\n    for child in root.children:\n        result = lca(child, p, q)\n        if result:\n            found.append(result)\n    \n    if len(found) >= 2: return root  # LCA!\n    if len(found) == 1: return found[0]  # Propagate\n    return None  # Not found",
+      "name": "Optimal: Single-Pass DFS with Bottom-Up Propagation",
+      "description": "Single DFS that returns found targets upward. A node is the LCA when it's the first to see both targets.",
+      "pseudocode": "def lca_optimal(root, p, q):\n    if root is None:\n        return None\n    if root == p or root == q:\n        return root  # Found target!\n    \n    count = 0\n    result = None\n    for child in root.children:\n        found = lca_optimal(child, p, q)\n        if found:\n            count += 1\n            result = found\n            if count >= 2:\n                return root  # I am LCA!\n    \n    return result  # null if 0, single result if 1",
       "time_complexity": "O(n) - visit each node once",
-      "space_complexity": "O(h) - recursion stack only",
+      "space_complexity": "O(h) - recursion stack depth",
       "pros": [
-        "Single pass",
-        "Minimal space",
+        "Single traversal",
+        "No extra storage",
         "Elegant and clean",
-        "Handles all edge cases naturally"
+        "Easy to extend"
       ],
       "cons": [
-        "Slightly tricky to understand at first",
-        "Recursion depth limit for very deep trees"
+        "Slightly harder to understand initially",
+        "Can't easily extract paths"
       ],
-      "key_insight": "The return value encodes 3 states: (1) found neither (null), (2) found one (return that node), (3) found both (return LCA)"
+      "key_insight": "The LCA is the first node (bottom-up) to 'see' both targets. Early return when finding a target handles 'ancestor of itself' case."
     }
   ],
   "optimal_solution": {
-    "name": "Single-Pass DFS with Bubble-Up Pattern",
-    "explanation_md": "## Approach\n\nWe use a **post-order DFS** that visits all descendants before making a decision at each node.\n\n### Core Logic\n\nFor each node, we ask: **\"Do p and/or q exist in my subtree?\"**\n\n1. **Base case**: If node is null, return null (neither target here)\n2. **Target found**: If node IS p or q, return it immediately\n3. **Recurse**: Check all children, collect non-null results\n4. **Decision**:\n   - 2+ children returned non-null \u2192 **current node is LCA!**\n   - 1 child returned non-null \u2192 propagate that result up\n   - 0 children returned non-null \u2192 return null\n\n### Why This Works\n\n```\n           1\n        \u2571     \u2572\n       2       3\n      \u2571 \u2572\n     p   q\n```\n\nWhen we're at node 2, we get results from both p and q subtrees. This is the **first** (deepest) node where both are found \u2192 LCA!\n\n### Handling \"Ancestor of Itself\"\n\n```\n       p  \u2190 If p is here\n      \u2571\n     q    \u2190 and q is here\n```\n\nWhen we reach p, we return p immediately. The DFS for q happens *within* p's subtree, so p is correctly identified as LCA (since one child will return q, making count = 1, and p itself was returned at the top level).\n\nActually, the elegant part: when we find p and return immediately, if q is in p's subtree, we never actually count it separately - but that's fine because p IS the LCA!",
+    "name": "Single-Pass DFS with Bottom-Up Propagation",
+    "explanation_md": "## Approach\n\nThe optimal solution uses a **single DFS traversal** with **post-order processing** to find the LCA.\n\n### Core Insight\n\nThe LCA is the **deepest node** where:\n1. The node IS one target AND the other target is in its subtree, OR\n2. The two targets are in **different child subtrees**\n\n### Why This Works\n\n**Case 1: Node is a target**\n```\n    [p] \u2190 We're here, this is p\n    / \\\n   ?   q \u2190 q is somewhere below\n```\nIf we find p, we return p immediately. If q is in p's subtree, then p is the LCA (a node can be its own ancestor). If q is elsewhere, p will propagate up and meet q's result at their common ancestor.\n\n**Case 2: Targets in different subtrees**\n```\n   [LCA] \u2190 Both children reported targets\n   /   \\\n  p     q\n```\nWhen a node receives non-null from multiple children, those targets must be in different subtrees. This node is their LCA.\n\n### Algorithm Flow\n1. **Base**: Return null for null nodes\n2. **Target Found**: Return immediately if current == p or q\n3. **Recurse**: Search all children, count non-null results\n4. **LCA Check**: If count >= 2, current node is LCA\n5. **Propagate**: Return the single found result (or null)",
     "data_structures": [
       {
-        "structure": "Recursion Call Stack",
-        "purpose": "O(h) space for tree traversal"
+        "structure": "Recursion stack",
+        "purpose": "DFS traversal, stores path from root to current node"
       },
       {
-        "structure": "Local list `found`",
-        "purpose": "Collect non-null results from children (max size = num children)"
+        "structure": "Integer counter",
+        "purpose": "Track how many children found targets (0, 1, or 2+)"
+      },
+      {
+        "structure": "Node reference",
+        "purpose": "Store last found result for propagation"
       }
     ],
     "algorithm_steps": [
-      "1. **Null check**: If root is null, return null",
-      "2. **Target check**: If root is p or q, return root immediately",
-      "3. **Recursive search**: For each child, call DFS recursively",
-      "4. **Collect results**: Store non-null results in a list",
-      "5. **LCA decision**: If 2+ results, return current node (it's LCA)",
-      "6. **Propagate**: If 1 result, return it; if 0, return null"
+      "1. If current node is null, return null (base case)",
+      "2. If current node IS p or q, return it immediately (target found)",
+      "3. Initialize count = 0 and result = null",
+      "4. For each child: recurse, if non-null increment count and store result",
+      "5. If count >= 2: return current node (this is the LCA!)",
+      "6. If count == 1: return the stored result (propagate up)",
+      "7. If count == 0: return null (no targets in this subtree)"
     ],
-    "why_decimal": "N/A - This is a tree traversal problem, not a numerical computation"
+    "why_early_return": "Returning immediately when finding a target is safe because: if the other target is in our subtree, we ARE the LCA. If not, we'll combine with the other result higher up. This elegantly handles the 'node is ancestor of itself' case."
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Lowest Common Ancestor in N-ary Tree",
-    "=====================================",
-    "Single-pass DFS solution using the bubble-up pattern.",
-    "",
-    "Time Complexity: O(n) where n = number of nodes",
-    "Space Complexity: O(h) where h = height of tree",
-    "\"\"\"",
     "from typing import List, Optional",
     "",
-    "",
     "class Node:",
-    "    \"\"\"N-ary tree node with value and variable number of children.\"\"\"",
-    "    ",
-    "    def __init__(self, val: int = 0, children: Optional[List['Node']] = None):",
-    "        \"\"\"",
-    "        Initialize an N-ary tree node.",
-    "        ",
-    "        Args:",
-    "            val: Integer value stored in the node",
-    "            children: List of child nodes (empty list for leaf nodes)",
-    "        \"\"\"",
+    "    \"\"\"N-ary tree node with arbitrary number of children.\"\"\"",
+    "    def __init__(self, val: int = 0, children: List['Node'] = None):",
     "        self.val = val",
-    "        self.children = children if children is not None else []",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        return f\"Node({self.val})\"",
-    "",
+    "        self.children = children if children else []",
     "",
     "class Solution:",
-    "    \"\"\"",
-    "    Solution for finding LCA in an N-ary tree.",
-    "    ",
-    "    Uses post-order DFS with bubble-up pattern to find the deepest",
-    "    node that has both p and q as descendants.",
-    "    \"\"\"",
-    "    ",
-    "    def lowest_common_ancestor(",
-    "        self,",
-    "        root: Optional[Node],",
-    "        p: Node,",
-    "        q: Node",
-    "    ) -> Optional[Node]:",
+    "    def lowest_common_ancestor(self, root: Node, p: Node, q: Node) -> Node:",
     "        \"\"\"",
-    "        Find the Lowest Common Ancestor of nodes p and q.",
-    "        ",
-    "        Args:",
-    "            root: Root node of the N-ary tree",
-    "            p: First target node (guaranteed to exist)",
-    "            q: Second target node (guaranteed to exist)",
-    "        ",
-    "        Returns:",
-    "            The LCA node of p and q, or None if tree is empty",
-    "        ",
-    "        Example:",
-    "            >>> #     1",
-    "            >>> #   / | \\\\",
-    "            >>> #  2  3  4",
-    "            >>> # /|\\\\",
-    "            >>> # 5 6 7",
-    "            >>> # LCA(5, 7) = 2",
-    "        ",
-    "        Time: O(n) where n = number of nodes",
-    "        Space: O(h) where h = tree height (recursion stack)",
+    "        Find LCA using single-pass DFS with bottom-up propagation.",
+    "        Key insight: LCA is first node (bottom-up) to see both targets.",
     "        \"\"\"",
-    "        # Base case: empty tree or null node",
+    "        # Base case: empty subtree",
     "        if root is None:",
     "            return None",
     "        ",
-    "        # If current node is one of the targets, return it",
-    "        # This handles the 'node is ancestor of itself' case",
+    "        # Found a target - return immediately",
+    "        # If other target is in subtree, this IS the LCA",
+    "        # If not, result propagates up to meet the other target",
     "        if root == p or root == q:",
     "            return root",
     "        ",
-    "        # Recursively search all children and collect results",
-    "        found_in_children: List[Node] = []",
+    "        # Search all children, track found targets",
+    "        count = 0",
+    "        result = None",
     "        ",
     "        for child in root.children:",
-    "            result = self.lowest_common_ancestor(child, p, q)",
-    "            if result is not None:",
-    "                found_in_children.append(result)",
-    "                # Optimization: if we found 2, no need to search more",
-    "                if len(found_in_children) == 2:",
-    "                    break",
+    "            found = self.lowest_common_ancestor(child, p, q)",
+    "            if found:",
+    "                count += 1",
+    "                result = found",
+    "                # Early termination: if 2+ found, current is LCA",
+    "                if count >= 2:",
+    "                    return root",
     "        ",
-    "        # Decision point: determine what to return",
-    "        if len(found_in_children) >= 2:",
-    "            # p and q are in different subtrees \u2192 current node is LCA!",
-    "            return root",
-    "        elif len(found_in_children) == 1:",
-    "            # Only one target found \u2192 propagate that result up",
-    "            return found_in_children[0]",
-    "        else:",
-    "            # Neither p nor q found in this subtree",
-    "            return None",
+    "        # Propagate: null if nothing found, single result otherwise",
+    "        return result",
     "",
     "",
-    "class TreeBuilder:",
-    "    \"\"\"Helper class to build N-ary trees for testing.\"\"\"",
+    "def build_tree_from_list(values: List) -> Optional[Node]:",
+    "    \"\"\"Build N-ary tree from nested list representation.\"\"\"",
+    "    if not values:",
+    "        return None",
     "    ",
-    "    @staticmethod",
-    "    def build_tree(values: List, children_map: dict) -> tuple:",
-    "        \"\"\"",
-    "        Build an N-ary tree from values and adjacency map.",
-    "        ",
-    "        Args:",
-    "            values: List of node values",
-    "            children_map: Dict mapping parent value to list of child values",
-    "        ",
-    "        Returns:",
-    "            Tuple of (root, node_map) where node_map maps values to nodes",
-    "        \"\"\"",
-    "        if not values:",
-    "            return None, {}",
-    "        ",
-    "        # Create all nodes",
-    "        node_map = {v: Node(v) for v in values}",
-    "        ",
-    "        # Connect children",
-    "        for parent_val, child_vals in children_map.items():",
-    "            parent_node = node_map.get(parent_val)",
-    "            if parent_node:",
-    "                parent_node.children = [node_map[cv] for cv in child_vals if cv in node_map]",
-    "        ",
-    "        root = node_map.get(values[0]) if values else None",
-    "        return root, node_map",
+    "    root = Node(values[0])",
+    "    if len(values) > 1:",
+    "        root.children = [build_tree_from_list(child) for child in values[1:]]",
+    "    return root",
     "",
     "",
-    "def print_tree(node: Node, level: int = 0, prefix: str = \"\") -> None:",
-    "    \"\"\"Print tree structure for debugging.\"\"\"",
-    "    if node is None:",
-    "        return",
-    "    print(f\"{prefix}{'\u2514\u2500\u2500 ' if level > 0 else ''}Node({node.val})\")",
-    "    for i, child in enumerate(node.children):",
-    "        is_last = (i == len(node.children) - 1)",
-    "        new_prefix = prefix + (\"    \" if level == 0 or is_last else \"\u2502   \")",
-    "        print_tree(child, level + 1, new_prefix)",
+    "def find_node(root: Node, val: int) -> Optional[Node]:",
+    "    \"\"\"Find node by value in tree.\"\"\"",
+    "    if root is None:",
+    "        return None",
+    "    if root.val == val:",
+    "        return root",
+    "    for child in root.children:",
+    "        found = find_node(child, val)",
+    "        if found:",
+    "            return found",
+    "    return None",
     "",
     "",
-    "def run_tests() -> None:",
-    "    \"\"\"Run comprehensive test cases.\"\"\"",
-    "    solution = Solution()",
-    "    ",
+    "if __name__ == '__main__':",
     "    print(\"=\" * 60)",
-    "    print(\"LOWEST COMMON ANCESTOR IN N-ARY TREE - TEST SUITE\")",
+    "    print(\"LCA in N-ary Tree - Test Cases\")",
     "    print(\"=\" * 60)",
     "    ",
-    "    # Test 1: Siblings under same parent",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 1: Siblings (5 and 7 under node 2)\")",
-    "    print(\"-\" * 60)",
-    "    #     1",
-    "    #   / | \\",
-    "    #  2  3  4",
-    "    # /|\\     |",
-    "    # 5 6 7   8",
-    "    values = [1, 2, 3, 4, 5, 6, 7, 8]",
-    "    children = {1: [2, 3, 4], 2: [5, 6, 7], 4: [8]}",
-    "    root, nodes = TreeBuilder.build_tree(values, children)",
+    "    # Build test tree:",
+    "    #         1",
+    "    #      /  |  \\",
+    "    #     2   3   4",
+    "    #    /|\\      |",
+    "    #   5 6 7     8",
     "    ",
-    "    print(\"Tree structure:\")",
-    "    print_tree(root)",
+    "    tree_data = [1, [2, [5], [6], [7]], [3], [4, [8]]]",
+    "    root = build_tree_from_list(tree_data)",
+    "    sol = Solution()",
     "    ",
-    "    p, q = nodes[5], nodes[7]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"\\nLCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    assert result == nodes[2], f\"Expected 2, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
+    "    # Test 1: Siblings",
+    "    p, q = find_node(root, 5), find_node(root, 7)",
+    "    lca = sol.lowest_common_ancestor(root, p, q)",
+    "    print(f\"\\nTest 1 - Siblings: LCA(5, 7) = {lca.val}\")",
+    "    print(\"  Expected: 2 (both are children of 2)\")",
+    "    assert lca.val == 2",
     "    ",
-    "    # Test 2: Root is LCA (nodes in different subtrees)",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 2: Different subtrees (6 and 8)\")",
-    "    print(\"-\" * 60)",
-    "    p, q = nodes[6], nodes[8]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"LCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    assert result == nodes[1], f\"Expected 1, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
+    "    # Test 2: Different subtrees (root is LCA)",
+    "    p, q = find_node(root, 6), find_node(root, 8)",
+    "    lca = sol.lowest_common_ancestor(root, p, q)",
+    "    print(f\"\\nTest 2 - Different subtrees: LCA(6, 8) = {lca.val}\")",
+    "    print(\"  Expected: 1 (6 under 2, 8 under 4, both under root)\")",
+    "    assert lca.val == 1",
     "    ",
     "    # Test 3: One is ancestor of other",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 3: Ancestor relationship (2 and 6)\")",
-    "    print(\"-\" * 60)",
-    "    p, q = nodes[2], nodes[6]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"LCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    print(\"(Node 2 is ancestor of 6, so LCA is 2)\")",
-    "    assert result == nodes[2], f\"Expected 2, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
+    "    # Extended tree with 9 under 5:",
+    "    #         1",
+    "    #      /  |  \\",
+    "    #     2   3   4",
+    "    #    /|\\",
+    "    #   5 6 7",
+    "    #   |",
+    "    #   9",
+    "    node5 = find_node(root, 5)",
+    "    node9 = Node(9)",
+    "    node5.children = [node9]",
     "    ",
-    "    # Test 4: Deep tree",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 4: Deep tree (linear chain)\")",
-    "    print(\"-\" * 60)",
-    "    # 1 -> 2 -> 3 -> 4 -> 5",
-    "    values = [1, 2, 3, 4, 5]",
-    "    children = {1: [2], 2: [3], 3: [4], 4: [5]}",
-    "    root, nodes = TreeBuilder.build_tree(values, children)",
-    "    print_tree(root)",
+    "    p, q = find_node(root, 2), find_node(root, 9)",
+    "    lca = sol.lowest_common_ancestor(root, p, q)",
+    "    print(f\"\\nTest 3 - Ancestor relationship: LCA(2, 9) = {lca.val}\")",
+    "    print(\"  Expected: 2 (2 is ancestor of 9)\")",
+    "    assert lca.val == 2",
     "    ",
-    "    p, q = nodes[3], nodes[5]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"\\nLCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    assert result == nodes[3], f\"Expected 3, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
-    "    ",
-    "    # Test 5: Wide tree (many children)",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 5: Wide tree (root with 5 children)\")",
-    "    print(\"-\" * 60)",
-    "    #       1",
-    "    #   / | | | \\",
-    "    #  2  3 4 5  6",
-    "    values = [1, 2, 3, 4, 5, 6]",
-    "    children = {1: [2, 3, 4, 5, 6]}",
-    "    root, nodes = TreeBuilder.build_tree(values, children)",
-    "    print_tree(root)",
-    "    ",
-    "    p, q = nodes[2], nodes[6]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"\\nLCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    assert result == nodes[1], f\"Expected 1, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
-    "    ",
-    "    # Test 6: Minimal tree (2 nodes)",
-    "    print(\"\\n\" + \"-\" * 60)",
-    "    print(\"Test 6: Minimal tree (just root and child)\")",
-    "    print(\"-\" * 60)",
-    "    values = [1, 2]",
-    "    children = {1: [2]}",
-    "    root, nodes = TreeBuilder.build_tree(values, children)",
-    "    print_tree(root)",
-    "    ",
-    "    p, q = nodes[1], nodes[2]",
-    "    result = solution.lowest_common_ancestor(root, p, q)",
-    "    print(f\"\\nLCA({p.val}, {q.val}) = {result.val if result else None}\")",
-    "    assert result == nodes[1], f\"Expected 1, got {result.val if result else None}\"",
-    "    print(\"\u2713 PASSED\")",
+    "    # Test 4: Cousins",
+    "    tree2 = build_tree_from_list([1, [2, [5], [6]], [3, [7], [8]], [4]])",
+    "    p, q = find_node(tree2, 5), find_node(tree2, 7)",
+    "    lca = sol.lowest_common_ancestor(tree2, p, q)",
+    "    print(f\"\\nTest 4 - Cousins: LCA(5, 7) = {lca.val}\")",
+    "    print(\"  Expected: 1 (5 under 2, 7 under 3)\")",
+    "    assert lca.val == 1",
     "    ",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"ALL TESTS PASSED! \u2713\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    run_tests()"
+    "    print(\"All tests passed! \u2713\")",
+    "    print(\"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
     "/**",
-    " * Lowest Common Ancestor in N-ary Tree",
-    " * =====================================",
-    " * Single-pass DFS solution using the bubble-up pattern.",
-    " *",
-    " * Time Complexity: O(n) where n = number of nodes",
-    " * Space Complexity: O(h) where h = height of tree",
-    " */",
-    "",
-    "/**",
-    " * N-ary tree node with value and variable number of children.",
+    " * N-ary tree node with arbitrary number of children.",
     " */",
     "class Node {",
     "    public int val;",
     "    public List<Node> children;",
     "    ",
     "    public Node() {",
-    "        this.children = new ArrayList<>();",
+    "        children = new ArrayList<>();",
     "    }",
     "    ",
     "    public Node(int val) {",
@@ -500,577 +382,445 @@
     "    ",
     "    public Node(int val, List<Node> children) {",
     "        this.val = val;",
-    "        this.children = children != null ? children : new ArrayList<>();",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return \"Node(\" + val + \")\";",
+    "        this.children = children;",
     "    }",
     "}",
     "",
-    "/**",
-    " * Solution for finding LCA in an N-ary tree.",
-    " * Uses post-order DFS with bubble-up pattern.",
-    " */",
     "class Solution {",
-    "    ",
     "    /**",
-    "     * Find the Lowest Common Ancestor of nodes p and q.",
-    "     *",
-    "     * @param root Root node of the N-ary tree",
-    "     * @param p    First target node (guaranteed to exist)",
-    "     * @param q    Second target node (guaranteed to exist)",
-    "     * @return The LCA node of p and q, or null if tree is empty",
-    "     *",
-    "     * Time: O(n) where n = number of nodes",
-    "     * Space: O(h) where h = tree height (recursion stack)",
+    "     * Find LCA using single-pass DFS with bottom-up propagation.",
+    "     * Key insight: LCA is first node (bottom-up) to see both targets.",
     "     */",
     "    public Node lowestCommonAncestor(Node root, Node p, Node q) {",
-    "        // Base case: empty tree or null node",
+    "        // Base case: empty subtree",
     "        if (root == null) {",
     "            return null;",
     "        }",
     "        ",
-    "        // If current node is one of the targets, return it",
-    "        // This handles the 'node is ancestor of itself' case",
+    "        // Found a target - return immediately",
+    "        // Handles 'ancestor of itself' case elegantly",
     "        if (root == p || root == q) {",
     "            return root;",
     "        }",
     "        ",
-    "        // Recursively search all children and collect results",
-    "        List<Node> foundInChildren = new ArrayList<>();",
+    "        // Search all children, track found targets",
+    "        int count = 0;",
+    "        Node result = null;",
     "        ",
     "        for (Node child : root.children) {",
-    "            Node result = lowestCommonAncestor(child, p, q);",
-    "            if (result != null) {",
-    "                foundInChildren.add(result);",
-    "                // Optimization: if we found 2, no need to search more",
-    "                if (foundInChildren.size() == 2) {",
-    "                    break;",
+    "            Node found = lowestCommonAncestor(child, p, q);",
+    "            if (found != null) {",
+    "                count++;",
+    "                result = found;",
+    "                // Early termination: 2+ means current is LCA",
+    "                if (count >= 2) {",
+    "                    return root;",
     "                }",
     "            }",
     "        }",
     "        ",
-    "        // Decision point: determine what to return",
-    "        if (foundInChildren.size() >= 2) {",
-    "            // p and q are in different subtrees -> current node is LCA!",
-    "            return root;",
-    "        } else if (foundInChildren.size() == 1) {",
-    "            // Only one target found -> propagate that result up",
-    "            return foundInChildren.get(0);",
-    "        } else {",
-    "            // Neither p nor q found in this subtree",
-    "            return null;",
-    "        }",
+    "        // Propagate: null if nothing, single result otherwise",
+    "        return result;",
     "    }",
     "}",
     "",
-    "/**",
-    " * Helper class for building test trees.",
-    " */",
-    "class TreeBuilder {",
+    "public class Main {",
+    "    public static Node buildTree() {",
+    "        // Build tree:",
+    "        //         1",
+    "        //      /  |  \\",
+    "        //     2   3   4",
+    "        //    /|\\      |",
+    "        //   5 6 7     8",
+    "        ",
+    "        Node node5 = new Node(5);",
+    "        Node node6 = new Node(6);",
+    "        Node node7 = new Node(7);",
+    "        Node node8 = new Node(8);",
+    "        ",
+    "        Node node2 = new Node(2, Arrays.asList(node5, node6, node7));",
+    "        Node node3 = new Node(3);",
+    "        Node node4 = new Node(4, Arrays.asList(node8));",
+    "        ",
+    "        return new Node(1, Arrays.asList(node2, node3, node4));",
+    "    }",
     "    ",
-    "    public static Map.Entry<Node, Map<Integer, Node>> buildTree(",
-    "            int[] values, Map<Integer, int[]> childrenMap) {",
-    "        ",
-    "        if (values == null || values.length == 0) {",
-    "            return new AbstractMap.SimpleEntry<>(null, new HashMap<>());",
+    "    public static Node findNode(Node root, int val) {",
+    "        if (root == null) return null;",
+    "        if (root.val == val) return root;",
+    "        for (Node child : root.children) {",
+    "            Node found = findNode(child, val);",
+    "            if (found != null) return found;",
     "        }",
-    "        ",
-    "        // Create all nodes",
-    "        Map<Integer, Node> nodeMap = new HashMap<>();",
-    "        for (int val : values) {",
-    "            nodeMap.put(val, new Node(val));",
-    "        }",
-    "        ",
-    "        // Connect children",
-    "        for (Map.Entry<Integer, int[]> entry : childrenMap.entrySet()) {",
-    "            Node parent = nodeMap.get(entry.getKey());",
-    "            if (parent != null) {",
-    "                for (int childVal : entry.getValue()) {",
-    "                    Node child = nodeMap.get(childVal);",
-    "                    if (child != null) {",
-    "                        parent.children.add(child);",
-    "                    }",
-    "                }",
-    "            }",
-    "        }",
-    "        ",
-    "        Node root = nodeMap.get(values[0]);",
-    "        return new AbstractMap.SimpleEntry<>(root, nodeMap);",
+    "        return null;",
     "    }",
-    "}",
-    "",
-    "/**",
-    " * Main class with test cases.",
-    " */",
-    "public class LowestCommonAncestorNary {",
     "    ",
     "    public static void main(String[] args) {",
-    "        Solution solution = new Solution();",
+    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"LCA in N-ary Tree - Test Cases\");",
+    "        System.out.println(\"============================================================\");",
     "        ",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"LOWEST COMMON ANCESTOR IN N-ARY TREE - TEST SUITE\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        Node root = buildTree();",
+    "        Solution sol = new Solution();",
     "        ",
-    "        // Test 1: Siblings under same parent",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"Test 1: Siblings (5 and 7 under node 2)\");",
-    "        System.out.println(\"-\".repeat(60));",
+    "        // Test 1: Siblings",
+    "        Node p = findNode(root, 5);",
+    "        Node q = findNode(root, 7);",
+    "        Node lca = sol.lowestCommonAncestor(root, p, q);",
+    "        System.out.println(\"\\nTest 1 - Siblings: LCA(5, 7) = \" + lca.val);",
+    "        System.out.println(\"  Expected: 2\");",
+    "        assert lca.val == 2;",
     "        ",
-    "        int[] values1 = {1, 2, 3, 4, 5, 6, 7, 8};",
-    "        Map<Integer, int[]> children1 = new HashMap<>();",
-    "        children1.put(1, new int[]{2, 3, 4});",
-    "        children1.put(2, new int[]{5, 6, 7});",
-    "        children1.put(4, new int[]{8});",
-    "        ",
-    "        var entry1 = TreeBuilder.buildTree(values1, children1);",
-    "        Node root1 = entry1.getKey();",
-    "        Map<Integer, Node> nodes1 = entry1.getValue();",
-    "        ",
-    "        Node p1 = nodes1.get(5);",
-    "        Node q1 = nodes1.get(7);",
-    "        Node result1 = solution.lowestCommonAncestor(root1, p1, q1);",
-    "        ",
-    "        System.out.println(\"LCA(5, 7) = \" + (result1 != null ? result1.val : null));",
-    "        assert result1 == nodes1.get(2) : \"Expected 2\";",
-    "        System.out.println(\"\u2713 PASSED\");",
-    "        ",
-    "        // Test 2: Root is LCA",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"Test 2: Different subtrees (6 and 8)\");",
-    "        System.out.println(\"-\".repeat(60));",
-    "        ",
-    "        Node p2 = nodes1.get(6);",
-    "        Node q2 = nodes1.get(8);",
-    "        Node result2 = solution.lowestCommonAncestor(root1, p2, q2);",
-    "        ",
-    "        System.out.println(\"LCA(6, 8) = \" + (result2 != null ? result2.val : null));",
-    "        assert result2 == nodes1.get(1) : \"Expected 1\";",
-    "        System.out.println(\"\u2713 PASSED\");",
+    "        // Test 2: Different subtrees",
+    "        p = findNode(root, 6);",
+    "        q = findNode(root, 8);",
+    "        lca = sol.lowestCommonAncestor(root, p, q);",
+    "        System.out.println(\"\\nTest 2 - Different subtrees: LCA(6, 8) = \" + lca.val);",
+    "        System.out.println(\"  Expected: 1\");",
+    "        assert lca.val == 1;",
     "        ",
     "        // Test 3: One is ancestor of other",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"Test 3: Ancestor relationship (2 and 6)\");",
-    "        System.out.println(\"-\".repeat(60));",
+    "        Node node9 = new Node(9);",
+    "        findNode(root, 5).children = Arrays.asList(node9);",
+    "        p = findNode(root, 2);",
+    "        q = findNode(root, 9);",
+    "        lca = sol.lowestCommonAncestor(root, p, q);",
+    "        System.out.println(\"\\nTest 3 - Ancestor: LCA(2, 9) = \" + lca.val);",
+    "        System.out.println(\"  Expected: 2\");",
+    "        assert lca.val == 2;",
     "        ",
-    "        Node p3 = nodes1.get(2);",
-    "        Node q3 = nodes1.get(6);",
-    "        Node result3 = solution.lowestCommonAncestor(root1, p3, q3);",
-    "        ",
-    "        System.out.println(\"LCA(2, 6) = \" + (result3 != null ? result3.val : null));",
-    "        System.out.println(\"(Node 2 is ancestor of 6, so LCA is 2)\");",
-    "        assert result3 == nodes1.get(2) : \"Expected 2\";",
-    "        System.out.println(\"\u2713 PASSED\");",
-    "        ",
-    "        // Test 4: Deep tree (linear chain)",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"Test 4: Deep tree (linear chain)\");",
-    "        System.out.println(\"-\".repeat(60));",
-    "        ",
-    "        int[] values4 = {1, 2, 3, 4, 5};",
-    "        Map<Integer, int[]> children4 = new HashMap<>();",
-    "        children4.put(1, new int[]{2});",
-    "        children4.put(2, new int[]{3});",
-    "        children4.put(3, new int[]{4});",
-    "        children4.put(4, new int[]{5});",
-    "        ",
-    "        var entry4 = TreeBuilder.buildTree(values4, children4);",
-    "        Node root4 = entry4.getKey();",
-    "        Map<Integer, Node> nodes4 = entry4.getValue();",
-    "        ",
-    "        Node p4 = nodes4.get(3);",
-    "        Node q4 = nodes4.get(5);",
-    "        Node result4 = solution.lowestCommonAncestor(root4, p4, q4);",
-    "        ",
-    "        System.out.println(\"LCA(3, 5) = \" + (result4 != null ? result4.val : null));",
-    "        assert result4 == nodes4.get(3) : \"Expected 3\";",
-    "        System.out.println(\"\u2713 PASSED\");",
-    "        ",
-    "        // Test 5: Wide tree",
-    "        System.out.println(\"\\n\" + \"-\".repeat(60));",
-    "        System.out.println(\"Test 5: Wide tree (root with 5 children)\");",
-    "        System.out.println(\"-\".repeat(60));",
-    "        ",
-    "        int[] values5 = {1, 2, 3, 4, 5, 6};",
-    "        Map<Integer, int[]> children5 = new HashMap<>();",
-    "        children5.put(1, new int[]{2, 3, 4, 5, 6});",
-    "        ",
-    "        var entry5 = TreeBuilder.buildTree(values5, children5);",
-    "        Node root5 = entry5.getKey();",
-    "        Map<Integer, Node> nodes5 = entry5.getValue();",
-    "        ",
-    "        Node p5 = nodes5.get(2);",
-    "        Node q5 = nodes5.get(6);",
-    "        Node result5 = solution.lowestCommonAncestor(root5, p5, q5);",
-    "        ",
-    "        System.out.println(\"LCA(2, 6) = \" + (result5 != null ? result5.val : null));",
-    "        assert result5 == nodes5.get(1) : \"Expected 1\";",
-    "        System.out.println(\"\u2713 PASSED\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"ALL TESTS PASSED! \u2713\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"\\n============================================================\");",
+    "        System.out.println(\"All tests passed!\");",
+    "        System.out.println(\"============================================================\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-10",
-      "section": "Module Docstring & Imports",
-      "explanation": "We import `List` and `Optional` for type hints. The docstring summarizes the problem and complexity upfront."
-    },
-    {
-      "lines": "13-28",
+      "lines": "1-8",
       "section": "Node Class Definition",
-      "explanation": "The `Node` class represents an N-ary tree node. Key difference from binary tree: `children` is a **list** that can have 0 to n elements, not just `left` and `right`."
+      "explanation": "The N-ary tree node has a value and a list of children. Unlike binary trees with `left` and `right`, we have a flexible `children` list that can hold any number of child nodes."
     },
     {
-      "lines": "31-42",
-      "section": "Solution Class & Method Signature",
-      "explanation": "Clean method signature with full type hints. The docstring includes an ASCII example - great for documentation and interviews."
+      "lines": "10-14",
+      "section": "Base Case",
+      "explanation": "If we reach a null node (empty subtree), return null. This handles leaf nodes' children naturally."
     },
     {
-      "lines": "57-60",
-      "section": "Base Case: Null Check",
-      "explanation": "If we hit a null node (went past a leaf), return None. This is standard tree DFS base case."
+      "lines": "16-22",
+      "section": "Target Found - Early Return",
+      "explanation": "**This is crucial**: when we find p or q, we return immediately WITHOUT searching the subtree. Why? If the other target is in our subtree, we ARE the LCA. If not, our result will propagate up and meet the other result at a higher ancestor."
     },
     {
-      "lines": "62-67",
-      "section": "Target Found Check",
-      "explanation": "**Critical**: If current node IS p or q, return it immediately. This elegantly handles the 'node is ancestor of itself' case. We don't need to search the subtree - if the other target is there, current is the LCA."
+      "lines": "24-35",
+      "section": "Recursive Search with Count",
+      "explanation": "We iterate through all children, counting how many returned non-null. If count reaches 2, we know both targets are in different subtrees of the current node, making it the LCA. Early return at count >= 2 avoids unnecessary work."
     },
     {
-      "lines": "69-79",
-      "section": "Recursive Children Search",
-      "explanation": "Iterate through ALL children (N-ary key difference). Collect non-null results. The optimization on line 77-78 breaks early when we've found 2 targets - no need to continue."
-    },
-    {
-      "lines": "81-90",
-      "section": "Decision: What to Return",
-      "explanation": "**The magic**: If 2+ children returned non-null, p and q are in different subtrees - current node is LCA! If 1 found, propagate it up. If 0, return None."
-    },
-    {
-      "lines": "93-125",
-      "section": "TreeBuilder Helper Class",
-      "explanation": "Helper to build test trees from simple value lists and adjacency maps. This makes test cases clean and readable. Production code would use a proper factory."
-    },
-    {
-      "lines": "140-230",
-      "section": "Comprehensive Test Suite",
-      "explanation": "Tests cover: siblings, different subtrees (root is LCA), ancestor relationship, deep tree, wide tree, and minimal tree. Each test includes assertions and descriptive output."
+      "lines": "37-38",
+      "section": "Result Propagation",
+      "explanation": "If count == 0, return null (no targets in subtree). If count == 1, return that single result to propagate it up the tree. This result will either become the final answer or combine with another result higher up."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. Test with minimal 2-node tree first\n2. Test 3-node tree with siblings\n3. Test ancestor-of-itself case\n4. Test root-is-LCA case\n5. Then larger trees",
+    "how_to_test_incrementally": "1. First test with tiny 3-node tree (root + 2 children). 2. Verify the 'ancestor of itself' case works. 3. Test siblings case. 4. Test deep tree with cousins. 5. Test linear tree (worst case for space).",
     "what_to_print_or_assert": [
-      "print(f\"Visiting node {root.val}, looking for {p.val}, {q.val}\")",
-      "print(f\"Node {root.val}: found_in_children = {[n.val for n in found_in_children]}\")",
-      "print(f\"Node {root.val} returning: {result.val if result else None}\")",
-      "assert result is not None, \"LCA should exist since p and q are in tree\""
+      "print(f'At node {root.val}: checking {len(root.children)} children')",
+      "print(f'At node {root.val}: found count = {count}')",
+      "print(f'Returning node {result.val if result else None} from node {root.val}')",
+      "assert lca is not None, 'LCA should exist for valid inputs'"
     ],
     "common_failure_modes": [
-      "**Returning wrong node**: Usually means decision logic is wrong. Check the count conditions.",
-      "**Infinite recursion**: Check base case - are you returning None for null nodes?",
-      "**Missing ancestor-of-itself**: Ensure you return root when root == p or root == q BEFORE recursing",
-      "**Only works for binary tree**: Make sure you're iterating children list, not checking left/right"
+      "Null pointer when accessing children on null node",
+      "Not returning immediately when finding target (missing 'ancestor of itself' case)",
+      "Using value comparison instead of reference comparison",
+      "Not handling empty children list correctly"
     ],
-    "how_to_fix_fast": "1. Add print statements at entry, decision point, and exit\n2. Trace through smallest failing case by hand\n3. Check if return conditions match the 3 cases: found both, found one, found none\n4. Verify base cases trigger correctly"
+    "how_to_fix_fast": "1. Add prints at each recursive call to trace the search. 2. Draw the tree and manually trace the expected path. 3. Check if the 'early return on target' logic is correct. 4. Verify children iteration handles empty list."
   },
   "complexity_analysis": {
     "time": {
       "lowestCommonAncestor": {
         "complexity": "O(n)",
-        "explanation": "We visit each node at most once. Early termination may improve average case, but worst case touches all n nodes."
+        "explanation": "Each node visited at most once in DFS traversal"
       },
-      "overall": "**O(n)** - Single DFS traversal, each node visited at most once"
+      "per_node_work": {
+        "complexity": "O(k)",
+        "explanation": "Where k is number of children (iterate children list)"
+      },
+      "overall": "O(n) - visiting n nodes, each with constant work per child"
     },
     "space": {
-      "complexity": "O(h) where h = tree height",
-      "breakdown": "- **Recursion stack**: O(h) frames, one per level\n- **found_in_children list**: O(k) where k = max children, but k \u2264 2 (we break early)\n- **No auxiliary data structures**: No hashmap/set needed",
-      "note": "Worst case h = n for skewed tree (linear chain). Best case h = log(n) for balanced tree."
+      "complexity": "O(h) where h is tree height",
+      "breakdown": "- Recursion stack: O(h) for path from root to deepest node\n- Local variables: O(1) per call (count, result)\n- No auxiliary data structures",
+      "note": "In worst case (linear tree), h = n, so space is O(n). For balanced tree, h = log(n)."
     },
-    "can_we_do_better": "**Time: No** - We must potentially check all nodes to find p and q. O(n) is optimal.\n\n**Space: Maybe** - Iterative solution with explicit stack is still O(h). With parent pointers, can achieve O(1) extra space using two-pointer technique (Part 3 follow-up)."
+    "can_we_do_better": "Time is optimal - must visit nodes to find targets. Space could be O(1) with iterative approach + parent pointers (covered in Part 3), but Part 1 assumes no parent pointers."
   },
   "dry_run": {
-    "example": "Tree: 1\u2192[2,3,4], 2\u2192[5,6,7], 4\u2192[8]. Query: LCA(5, 8)",
-    "trace_table": "| Call | Node | Is p(5)/q(8)? | Children Results | Decision | Return |\n|------|------|---------------|------------------|----------|--------|\n| dfs(1,5,8) | 1 | No | \u2192 recurse | Enter | - |\n| dfs(2,5,8) | 2 | No | \u2192 recurse | Enter | - |\n| dfs(5,5,8) | **5** | **Yes (p)** | - | Found target! | **Node(5)** |\n| dfs(6,5,8) | 6 | No | [] (leaf) | None found | None |\n| dfs(7,5,8) | 7 | No | [] (leaf) | None found | None |\n| back to 2 | 2 | No | [5, None, None]\u2192[5] | 1 found | Node(5) |\n| dfs(3,5,8) | 3 | No | [] (leaf) | None found | None |\n| dfs(4,5,8) | 4 | No | \u2192 recurse | Enter | - |\n| dfs(8,5,8) | **8** | **Yes (q)** | - | Found target! | **Node(8)** |\n| back to 4 | 4 | No | [8] | 1 found | Node(8) |\n| back to 1 | 1 | No | [5, None, 8]\u2192[5,8] | **2 found!** | **Node(1)** \u2605 |\n\n**Final Answer: LCA(5, 8) = Node(1)** - the root, since 5 and 8 are in different subtrees",
-    "final_answer": "Node(1) is the LCA of nodes 5 and 8"
+    "example": "Tree: 1->[2->[5,6,7], 3, 4->[8]]. Find LCA(6, 8)",
+    "trace_table": "| Call | Node | Is p/q? | Children Results | Count | Return | Why |\n|------|------|---------|------------------|-------|--------|-----|\n| dfs(1) | 1 | NO | [2, null, null] | 1 | **2** | Propagate LCA |\n| \u251c\u2500dfs(2) | 2 | NO | [null, **6**, null] | 1 | **6** | Wait... |\n| \u2502 \u251c\u2500dfs(5) | 5 | NO | [] | 0 | null | No targets |\n| \u2502 \u251c\u2500dfs(6) | **6** | **p=YES** | - | - | **6** | Found p! |\n| \u2502 \u2514\u2500dfs(7) | 7 | NO | [] | 0 | null | No targets |\n| \u2502 | 2 | - | [null, 6, null] | 1 | 6 | Propagate 6 |\n| \u251c\u2500dfs(3) | 3 | NO | [] | 0 | null | No targets |\n| \u2514\u2500dfs(4) | 4 | NO | [**8**] | 1 | **8** | Propagate 8 |\n|   \u2514\u2500dfs(8) | **8** | **q=YES** | - | - | **8** | Found q! |\n| **Back at 1** | 1 | - | [6, null, 8] | **2** | **1** | **I am LCA!** |",
+    "final_answer": "Node 1 (root) is the LCA of 6 and 8"
   },
   "test_cases": [
     {
-      "name": "Siblings - Same Parent",
-      "category": "Basic",
-      "input": "Tree: 1\u2192[2,3,4], 2\u2192[5,6,7]. Query: LCA(5,7)",
-      "expected": "Node(2)",
-      "explanation": "5 and 7 are both children of 2, so 2 is their LCA"
+      "name": "Siblings under same parent",
+      "category": "Happy Path",
+      "input": "Tree: 1->[2->[5,6,7], 3, 4->[8]], LCA(5, 7)",
+      "expected": "2",
+      "explanation": "5 and 7 are both direct children of node 2"
     },
     {
-      "name": "Root is LCA",
-      "category": "Basic",
-      "input": "Tree: 1\u2192[2,3,4], 2\u2192[5,6,7], 4\u2192[8]. Query: LCA(6,8)",
-      "expected": "Node(1)",
-      "explanation": "6 is under 2, 8 is under 4. Different subtrees of root, so root is LCA"
+      "name": "Nodes in different subtrees (root is LCA)",
+      "category": "Happy Path",
+      "input": "Tree: 1->[2->[5,6,7], 3, 4->[8]], LCA(6, 8)",
+      "expected": "1",
+      "explanation": "6 is under 2, 8 is under 4. Root 1 is the only common ancestor."
     },
     {
-      "name": "Ancestor of Itself",
+      "name": "One node is ancestor of other",
       "category": "Edge Case",
-      "input": "Tree: 1\u2192[2], 2\u2192[3,4]. Query: LCA(2,4)",
-      "expected": "Node(2)",
-      "explanation": "Node 2 is ancestor of 4, so LCA is 2 (node can be ancestor of itself)"
+      "input": "Tree: 1->[2->[5->[9], 6, 7], 3, 4], LCA(2, 9)",
+      "expected": "2",
+      "explanation": "Node 2 is ancestor of 9. By definition, LCA(2, 9) = 2."
     },
     {
-      "name": "Deep Nested - Same Branch",
+      "name": "Linear tree (chain)",
       "category": "Edge Case",
-      "input": "Linear chain: 1\u21922\u21923\u21924\u21925. Query: LCA(3,5)",
-      "expected": "Node(3)",
-      "explanation": "5 is descendant of 3, so 3 is the LCA"
+      "input": "Tree: 1->[2->[3->[4->[5]]]], LCA(3, 5)",
+      "expected": "3",
+      "explanation": "Node 3 is ancestor of 5. Tests worst-case space O(n)."
     },
     {
-      "name": "Wide Tree - Extremes",
-      "category": "Stress",
-      "input": "Tree: 1\u2192[2,3,4,5,6,7,8,9,10]. Query: LCA(2,10)",
-      "expected": "Node(1)",
-      "explanation": "All nodes are children of root, so root is LCA for any two"
+      "name": "Wide tree (many children)",
+      "category": "Stress Test",
+      "input": "Tree: 1->[2, 3, 4, 5, 6, 7, 8, 9, 10], LCA(3, 8)",
+      "expected": "1",
+      "explanation": "All nodes at same level, root is only common ancestor."
     },
     {
-      "name": "Deep Tree in Both Branches",
-      "category": "Complex",
-      "input": "Tree: 1\u2192[2,3], 2\u2192[4], 4\u2192[6], 3\u2192[5], 5\u2192[7]. Query: LCA(6,7)",
-      "expected": "Node(1)",
-      "explanation": "6 is deep in left subtree, 7 is deep in right subtree. LCA is root"
-    },
-    {
-      "name": "p equals root",
+      "name": "Root is one of the targets",
       "category": "Edge Case",
-      "input": "Tree: 1\u2192[2,3]. Query: LCA(1,3)",
-      "expected": "Node(1)",
-      "explanation": "If p is the root, LCA is always root (everything is descendant of root)"
+      "input": "Tree: 1->[2->[5,6,7], 3, 4], LCA(1, 6)",
+      "expected": "1",
+      "explanation": "Root is target and ancestor of 6. LCA = root."
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Only checking left and right children (binary tree assumption)",
-      "why_wrong": "N-ary trees have variable number of children in a list",
-      "correct_approach": "Iterate through `root.children` list",
+      "mistake": "Treating N-ary tree like binary tree with left/right",
+      "why_wrong": "N-ary trees have variable children, must iterate over list",
+      "correct_approach": "Use `for child in root.children` instead of checking left/right",
       "code_wrong": "left_result = dfs(root.left)\nright_result = dfs(root.right)",
-      "code_correct": "for child in root.children:\n    result = dfs(child, p, q)"
+      "code_correct": "for child in root.children:\n    result = dfs(child)"
     },
     {
-      "mistake": "Not returning immediately when target found",
-      "why_wrong": "Continuing to search subtree wastes time and breaks ancestor-of-itself logic",
-      "correct_approach": "Return root immediately when root == p or root == q",
-      "code_wrong": "if root == p:\n    found_p = True\n# continue searching...",
-      "code_correct": "if root == p or root == q:\n    return root  # Stop here!"
+      "mistake": "Not returning immediately when finding p or q",
+      "why_wrong": "Misses the 'ancestor of itself' case. If p is ancestor of q, we'd miss it.",
+      "correct_approach": "Return immediately when root == p or root == q",
+      "code_wrong": "def dfs(root):\n    results = [dfs(c) for c in root.children]  # Always recurse\n    if root == p or root == q:\n        return root",
+      "code_correct": "def dfs(root):\n    if root == p or root == q:\n        return root  # Return BEFORE recursing!"
     },
     {
-      "mistake": "Counting found nodes incorrectly",
-      "why_wrong": "Using boolean instead of count misses the '2 found' detection",
-      "correct_approach": "Collect all non-null results, check if count >= 2",
-      "code_wrong": "if left_found or right_found:\n    return something",
-      "code_correct": "found = [r for c in children if (r := dfs(c))]\nif len(found) >= 2: return root"
+      "mistake": "Using list to collect all results instead of counter",
+      "why_wrong": "Unnecessary memory allocation, no early termination",
+      "correct_approach": "Use counter and early return when count >= 2",
+      "code_wrong": "found = []\nfor child in root.children:\n    found.append(dfs(child))\nfound = [f for f in found if f]\nif len(found) >= 2: return root",
+      "code_correct": "count = 0\nfor child in root.children:\n    if dfs(child): count += 1\n    if count >= 2: return root"
     },
     {
-      "mistake": "Searching same subtree twice",
-      "why_wrong": "Doubles time complexity unnecessarily",
-      "correct_approach": "Single DFS that handles both targets simultaneously",
-      "code_wrong": "path_p = find_path(root, p)\npath_q = find_path(root, q)  # Separate traversals",
-      "code_correct": "# Single traversal handles both"
-    },
-    {
-      "mistake": "Forgetting to handle null children list",
-      "why_wrong": "Some languages may have null instead of empty list",
-      "correct_approach": "Use empty list fallback in constructor or check before iterating",
-      "code_wrong": "for child in root.children:  # Crashes if children is None",
-      "code_correct": "for child in (root.children or []):"
+      "mistake": "Comparing by value instead of reference",
+      "why_wrong": "Different nodes could have same value. We need the actual node objects.",
+      "correct_approach": "Use `root == p` (reference) not `root.val == p.val`",
+      "code_wrong": "if root.val == p.val or root.val == q.val:",
+      "code_correct": "if root == p or root == q:"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. I see we need to find the Lowest Common Ancestor in an N-ary tree. Before I start, let me clarify a few things and share my initial thoughts...",
+    "opening": "Thank you for this problem. Before I start coding, I'd like to confirm my understanding and share my approach...",
     "clarifying_questions_to_ask": [
-      "Are p and q guaranteed to exist in the tree? \u2192 Yes, I'll skip existence validation",
-      "Can p equal q? \u2192 No, p \u2260 q. Simplifies edge cases",
-      "Can a node be its own ancestor? \u2192 Yes, critical for when p is ancestor of q",
-      "What's the expected tree shape - balanced or potentially skewed? \u2192 Affects space complexity discussion",
-      "Are we comparing by reference or value? \u2192 Reference is cleaner, values are unique anyway"
+      "Should I compare nodes by reference or value? (Reference)",
+      "Are p and q guaranteed to exist and be different? (Yes)",
+      "Can the children list be null or is it always initialized? (Assume empty list)",
+      "Is the tree guaranteed to have at least 2 nodes? (Yes per constraints)",
+      "Should I handle the case where p == q? (No, they're guaranteed different)"
     ],
     "what_to_mention_proactively": [
-      "N-ary trees have variable children, so I'll iterate through a list instead of checking left/right",
-      "I'll use post-order DFS to bubble up information from children",
-      "The key insight is: LCA is found when p and q are in different subtrees of a node",
-      "I'll handle the 'ancestor of itself' case by returning immediately when target found"
+      "This extends binary tree LCA - I'll iterate over N children instead of just left/right",
+      "The key insight is bottom-up propagation: LCA is first node to see both targets",
+      "Early return on finding a target handles 'ancestor of itself' elegantly",
+      "I'll trace through an example after coding to verify correctness"
     ],
     "communication_during_coding": [
-      "First, I'll handle the base cases - null check and target found check",
-      "Now I'll iterate through all children and collect non-null results",
-      "This is the decision point - if 2+ children returned targets, current node is LCA",
-      "Let me trace through this with the example to verify..."
+      "Base case: null check for empty subtrees",
+      "Here's the early return for when we find a target",
+      "I'm counting non-null results from children",
+      "count >= 2 means current node is LCA - both targets in different subtrees"
     ],
     "if_stuck": [
-      "Step back: What does LCA mean? Deepest node with both as descendants",
-      "Think about information flow: What does each subtree need to tell its parent?",
-      "Binary tree version: What's different here? Just more children to check",
-      "Draw it: Visualize where p and q are and trace the path up"
+      "Draw the tree and manually trace for a simple case",
+      "Think: what info do I need from children? \u2192 Whether target was found",
+      "Ask: when is current node the LCA? \u2192 When both targets accounted for",
+      "Consider: what does returning a node mean? \u2192 That subtree contains target"
     ],
-    "time_management": "0-5min: Clarify problem, identify N-ary difference | 5-10min: Explain DFS approach | 10-25min: Code solution | 25-30min: Test with example | 30-35min: Discuss complexity | 35-45min: Follow-up questions"
+    "time_management": "0-5min: Clarify & understand | 5-10min: Explain approach | 10-20min: Implement | 20-30min: Test & trace | 30-35min: Complexity analysis"
   },
   "pattern_recognition": {
-    "pattern_name": "Post-Order DFS with Information Propagation (Bubble-Up Pattern)",
+    "pattern_name": "DFS with Bottom-Up Propagation",
     "indicators": [
-      "Need information from children before making decision at parent",
-      "LCA/path problems in trees",
-      "Finding meeting point of two paths",
-      "Any 'deepest node with property X' problem"
+      "Tree traversal with information aggregation",
+      "Finding nodes that satisfy some property based on descendants",
+      "Combining results from subtrees at each node",
+      "Post-order processing (process children before current)"
     ],
     "similar_problems": [
-      "**LC 236 - Binary Tree LCA**: Same pattern, just 2 children instead of n",
-      "**LC 1676 - LCA of Binary Tree IV**: Extend to k nodes, same bubble-up",
-      "**LC 559 - Max Depth N-ary**: Post-order collecting depth from children",
-      "**LC 543 - Diameter of Binary Tree**: Bubble up max depth, track global max",
-      "**LC 124 - Binary Tree Max Path Sum**: Bubble up path sums"
+      "LC 236 - LCA of Binary Tree: Same approach with left/right instead of children list",
+      "LC 1644 - LCA of Binary Tree II: When nodes might not exist (need extra handling)",
+      "LC 1650 - LCA of Binary Tree III: With parent pointers (different traversal)",
+      "LC 865 - Smallest Subtree with Deepest Nodes: Similar bottom-up aggregation"
     ],
-    "template": "```python\ndef dfs(node):\n    if node is None: return base_case\n    if is_target(node): return found_value\n    \n    results = []\n    for child in node.children:\n        result = dfs(child)\n        if result is not None:\n            results.append(result)\n    \n    return aggregate_decision(results, node)\n```"
+    "template": "```python\ndef solve(root):\n    if root is None:\n        return base_value\n    \n    if meets_condition(root):\n        return root  # Early return\n    \n    results = [solve(child) for child in root.children]\n    return combine(root, results)  # Bottom-up aggregation\n```"
   },
   "follow_up_preparation": {
-    "part_2_hint": "**Part 2: LCA of K Nodes** - Instead of finding where 2 targets meet, find where K targets meet. Hint: Track count of targets found in subtree. LCA is deepest node with count == K.",
-    "part_3_hint": "**Part 3: LCA with Parent Pointers** - Each node has a parent pointer. Use two-pointer technique: put one pointer at p, one at q, move them up alternately until they meet. Or use HashSet to track visited ancestors.",
-    "part_4_hint": "**Part 4: Distance Between Nodes** - Find LCA first, then distance = depth(p) + depth(q) - 2*depth(LCA). Can compute depths during LCA traversal.",
-    "data_structure_evolution": "Part 1: Basic DFS \u2192 Part 2: DFS with counter \u2192 Part 3: Two-pointer with parent links \u2192 Part 4: DFS with depth tracking"
+    "part_2_hint": "Part 2 extends to K nodes. Instead of count >= 2, check if count equals total targets found in tree. Key insight: LCA of K nodes is the deepest node containing all K.",
+    "part_3_hint": "Part 3 adds parent pointers. No recursion needed - traverse from p and q upward to root, mark visited, find first intersection. Similar to finding intersection of two linked lists.",
+    "part_4_hint": "Part 4 calculates distance using LCA. distance(p, q) = depth(p) + depth(q) - 2 * depth(LCA). Combine LCA finding with depth tracking.",
+    "data_structure_evolution": "Part 1: Simple DFS \u2192 Part 2: Count-based DFS \u2192 Part 3: HashSet for visited \u2192 Part 4: Depth array + LCA"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. So we have an N-ary tree and need to find the Lowest Common Ancestor of two given nodes p and q. Before I dive in, let me make sure I understand the requirements correctly...",
-    "after_clarification": "Great, so to summarize: I need to find the deepest node that has both p and q as descendants. Both are guaranteed to exist, and a node can be an ancestor of itself. For an N-ary tree, I'll need to handle variable numbers of children. I'm thinking post-order DFS where I bubble up which targets are found in each subtree. Does that approach sound reasonable?",
+    "opening_verbatim": "Thank you for this problem. I see this is finding LCA in an N-ary tree, which extends the classic binary tree LCA problem. Before I code, let me confirm a few things...",
+    "after_clarification": "Great, so to summarize: I need to find the deepest node that has both p and q as descendants, where a node can be its own ancestor. My approach will be single-pass DFS with bottom-up propagation - returning found targets upward and identifying the LCA as the first node to see both. Does that approach make sense?",
     "while_coding": [
-      "I'm starting with the base cases - null node returns null, and if current node is p or q, I return it immediately...",
-      "Now I'll iterate through all children, which is the key N-ary difference from binary trees...",
-      "This is where I collect results - if 2 or more children returned targets, current node must be the LCA...",
-      "I'm adding an optimization to break early once we've found 2 targets..."
+      "First, the base case for null nodes...",
+      "Here's the key insight - I return immediately when finding a target...",
+      "Now iterating through all children and counting results...",
+      "If count reaches 2, I know I'm the LCA..."
     ],
-    "after_coding": "Let me trace through this with Example 1. We have nodes 5 and 7 under node 2. DFS visits 5 first, returns Node(5). Visits 6 and 7, returns Node(7) for 7. At node 2, we have 2 non-null results, so we return Node(2) as the LCA. That matches the expected output.",
-    "when_stuck_verbatim": "Hmm, let me think about this for a moment... I'm considering what information each recursive call needs to return. The key question is: how does a parent know if both targets are in its subtree?",
-    "after_mistake": "Oh, I see the issue - I wasn't handling the case where the current node itself is one of the targets. Let me fix that by checking before recursing into children.",
-    "before_moving_on": "This solution has O(n) time complexity since we visit each node at most once, and O(h) space for the recursion stack where h is the tree height. Ready for follow-up questions or the next part?"
+    "after_coding": "Let me trace through an example to verify. With tree [1,[2,[5,6,7]],[3],[4,[8]]] and LCA(5,7)... [trace through]. The answer is 2, which is correct.",
+    "when_stuck_verbatim": "Let me step back and think about what information I need. At each node, I need to know if p or q is in my subtree. I can get this by recursing and checking return values...",
+    "after_mistake": "Actually, I see an issue - I need to return immediately when finding a target, not after checking children. Let me fix that...",
+    "before_moving_on": "This solution is O(n) time and O(h) space. The key insight is bottom-up propagation with early return for targets. Ready for follow-up parts?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Problem Decomposition**: Can they break down LCA into 'where do paths meet'?",
-      "**N-ary Handling**: Do they recognize the difference from binary trees?",
-      "**Recursion Understanding**: Can they explain what's returned and why?",
-      "**Edge Case Awareness**: Do they consider ancestor-of-itself case?",
-      "**Communication**: Do they explain their thinking clearly?"
+      "Understanding of tree recursion and DFS",
+      "Handling the 'ancestor of itself' edge case",
+      "Clean code with proper base cases",
+      "Ability to trace through examples",
+      "Clear explanation of why the approach works"
     ],
     "bonus_points": [
-      "Drawing the tree and tracing through an example before coding",
-      "Mentioning the binary tree LCA solution and how N-ary differs",
-      "Adding early termination optimization when 2 targets found",
-      "Discussing iterative alternative for very deep trees",
-      "Proactively mentioning follow-up possibilities (k nodes, parent pointers)"
+      "Immediately recognizing extension from binary tree LCA",
+      "Explaining why early return handles 'ancestor of itself'",
+      "Mentioning the counter optimization over list collection",
+      "Discussing worst-case space for unbalanced tree",
+      "Connecting to related problems (LC 236)"
     ],
     "red_flags": [
-      "Treating it as binary tree (only left/right)",
-      "Not handling the ancestor-of-itself case",
-      "Cannot explain what the recursive function returns",
-      "Searching same subtree multiple times",
-      "No testing or dry run after coding"
+      "Treating N-ary tree as binary tree",
+      "Not handling 'node is ancestor of itself' case",
+      "Comparing values instead of references",
+      "Not being able to trace through example",
+      "Silent coding without explanation"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the bubble-up pattern from similar problems, explain WHY returning early when target found handles the ancestor case, and can clearly articulate the invariant: 'if this function returns non-null, at least one target exists in the subtree rooted at input node.'"
+    "what_differentiates_strong_candidates": "Strong candidates immediately see this as DFS with bottom-up propagation. They explain WHY returning immediately on finding a target handles the ancestor case. They trace through at least one example unprompted and discuss time/space complexity with understanding of worst case."
   },
   "time_milestones": {
-    "by_5_min": "Problem understood, clarifying questions asked, identified as N-ary tree LCA using DFS",
-    "by_10_min": "Approach explained - post-order DFS, bubble-up pattern, handling all children",
-    "by_20_min": "Core solution coded with base cases, recursion, and decision logic",
-    "by_25_min": "Dry run complete, edge cases discussed, complexity analyzed",
-    "by_30_min": "Part 1 finished, ready for follow-ups",
-    "warning_signs": "If still confused about approach at 10 min, ask for a hint. If code has bugs at 25 min, focus on fixing core logic over edge cases."
+    "by_5_min": "Understand problem, ask clarifying questions, recognize as DFS/LCA pattern",
+    "by_10_min": "Explain approach: single-pass DFS, bottom-up propagation, count-based LCA detection",
+    "by_20_min": "Complete implementation with clean code and proper comments",
+    "by_25_min": "Trace through example, verify edge cases (siblings, ancestor relationship)",
+    "by_30_min": "Discuss complexity, edge cases handled, ready for follow-ups",
+    "warning_signs": "If still confused about approach at 10min, or still debugging at 25min, simplify and focus on core logic"
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Say: 'I see an issue - I'm not handling the case where...'. Fix it calmly and explain the fix. Bugs are expected; graceful recovery shows maturity.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for iterating children in this language - let me write it conceptually.' Most interviewers care about logic, not syntax.",
-    "when_approach_is_wrong": "Say: 'Actually, I realize this approach won't work because... Let me reconsider.' A clean pivot is better than going down a wrong path.",
-    "when_completely_stuck": "Say: 'I'm thinking about how to propagate information from children to parent. Could you give me a hint about what each recursive call should return?' Targeted questions show good problem-solving.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me complete the core logic and explain what I'd add for edge cases.'"
+    "when_you_make_a_bug": "Say: 'I notice an issue - I should return immediately when finding a target. Let me fix that.' The early-return logic is the most common bug.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for iterating over a list in Java, but I need to loop through children and recurse on each.' This is acceptable.",
+    "when_approach_is_wrong": "If your initial approach is path-finding, that's fine but mention: 'This works but uses extra space for paths. The optimal single-pass approach would be...'",
+    "when_completely_stuck": "Ask: 'Can I get a hint about what to return from the recursive function?' The key insight is returning found targets.",
+    "when_running_out_of_time": "Say: 'Let me focus on the core logic. The key is: return target when found, count non-null results from children, return self when count >= 2.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "AI tools can help with boilerplate and syntax but won't understand the algorithm reasoning. Use them wisely.",
+    "when_using_cursor_or_copilot": "AI is allowed at Rippling. Use it for boilerplate like Node class definition, but write the core LCA logic yourself.",
     "what_to_do": [
-      "Let AI generate the Node class structure",
-      "Use for test case generation",
-      "Accept autocomplete for obvious iterations",
-      "Use for docstrings and comments"
+      "Use AI for Node class definition",
+      "Use for generating test cases",
+      "Use for tree-building helper functions"
     ],
     "what_not_to_do": [
-      "Don't paste the problem and ask for the solution",
-      "Don't accept LCA algorithm suggestions without understanding them",
-      "Don't let it write the core recursive logic without your direction"
+      "Don't paste 'find LCA in N-ary tree' and accept the solution",
+      "Don't accept suggestions without understanding WHY they work",
+      "Don't let AI write the core recursive logic"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests the solution, explain WHY it works - what the return value represents, why early return handles ancestor case, why 2+ children means current is LCA. The interviewer tests YOUR understanding.",
-    "expectation_adjustment": "With AI, you're expected to finish faster and cleaner. Use the time saved to thoroughly test and discuss extensions."
+    "how_to_demonstrate_understanding": "If AI suggests the early-return pattern, explain WHY it handles the ancestor case. Show you understand the algorithm, not just the code.",
+    "expectation_adjustment": "Using AI means faster completion is expected. Part 1 should be done in 15-20 min with AI, leaving time for follow-ups."
   },
   "signal_points": {
     "wow_factors": [
-      "Immediately recognizing post-order DFS pattern from binary tree LCA",
-      "Drawing a quick tree diagram before coding",
-      "Adding early termination optimization without being asked",
-      "Explaining the return value contract clearly (null = not found, node = found in subtree/is LCA)",
-      "Mentioning stack overflow risk for very deep trees and iterative alternative"
+      "Immediately connecting to LC 236 binary tree LCA",
+      "Explaining bottom-up propagation clearly with diagram",
+      "Proactively mentioning the counter optimization",
+      "Discussing why unbalanced tree affects space",
+      "Noting that early return handles ancestor case elegantly"
     ],
     "subtle_signals_of_experience": [
-      "Using meaningful variable names like `found_in_children` instead of `res`",
-      "Checking edge cases naturally during coding (what if children list is empty?)",
-      "Thinking about API design - should method be on Node class or separate?",
-      "Considering testability - building helper to create test trees"
+      "Using counter instead of list for results",
+      "Checking for null children list before iteration",
+      "Reference comparison (==) vs value comparison",
+      "Mentioning worst-case height for space analysis",
+      "Testing with 'one is ancestor' case unprompted"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Coding silently for more than 1 minute without explaining",
-      "Getting frustrated when the approach doesn't work",
-      "Not asking clarifying questions upfront",
-      "Dismissing interviewer's hints or suggestions"
+      "Starting to code without explaining approach",
+      "Silent for more than 30 seconds",
+      "Getting defensive when interviewer points out issue",
+      "Not drawing or tracing through examples"
     ],
     "technical": [
-      "Only handling left/right (binary tree assumption)",
-      "Returning wrong node type (returning value instead of node)",
-      "Infinite loop or recursion without base case",
-      "O(n\u00b2) solution when O(n) is clearly achievable"
+      "Using root.left/root.right for N-ary tree",
+      "Not returning when target found (missing ancestor case)",
+      "O(n\u00b2) approach (restarting DFS from each node)",
+      "Comparing values instead of references"
     ],
     "communication": [
-      "Using 'it' without specifying what 'it' refers to",
-      "Jumping between topics without finishing thoughts",
-      "Not summarizing approach before coding",
-      "Not verifying solution with an example"
+      "Not explaining WHY the approach works",
+      "Skipping complexity analysis",
+      "Not testing with edge cases",
+      "Not asking clarifying questions"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "\u2713 Handles null input gracefully",
-      "\u2713 Handles ancestor-of-itself case (p is ancestor of q)",
-      "\u2713 Works for any number of children (not just 2)",
-      "\u2713 Returns the actual node, not just the value",
-      "\u2713 Traced through at least one example",
-      "\u2713 Discussed time O(n) and space O(h) complexity"
+      "Did I handle null root case?",
+      "Did I handle 'p is ancestor of q' case (early return)?",
+      "Did I iterate over ALL children?",
+      "Did I trace through at least one example?",
+      "Did I mention time O(n) and space O(h)?",
+      "Did I explain why my approach is correct?"
     ],
     "quick_code_review": [
-      "No hardcoded values",
-      "Consistent naming (camelCase or snake_case)",
-      "Base cases handled first",
-      "Clear decision logic with comments",
-      "No unused variables or dead code"
+      "Base case: null check \u2713",
+      "Target check: root == p or root == q \u2713",
+      "Children iteration: for child in children \u2713",
+      "Count logic: increment on non-null \u2713",
+      "LCA detection: count >= 2 returns root \u2713",
+      "Propagation: return single result or null \u2713"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "**Input validation**: Check if root, p, q are not null (or return early with descriptive error)",
-      "**Existence check**: Optionally verify p and q exist in tree before searching",
-      "**Iterative version**: For extremely deep trees, convert to iterative with explicit stack",
-      "**Logging**: Add debug logging for traversal path in complex cases",
-      "**Caching**: If LCA queries are frequent, precompute ancestor relationships"
+      "Input validation: check root, p, q not null",
+      "Defensive check: verify p and q actually exist in tree",
+      "Logging for debugging large trees",
+      "Consider iterative approach for very deep trees (stack overflow risk)",
+      "Unit tests covering all edge cases"
     ],
-    "why_not_in_interview": "Interview code should focus on algorithm correctness and clarity. Mention these verbally to show senior-level thinking, but don't over-engineer.",
-    "how_to_mention": "Say: 'In production, I'd add input validation, possibly an iterative version for very deep trees, and caching if LCA queries are frequent. For this interview, I'll focus on the core algorithm.'"
+    "why_not_in_interview": "Focus on core algorithm. Mention these verbally to show production awareness.",
+    "how_to_mention": "Say: 'In production, I'd add validation to check p and q exist, and consider iterative DFS to avoid stack overflow on very deep trees.'"
   },
-  "generated_at": "2026-01-18T18:37:52.310209",
+  "generated_at": "2026-01-19T04:03:47.493282",
   "_meta": {
     "problem_id": "lca_nary_tree",
     "part_number": null,

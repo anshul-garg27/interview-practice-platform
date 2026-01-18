@@ -4,57 +4,50 @@
   "builds_on": "Part 2",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "This is a **completely new design problem** asked in the same interview loop. Unlike Parts 1-2 which focused on process scheduling with binary search, Part 3 tests your ability to design a rate limiter data structure with time-based state management. The key shift is from algorithmic optimization to system design with temporal semantics.",
+    "what_changes": "This is a completely separate design problem asked in the same interview loop. Instead of process scheduling, we're designing a token bucket rate limiter - a classic system design component. The bucket holds tokens up to a capacity, with optional 'dripping' that fills the bucket over time at a configurable rate.",
     "new_requirements": [
-      "Design a TokenBucket class with fixed capacity",
-      "Implement add(token) that returns success/failure based on capacity",
-      "Implement get() that peeks (doesn't remove) an arbitrary token",
-      "Handle time-based 'dripping' where tokens accumulate automatically over time",
-      "Lazy evaluation: compute dripped tokens on-demand, not eagerly"
+      "Implement TokenBucket class with capacity-limited token storage",
+      "add(token) - Add token, return false if bucket full",
+      "get() - Peek at token without removing, return null if empty",
+      "set_drip_rate(rate) - Enable automatic token generation at r tokens/second",
+      "Dripped tokens accumulate lazily and fill available capacity"
     ],
     "new_constraints": [
-      "add() and get() must be O(1) operations",
-      "Cannot eagerly create dripped token objects (memory efficiency)",
-      "Must handle concurrent dripping and explicit additions sharing capacity",
-      "Time calculations must be precise and handle edge cases"
+      "Bucket cannot exceed capacity",
+      "Dripped tokens must be computed lazily (not actually stored until needed)",
+      "get() does NOT remove tokens - it's a peek operation",
+      "Dripped tokens should be named 'dripped_0', 'dripped_1', etc."
     ],
-    "key_insight": "**Lazy Evaluation with Fill Level Tracking**: Instead of tracking dripped tokens explicitly, maintain a 'fill_level' that represents the current fullness of the bucket. This level increases over time (dripping) and with explicit additions, capped at capacity. Dripped token count = fill_level - explicit_tokens.size(). This gives O(1) operations without materializing virtual tokens."
+    "key_insight": "Use lazy evaluation: instead of spawning a background thread to add dripped tokens, compute the drip count on each access based on elapsed time since last update. Formula: new_drips = floor(elapsed_time \u00d7 rate), capped at available capacity."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "add() returns true when space available",
-        "how_met": "Check fill_level < capacity before adding",
+        "requirement": "add() returns true if added, false if dropped",
+        "how_met": "Check total count (explicit + dripped) against capacity before adding",
         "gotchas": [
-          "Must sync drip state before checking"
+          "Must update drips first to get accurate count"
         ]
       },
       {
-        "requirement": "add() returns false when bucket full",
-        "how_met": "Compare fill_level against capacity after sync",
+        "requirement": "get() peeks without removing",
+        "how_met": "Return first explicit token or dripped_0, don't modify tokens list",
         "gotchas": [
-          "Dripped tokens count toward fullness"
+          "Multiple get() calls return same token"
         ]
       },
       {
-        "requirement": "get() peeks without removal",
-        "how_met": "Return token[0] or virtual 'dripped_X' without modifying state",
+        "requirement": "Dripping fills bucket over time",
+        "how_met": "Track last_update time and drip_count, compute on access",
         "gotchas": [
-          "Must differentiate explicit vs dripped tokens"
+          "Drips can't exceed remaining capacity"
         ]
       },
       {
-        "requirement": "Drip rate fills bucket over time",
-        "how_met": "fill_level += elapsed_time \u00d7 rate on each sync",
+        "requirement": "Lazy evaluation for drips",
+        "how_met": "Only compute dripped count when add/get/setDripRate called",
         "gotchas": [
-          "Cap at capacity to prevent overflow"
-        ]
-      },
-      {
-        "requirement": "Lazy evaluation for dripped tokens",
-        "how_met": "Only compute dripped count when needed; never create objects",
-        "gotchas": [
-          "Virtual tokens named 'dripped_N' on get()"
+          "Don't actually create dripped token objects"
         ]
       }
     ],
@@ -63,1015 +56,771 @@
         "operation": "add",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Single append + arithmetic"
+        "why": "List append is O(1) amortized"
       },
       {
         "operation": "get",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Index access + arithmetic"
+        "why": "Just index into list or return constant string"
       },
       {
         "operation": "setDripRate",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Just stores rate value"
+        "why": "Just update rate variable"
       }
     ],
     "non_goals": [
-      "Thread-safety (would mention in interview)",
-      "Token removal/consumption",
-      "Multiple drip rate schedules",
-      "Token expiration"
+      "Thread-safe implementation",
+      "Persistent storage",
+      "Multiple bucket coordination"
     ]
   },
   "assumptions": [
-    "Time source is monotonic (time never goes backward)",
+    "Time source is monotonically increasing (no clock adjustments)",
     "Drip rate is non-negative (0 means no dripping)",
-    "Capacity is a positive integer",
-    "Token names are non-null strings",
-    "get() can return any token (we choose first explicit or 'dripped_0')",
-    "Interview may provide mock time source for testing"
+    "Capacity is positive integer",
+    "Token names are strings",
+    "Dripped tokens named sequentially: dripped_0, dripped_1, etc."
   ],
   "tradeoffs": [
     {
-      "decision": "Fill Level vs. Separate Counters",
-      "chosen": "Fill Level",
-      "why": "Single value captures total state; simpler sync logic",
-      "alternative": "Separate explicit_count and dripped_count",
-      "when_to_switch": "If need to track/expire dripped vs explicit differently"
-    },
-    {
-      "decision": "List vs. Set for tokens",
-      "chosen": "List",
-      "why": "Preserves insertion order, O(1) append and index access",
-      "alternative": "Set for uniqueness guarantee",
-      "when_to_switch": "If token deduplication required"
-    },
-    {
-      "decision": "Lazy vs. Eager drip materialization",
+      "decision": "Lazy vs Eager drip computation",
       "chosen": "Lazy",
-      "why": "O(1) space for dripped tokens regardless of time elapsed",
-      "alternative": "Eager (create objects)",
-      "when_to_switch": "If dripped tokens need individual state/expiry"
+      "why": "O(1) operations, no background threads needed",
+      "alternative": "Timer/Thread",
+      "when_to_switch": "If real-time guarantees needed across distributed systems"
+    },
+    {
+      "decision": "List vs Set for tokens",
+      "chosen": "List",
+      "why": "Preserves insertion order, supports duplicates",
+      "alternative": "Set",
+      "when_to_switch": "If deduplication required"
+    },
+    {
+      "decision": "Real time vs Injectable time",
+      "chosen": "Real time with test helper",
+      "why": "Simpler for interview, still testable",
+      "alternative": "Full dependency injection",
+      "when_to_switch": "Production code requiring comprehensive testing"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Public method signatures (add, get, setDripRate)",
-      "Return type contracts",
-      "Capacity immutability after construction"
+      "Public method signatures",
+      "Lazy evaluation approach",
+      "O(1) complexity"
     ],
     "what_to_change": [
-      "Internal fill_level tracking",
-      "Time source injection for testing",
-      "Token storage structure"
+      "TokenBucket is a new class added alongside Solution",
+      "Internal time tracking"
     ],
-    "interfaces_and_boundaries": "Time source is injectable via constructor, allowing mock time for testing. Core logic isolated in _sync() method makes extension easy.",
+    "interfaces_and_boundaries": "TokenBucket is completely independent of Solution class - they were asked in same interview loop but solve different problems",
     "invariants": [
-      "0 <= fill_level <= capacity (always)",
-      "len(tokens) <= fill_level (explicit tokens counted in fill)",
-      "dripped_count = fill_level - len(tokens) >= 0",
-      "fill_level only increases (unless tokens removed in future extension)"
+      "len(tokens) + drip_count <= capacity always",
+      "drip_count is never negative",
+      "last_update tracks when drips were last computed"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\n=== BASIC MODE (no dripping) ===\n\nInitial:          After add(A,B,C):    After add(D):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Cap: 3   \u2502     \u2502  Cap: 3   \u2502        \u2502  Cap: 3   \u2502\n\u2502           \u2502     \u2502 [A][B][C] \u2502        \u2502 [A][B][C] \u2502 \u2190 FULL!\n\u2502   empty   \u2502     \u2502  fill=3   \u2502        \u2502  D dropped\u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n=== DRIP MODE (rate=2/sec, cap=5) ===\n\nt=0:              t=1:                 t=2:                 t=3:\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Cap: 5     \u2502   \u2502  Cap: 5     \u2502      \u2502  Cap: 5     \u2502      \u2502  Cap: 5     \u2502\n\u2502             \u2502   \u2502 [~][~]      \u2502      \u2502 [~][~][~][~]\u2502      \u2502 [~][~][~]   \u2502\n\u2502  fill=0     \u2502   \u2502  fill=2     \u2502      \u2502  fill=4     \u2502      \u2502 [~][~] FULL \u2502\n\u2502  drip: 2/s  \u2502   \u2502  dripped=2  \u2502      \u2502  dripped=4  \u2502      \u2502  fill=5     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                        \u2193                     \u2193                    \u2193\n                  get()=\"dripped_0\"    get()=\"dripped_0\"    add(X)=FALSE\n\n[~] = virtual dripped token (not actually stored)\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    TOKEN BUCKET FLOW                        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n              \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n              \u2502  Operation   \u2502\n              \u2502 (add/get)    \u2502\n              \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                     \u2502\n                     \u25bc\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u2502   1. _sync() called   \u2502\n         \u2502   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500   \u2502\n         \u2502 elapsed = now - last  \u2502\n         \u2502 fill += elapsed \u00d7 rate\u2502\n         \u2502 fill = min(fill, cap) \u2502\n         \u2502 last = now            \u2502\n         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                     \u2502\n          \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n          \u2502                     \u2502\n          \u25bc                     \u25bc\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510       \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502    add()    \u2502       \u2502    get()    \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n          \u2502                     \u2502\n          \u25bc                     \u25bc\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510       \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502fill >= cap? \u2502       \u2502 explicit tokens > 0?\u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n     yes/\u2502\\no                   yes/\u2502\\no\n         \u2502                          \u2502\n    \u250c\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2510              \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u25bc         \u25bc              \u25bc             \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502return \u2502 \u2502tokens.add \u2502 \u2502 return  \u2502  \u2502dripped > 0?  \u2502\n\u2502 false \u2502 \u2502fill += 1  \u2502 \u2502token[0] \u2502  \u2502return dripped\u2502\n\u2502       \u2502 \u2502return true\u2502 \u2502         \u2502  \u2502else null     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "Before (empty bucket, rate=2/sec):\\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\\n\u2502  Capacity: 5    \u2502\\n\u2502                 \u2502  \u2190 empty\\n\u2502                 \u2502\\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\\n\\nAfter 3 seconds:\\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\\n\u2502  Capacity: 5    \u2502\\n\u2502 [D][D][D][D][D] \u2502  \u2190 5 dripped (capped)\\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\\n\\nAfter add('X') -> returns False (full)",
+    "algorithm_flow": "Access Operation Flow:\\n1. _update_drips()\\n   \u2514\u2500 elapsed = now - last_update\\n   \u2514\u2500 new_drips = floor(elapsed \u00d7 rate)\\n   \u2514\u2500 space = capacity - tokens - drip_count\\n   \u2514\u2500 drip_count += min(new_drips, space)\\n   \u2514\u2500 last_update = now\\n\\n2. Perform actual operation (add/get)\\n   \u2514\u2500 Check total count\\n   \u2514\u2500 Return result"
   },
   "approaches": [
     {
-      "name": "Naive: Eager Token Materialization",
-      "description": "Create actual token objects for dripped tokens by running a background timer or checking on every call to materialize tokens into the list.",
-      "time_complexity": "O(dripped) per operation",
-      "space_complexity": "O(capacity) - could store up to capacity dripped objects",
-      "why_not_optimal": "Creating dripped token objects is wasteful. If bucket has capacity 1M and drips for hours, we'd create millions of dummy objects. Also, background timers add complexity and threading concerns."
+      "name": "Eager Dripping (Timer/Thread)",
+      "description": "Use a background timer to actually add dripped tokens at regular intervals",
+      "time_complexity": "O(1) for operations, but requires threading overhead",
+      "space_complexity": "O(capacity) - actually stores all dripped tokens",
+      "why_not_optimal": "Unnecessary complexity, threading issues, wastes memory on unused dripped tokens"
     },
     {
-      "name": "Optimal: Lazy Fill-Level Tracking",
-      "description": "Track a single 'fill_level' representing bucket fullness. Dripped count is derived: fill_level - explicit_tokens.size(). On each operation, sync fill_level by computing elapsed time \u00d7 rate, capped at capacity.",
+      "name": "Lazy Evaluation (Optimal)",
+      "description": "Don't store dripped tokens. On each access, compute how many would have dripped based on elapsed time. Only track the count, not actual tokens.",
       "time_complexity": "O(1) for all operations",
-      "space_complexity": "O(n) where n = explicit tokens added",
-      "key_insight": "Virtual tokens don't need to exist as objects. The fill_level tells us how 'full' the bucket is. Subtract explicit token count to get dripped count. Only materialize a name like 'dripped_0' when get() specifically requests it."
+      "space_complexity": "O(n) where n = explicitly added tokens only",
+      "key_insight": "Dripped tokens are fungible - we only need to know HOW MANY exist, not store them individually"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: Fill-Level State Machine\n\n### Core Insight\nThe bucket's state at any time can be captured by a single **fill_level** value representing how \"full\" the bucket is. This level:\n1. **Increases over time** due to dripping (elapsed \u00d7 rate)\n2. **Increases on add()** (+1 for each successful addition)\n3. **Is capped at capacity** (never exceeds maximum)\n\n### Key Formula\n```\ndripped_tokens = fill_level - len(explicit_tokens)\n```\n\n### Sync Operation\nBefore any read/write, call `_sync()`:\n```\nelapsed = current_time - last_update_time\nfill_level = min(fill_level + elapsed \u00d7 drip_rate, capacity)\nlast_update_time = current_time\n```\n\n### Why This Works\n- **O(1) time**: Just arithmetic, no loops\n- **O(n) space**: Only store explicit tokens; dripped tokens are virtual\n- **Correctness**: fill_level precisely tracks total occupancy\n\n### Edge Cases Handled\n1. **No drip rate**: fill_level only changes via add()\n2. **Bucket full from dripping**: add() fails, fill_level unchanged\n3. **Only dripped tokens**: get() returns 'dripped_0'\n4. **Time source injection**: Allows deterministic testing",
+    "explanation_md": "The **lazy evaluation** pattern is key here. Instead of spawning threads or timers to add dripped tokens:\n\n1. **Track state minimally**: `drip_count` (virtual count), `last_update` (timestamp), `drip_rate`\n\n2. **Update on access**: Before any add/get operation, call `_update_drips()` which computes:\n   - `elapsed = current_time - last_update`\n   - `new_drips = floor(elapsed \u00d7 rate)`\n   - Add to `drip_count`, but cap at available space\n\n3. **Virtual tokens**: Dripped tokens aren't real objects - we just track the count. When `get()` needs to return a dripped token, generate the name on the fly (`dripped_0`).\n\nThis gives us **O(1)** for all operations with minimal memory footprint.",
     "data_structures": [
       {
-        "structure": "List<String>",
-        "purpose": "Store explicitly added tokens in insertion order"
+        "structure": "List[str]",
+        "purpose": "Store explicitly added tokens in order"
       },
       {
-        "structure": "float fill_level",
-        "purpose": "Track total bucket occupancy (explicit + dripped)"
+        "structure": "int drip_count",
+        "purpose": "Virtual count of dripped tokens (not stored)"
       },
       {
-        "structure": "float drip_rate",
-        "purpose": "Tokens per second to drip"
-      },
-      {
-        "structure": "float last_update_time",
-        "purpose": "Timestamp of last sync for elapsed calculation"
+        "structure": "float last_update",
+        "purpose": "Timestamp for lazy drip calculation"
       }
     ],
     "algorithm_steps": [
-      "Step 1: On construction, initialize empty token list, fill_level=0, record current time",
-      "Step 2: On setDripRate(r), sync first (with old rate), then store new rate",
-      "Step 3: On add(token), sync \u2192 if fill_level < capacity: append token, fill_level++, return true; else return false",
-      "Step 4: On get(), sync \u2192 if explicit tokens exist: return tokens[0]; elif fill_level > len(tokens): return 'dripped_0'; else return null",
-      "Step 5: _sync() computes: elapsed = now - last_time; fill_level += elapsed \u00d7 rate; cap at capacity; update last_time"
+      "1. On __init__: Set capacity, empty token list, drip_rate=0, last_update=now",
+      "2. On _update_drips(): Compute elapsed time \u00d7 rate, add to drip_count (capped at space)",
+      "3. On add(token): Update drips, check if full, append token if not",
+      "4. On get(): Update drips, return first explicit token or 'dripped_0' if drips exist",
+      "5. On set_drip_rate(): Update drips with old rate first, then set new rate"
     ]
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Token Bucket Rate Limiter with Dripping Support",
-    "",
-    "A classic rate limiting data structure that supports:",
-    "- Explicit token additions",
-    "- Time-based dripping (tokens accumulate automatically)",
-    "- Lazy evaluation (dripped tokens computed on-demand)",
-    "\"\"\"",
-    "",
+    "from typing import List, Optional",
     "import time",
-    "from typing import Optional, List, Callable",
+    "",
+    "",
+    "class Solution:",
+    "    \"\"\"Process scheduling solutions from Parts 1-2 (unchanged).\"\"\"",
+    "    ",
+    "    def min_time(self, process_size: List[int], capacity: List[int]) -> int:",
+    "        \"\"\"Part 1: Unit execution time scheduling.\"\"\"",
+    "        processes = sorted(process_size, reverse=True)",
+    "        caps = sorted(capacity, reverse=True)",
+    "        n, m = len(processes), len(caps)",
+    "        ",
+    "        if processes[0] > caps[0]:",
+    "            return -1",
+    "        ",
+    "        def can_complete(time: int) -> bool:",
+    "            slots = (time + 1) // 2",
+    "            proc_idx = 0",
+    "            for cap in caps:",
+    "                assigned = 0",
+    "                while assigned < slots and proc_idx < n:",
+    "                    if processes[proc_idx] <= cap:",
+    "                        proc_idx += 1",
+    "                        assigned += 1",
+    "                    else:",
+    "                        break",
+    "                if proc_idx == n:",
+    "                    return True",
+    "            return proc_idx == n",
+    "        ",
+    "        lo, hi = 1, 2 * n - 1",
+    "        while lo < hi:",
+    "            mid = (lo + hi) // 2",
+    "            if can_complete(mid):",
+    "                hi = mid",
+    "            else:",
+    "                lo = mid + 1",
+    "        return lo",
+    "",
+    "    def min_time_variable(self, process_size: List[int], exec_time: List[int], capacity: List[int]) -> int:",
+    "        \"\"\"Part 2: Variable execution time scheduling.\"\"\"",
+    "        n, m = len(process_size), len(capacity)",
+    "        processes = sorted(zip(process_size, exec_time), key=lambda x: (-x[0], -x[1]))",
+    "        caps = sorted(capacity, reverse=True)",
+    "        ",
+    "        if processes[0][0] > caps[0]:",
+    "            return -1",
+    "        ",
+    "        def can_complete(time: int) -> bool:",
+    "            proc_idx = 0",
+    "            for cap in caps:",
+    "                current_time = 0",
+    "                while proc_idx < n:",
+    "                    size, exec_t = processes[proc_idx]",
+    "                    if size > cap:",
+    "                        break",
+    "                    add_time = exec_t if current_time == 0 else (1 + exec_t)",
+    "                    if current_time + add_time <= time:",
+    "                        current_time += add_time",
+    "                        proc_idx += 1",
+    "                    else:",
+    "                        break",
+    "                if proc_idx == n:",
+    "                    return True",
+    "            return proc_idx == n",
+    "        ",
+    "        total_exec = sum(exec_time)",
+    "        lo, hi = 1, total_exec + n - 1",
+    "        while lo < hi:",
+    "            mid = (lo + hi) // 2",
+    "            if can_complete(mid):",
+    "                hi = mid",
+    "            else:",
+    "                lo = mid + 1",
+    "        return lo",
     "",
     "",
     "class TokenBucket:",
     "    \"\"\"",
-    "    Token bucket rate limiter with optional dripping.",
-    "    ",
-    "    The bucket has a fixed capacity and supports:",
-    "    - add(token): Add explicit token if space available",
-    "    - get(): Peek at arbitrary token without removal",
-    "    - set_drip_rate(rate): Enable time-based token accumulation",
-    "    ",
-    "    Key insight: Track 'fill_level' representing total fullness.",
-    "    Dripped tokens = fill_level - explicit_token_count.",
+    "    Token bucket rate limiter with lazy dripping.",
+    "    Key insight: Don't store dripped tokens - just track count and compute on access.",
     "    \"\"\"",
     "    ",
-    "    def __init__(self, capacity: int, time_source: Callable[[], float] = None):",
-    "        \"\"\"",
-    "        Initialize empty bucket with given capacity.",
-    "        ",
-    "        Args:",
-    "            capacity: Maximum tokens the bucket can hold",
-    "            time_source: Optional callable returning current time (for testing)",
-    "        \"\"\"",
-    "        if capacity <= 0:",
-    "            raise ValueError(\"Capacity must be positive\")",
-    "        ",
-    "        self._capacity: int = capacity",
-    "        self._tokens: List[str] = []  # Explicitly added tokens",
-    "        self._drip_rate: float = 0.0  # Tokens per second",
-    "        self._time_source: Callable[[], float] = time_source or time.time",
-    "        self._last_update_time: float = self._time_source()",
-    "        self._fill_level: float = 0.0  # Current fullness (explicit + dripped)",
+    "    def __init__(self, capacity: int):",
+    "        self.capacity = capacity",
+    "        self.tokens: List[str] = []  # Explicitly added tokens",
+    "        self.drip_rate = 0.0",
+    "        self.last_update = time.time()",
+    "        self.drip_count = 0  # Virtual dripped token count",
     "    ",
-    "    def _sync(self) -> None:",
-    "        \"\"\"",
-    "        Synchronize fill level with elapsed time.",
+    "    def _update_drips(self) -> None:",
+    "        \"\"\"Lazily compute dripped tokens based on elapsed time.\"\"\"",
+    "        if self.drip_rate <= 0:",
+    "            return",
     "        ",
-    "        Computes how many tokens have dripped since last sync",
-    "        and updates fill_level accordingly (capped at capacity).",
-    "        \"\"\"",
-    "        current_time = self._time_source()",
+    "        now = time.time()",
+    "        elapsed = now - self.last_update",
+    "        new_drips = int(elapsed * self.drip_rate)",
     "        ",
-    "        if self._drip_rate > 0:",
-    "            elapsed = max(0.0, current_time - self._last_update_time)",
-    "            self._fill_level += elapsed * self._drip_rate",
-    "            self._fill_level = min(self._fill_level, float(self._capacity))",
-    "        ",
-    "        self._last_update_time = current_time",
+    "        # Add drips up to available capacity",
+    "        space = self.capacity - len(self.tokens) - self.drip_count",
+    "        self.drip_count += min(new_drips, max(0, space))",
+    "        self.last_update = now",
     "    ",
     "    def add(self, token: str) -> bool:",
-    "        \"\"\"",
-    "        Add a token to the bucket.",
+    "        \"\"\"Add token to bucket. Returns False if full.\"\"\"",
+    "        self._update_drips()",
     "        ",
-    "        Args:",
-    "            token: Token string to add",
-    "            ",
-    "        Returns:",
-    "            True if token was added successfully,",
-    "            False if dropped (bucket at capacity)",
-    "        \"\"\"",
-    "        self._sync()",
-    "        ",
-    "        # Check if bucket is full (explicit + dripped)",
-    "        if self._fill_level >= self._capacity:",
+    "        if len(self.tokens) + self.drip_count >= self.capacity:",
     "            return False",
     "        ",
-    "        # Add token and increment fill level",
-    "        self._tokens.append(token)",
-    "        self._fill_level += 1",
+    "        self.tokens.append(token)",
     "        return True",
     "    ",
     "    def get(self) -> Optional[str]:",
-    "        \"\"\"",
-    "        Peek at an arbitrary token without removing it.",
+    "        \"\"\"Peek at a token (doesn't remove). Returns None if empty.\"\"\"",
+    "        self._update_drips()",
     "        ",
-    "        Returns:",
-    "            A token if bucket has any (explicit or dripped),",
-    "            None if bucket is empty",
-    "        \"\"\"",
-    "        self._sync()",
-    "        ",
-    "        # Prefer explicit tokens",
-    "        if self._tokens:",
-    "            return self._tokens[0]",
-    "        ",
-    "        # Check for dripped tokens",
-    "        dripped_count = int(self._fill_level) - len(self._tokens)",
-    "        if dripped_count > 0:",
-    "            return \"dripped_0\"  # Virtual token name",
-    "        ",
+    "        if self.tokens:",
+    "            return self.tokens[0]",
+    "        if self.drip_count > 0:",
+    "            return \"dripped_0\"",
     "        return None",
     "    ",
     "    def set_drip_rate(self, rate: float) -> None:",
-    "        \"\"\"",
-    "        Set the drip rate (tokens per second).",
-    "        ",
-    "        Args:",
-    "            rate: Non-negative tokens per second",
-    "        \"\"\"",
-    "        self._sync()  # Sync with current rate before changing",
-    "        self._drip_rate = max(0.0, rate)",
+    "        \"\"\"Set dripping rate (tokens per second).\"\"\"",
+    "        self._update_drips()  # Update with old rate first",
+    "        self.drip_rate = rate",
     "    ",
-    "    # ----- Utility methods for debugging/testing -----",
-    "    ",
-    "    def get_state(self) -> dict:",
-    "        \"\"\"Return current state for debugging.\"\"\"",
-    "        self._sync()",
-    "        return {",
-    "            'capacity': self._capacity,",
-    "            'explicit_tokens': list(self._tokens),",
-    "            'fill_level': self._fill_level,",
-    "            'drip_rate': self._drip_rate,",
-    "            'dripped_count': max(0, int(self._fill_level) - len(self._tokens))",
-    "        }",
-    "",
-    "",
-    "# ============================================================",
-    "# DEMO AND TESTING",
-    "# ============================================================",
-    "",
-    "def demo_basic():",
-    "    \"\"\"Demonstrate basic add/get without dripping.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"DEMO 1: Basic Token Bucket (No Dripping)\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    bucket = TokenBucket(3)",
-    "    ",
-    "    print(f\"\\nCreated bucket with capacity 3\")",
-    "    print(f\"Initial state: {bucket.get_state()}\")",
-    "    ",
-    "    # Add tokens A, B, C",
-    "    for token in ['A', 'B', 'C']:",
-    "        result = bucket.add(token)",
-    "        print(f\"add('{token}') -> {result}\")",
-    "    ",
-    "    print(f\"\\nState after adds: {bucket.get_state()}\")",
-    "    ",
-    "    # Get should return A (peek, not remove)",
-    "    result = bucket.get()",
-    "    print(f\"\\nget() -> '{result}' (peek, doesn't remove)\")",
-    "    ",
-    "    # Add D should fail (full)",
-    "    result = bucket.add('D')",
-    "    print(f\"add('D') -> {result} (bucket full!)\")",
-    "    ",
-    "    print(f\"\\nFinal state: {bucket.get_state()}\")",
-    "",
-    "",
-    "def demo_dripping():",
-    "    \"\"\"Demonstrate dripping functionality with mock time.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"DEMO 2: Token Bucket with Dripping\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    # Use mock time for deterministic testing",
-    "    mock_time = [0.0]  # Mutable container for mock time",
-    "    ",
-    "    def get_mock_time() -> float:",
-    "        return mock_time[0]",
-    "    ",
-    "    bucket = TokenBucket(5, time_source=get_mock_time)",
-    "    ",
-    "    print(f\"\\nCreated bucket with capacity 5\")",
-    "    print(f\"Time = {mock_time[0]}s, State: {bucket.get_state()}\")",
-    "    ",
-    "    # Set drip rate to 2 tokens/second",
-    "    bucket.set_drip_rate(2.0)",
-    "    print(f\"\\nSet drip rate to 2 tokens/sec\")",
-    "    ",
-    "    # Advance time by 1 second",
-    "    mock_time[0] = 1.0",
-    "    print(f\"\\n--- Time advances to {mock_time[0]}s ---\")",
-    "    print(f\"State: {bucket.get_state()}\")",
-    "    print(f\"get() -> '{bucket.get()}'\")",
-    "    ",
-    "    # Advance time by 2 more seconds (total 3s)",
-    "    mock_time[0] = 3.0",
-    "    print(f\"\\n--- Time advances to {mock_time[0]}s ---\")",
-    "    state = bucket.get_state()",
-    "    print(f\"State: {state}\")",
-    "    print(f\"Dripped = {state['dripped_count']} (capped at capacity)\")",
-    "    ",
-    "    # Try to add - should fail (full from dripping)",
-    "    result = bucket.add('X')",
-    "    print(f\"\\nadd('X') -> {result} (bucket full from dripping!)\")",
-    "    ",
-    "    # Get returns dripped token",
-    "    result = bucket.get()",
-    "    print(f\"get() -> '{result}'\")",
-    "",
-    "",
-    "def demo_mixed():",
-    "    \"\"\"Demonstrate mixed explicit and dripped tokens.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"DEMO 3: Mixed Explicit + Dripped Tokens\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    mock_time = [0.0]",
-    "    bucket = TokenBucket(5, time_source=lambda: mock_time[0])",
-    "    bucket.set_drip_rate(1.0)  # 1 token/sec",
-    "    ",
-    "    print(f\"\\nCapacity=5, drip_rate=1/sec\")",
-    "    ",
-    "    # Add explicit token at t=0",
-    "    bucket.add('EXPLICIT_A')",
-    "    print(f\"\\nt=0: add('EXPLICIT_A') -> State: {bucket.get_state()}\")",
-    "    ",
-    "    # Advance time",
-    "    mock_time[0] = 2.0",
-    "    print(f\"\\nt=2: State: {bucket.get_state()}\")",
-    "    print(f\"     (1 explicit + 2 dripped = 3 total)\")",
-    "    ",
-    "    # Get returns explicit token (priority)",
-    "    print(f\"     get() -> '{bucket.get()}' (explicit has priority)\")",
-    "    ",
-    "    # Add another explicit",
-    "    bucket.add('EXPLICIT_B')",
-    "    print(f\"\\n     add('EXPLICIT_B') -> State: {bucket.get_state()}\")",
-    "    ",
-    "    # Advance to fill up",
-    "    mock_time[0] = 5.0",
-    "    print(f\"\\nt=5: State: {bucket.get_state()}\")",
-    "    print(f\"     (bucket full, further adds will fail)\")",
-    "",
-    "",
-    "def run_test_cases():",
-    "    \"\"\"Run verification test cases.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"TEST CASES\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    # Test Case 1: Basic functionality",
-    "    print(\"\\nTest 1: Basic add/get...\")",
-    "    b = TokenBucket(3)",
-    "    assert b.add('A') == True",
-    "    assert b.add('B') == True",
-    "    assert b.add('C') == True",
-    "    assert b.get() == 'A'",
-    "    assert b.add('D') == False",
-    "    print(\"  PASSED \u2713\")",
-    "    ",
-    "    # Test Case 2: Empty bucket",
-    "    print(\"\\nTest 2: Empty bucket...\")",
-    "    b = TokenBucket(5)",
-    "    assert b.get() == None",
-    "    print(\"  PASSED \u2713\")",
-    "    ",
-    "    # Test Case 3: Dripping fills bucket",
-    "    print(\"\\nTest 3: Dripping fills bucket...\")",
-    "    mock_time = [0.0]",
-    "    b = TokenBucket(5, time_source=lambda: mock_time[0])",
-    "    b.set_drip_rate(2.0)",
-    "    mock_time[0] = 3.0  # 6 dripped, capped at 5",
-    "    assert b.get() == 'dripped_0'",
-    "    assert b.add('X') == False",
-    "    print(\"  PASSED \u2713\")",
-    "    ",
-    "    # Test Case 4: Explicit tokens have priority in get()",
-    "    print(\"\\nTest 4: Explicit tokens priority...\")",
-    "    mock_time = [0.0]",
-    "    b = TokenBucket(5, time_source=lambda: mock_time[0])",
-    "    b.add('MyToken')",
-    "    b.set_drip_rate(2.0)",
-    "    mock_time[0] = 1.0",
-    "    assert b.get() == 'MyToken'  # Not 'dripped_0'",
-    "    print(\"  PASSED \u2713\")",
-    "    ",
-    "    # Test Case 5: Zero drip rate",
-    "    print(\"\\nTest 5: Zero drip rate...\")",
-    "    mock_time = [0.0]",
-    "    b = TokenBucket(5, time_source=lambda: mock_time[0])",
-    "    b.set_drip_rate(0.0)",
-    "    mock_time[0] = 100.0",
-    "    assert b.get() == None  # No dripping occurred",
-    "    print(\"  PASSED \u2713\")",
-    "    ",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"ALL TESTS PASSED! \u2713\")",
-    "    print(\"=\" * 60)",
+    "    def _simulate_wait(self, seconds: float) -> None:",
+    "        \"\"\"Testing helper: simulate time passing.\"\"\"",
+    "        self.last_update -= seconds",
     "",
     "",
     "if __name__ == '__main__':",
-    "    demo_basic()",
-    "    demo_dripping()",
-    "    demo_mixed()",
-    "    run_test_cases()"
+    "    print(\"=\" * 60)",
+    "    print(\"Part 3: Token Bucket Rate Limiter\")",
+    "    print(\"=\" * 60)",
+    "    ",
+    "    # Example 1: Basic add/get",
+    "    print(\"\\nTest 1: Basic operations (capacity=3)\")",
+    "    bucket = TokenBucket(3)",
+    "    print(f\"  add('A'): {bucket.add('A')}  (expected: True)\")",
+    "    print(f\"  add('B'): {bucket.add('B')}  (expected: True)\")",
+    "    print(f\"  add('C'): {bucket.add('C')}  (expected: True)\")",
+    "    print(f\"  get():    {bucket.get()}  (expected: A)\")",
+    "    print(f\"  add('D'): {bucket.add('D')}  (expected: False - full)\")",
+    "    print(f\"  get():    {bucket.get()}  (expected: A - didn't remove)\")",
+    "    ",
+    "    # Example 2: Dripping",
+    "    print(\"\\nTest 2: Dripping (capacity=5, rate=2/sec, wait 3s)\")",
+    "    bucket2 = TokenBucket(5)",
+    "    bucket2.set_drip_rate(2)",
+    "    bucket2._simulate_wait(3)  # Simulate 3 seconds passing",
+    "    print(f\"  After 3s: get() = {bucket2.get()}  (expected: dripped_0)\")",
+    "    print(f\"  add('X'): {bucket2.add('X')}  (expected: False - 6 drips capped at 5)\")",
+    "    ",
+    "    # Example 3: Mixed explicit and dripped",
+    "    print(\"\\nTest 3: Mixed tokens (capacity=5)\")",
+    "    bucket3 = TokenBucket(5)",
+    "    bucket3.add(\"A\")",
+    "    bucket3.add(\"B\")",
+    "    bucket3.set_drip_rate(2)",
+    "    bucket3._simulate_wait(2)  # 4 drips, but only 3 spaces",
+    "    print(f\"  Explicit: 2, Dripped: 3 (capped at space)\")",
+    "    print(f\"  get(): {bucket3.get()}  (expected: A - explicit first)\")",
+    "    print(f\"  add('C'): {bucket3.add('C')}  (expected: False - full)\")",
+    "    ",
+    "    # Example 4: Empty bucket",
+    "    print(\"\\nTest 4: Empty bucket\")",
+    "    bucket4 = TokenBucket(3)",
+    "    print(f\"  get() on empty: {bucket4.get()}  (expected: None)\")",
+    "    ",
+    "    # Parts 1-2 still work",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Parts 1-2 Tests (unchanged):\")",
+    "    print(\"=\" * 60)",
+    "    sol = Solution()",
+    "    print(f\"Part 1: {sol.min_time([2, 5, 3], [6, 2, 4])}  (expected: 1)\")",
+    "    print(f\"Part 2: {sol.min_time_variable([2,5,3], [1,3,2], [6,6])}  (expected: 4)\")",
+    "    ",
+    "    print(\"\\nAll tests completed!\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
-    "import java.util.function.Supplier;",
     "",
-    "/**",
-    " * Token Bucket Rate Limiter with Dripping Support",
-    " * ",
-    " * Supports explicit token additions and time-based dripping.",
-    " * Uses lazy evaluation - dripped tokens computed on-demand.",
-    " */",
-    "public class TokenBucket {",
-    "    ",
-    "    private final int capacity;",
-    "    private final List<String> tokens;  // Explicitly added tokens",
-    "    private double dripRate;             // Tokens per second",
-    "    private final Supplier<Double> timeSource;",
-    "    private double lastUpdateTime;",
-    "    private double fillLevel;            // Current fullness",
-    "    ",
-    "    /**",
-    "     * Create bucket with given capacity using system time.",
-    "     */",
-    "    public TokenBucket(int capacity) {",
-    "        this(capacity, () -> System.currentTimeMillis() / 1000.0);",
+    "public class Solution {",
+    "    // Parts 1-2 unchanged",
+    "    public int minTime(int[] processSize, int[] capacity) {",
+    "        int n = processSize.length;",
+    "        Integer[] processes = Arrays.stream(processSize).boxed().toArray(Integer[]::new);",
+    "        Integer[] caps = Arrays.stream(capacity).boxed().toArray(Integer[]::new);",
+    "        Arrays.sort(processes, Collections.reverseOrder());",
+    "        Arrays.sort(caps, Collections.reverseOrder());",
+    "        ",
+    "        if (processes[0] > caps[0]) return -1;",
+    "        ",
+    "        int lo = 1, hi = 2 * n - 1;",
+    "        while (lo < hi) {",
+    "            int mid = (lo + hi) / 2;",
+    "            if (canComplete(processes, caps, mid)) hi = mid;",
+    "            else lo = mid + 1;",
+    "        }",
+    "        return lo;",
     "    }",
     "    ",
-    "    /**",
-    "     * Create bucket with given capacity and custom time source.",
-    "     */",
-    "    public TokenBucket(int capacity, Supplier<Double> timeSource) {",
-    "        if (capacity <= 0) {",
-    "            throw new IllegalArgumentException(\"Capacity must be positive\");",
+    "    private boolean canComplete(Integer[] processes, Integer[] caps, int time) {",
+    "        int slots = (time + 1) / 2, procIdx = 0, n = processes.length;",
+    "        for (int cap : caps) {",
+    "            int assigned = 0;",
+    "            while (assigned < slots && procIdx < n && processes[procIdx] <= cap) {",
+    "                procIdx++; assigned++;",
+    "            }",
+    "            if (procIdx == n) return true;",
     "        }",
+    "        return procIdx == n;",
+    "    }",
+    "    ",
+    "    public int minTimeVariable(int[] processSize, int[] execTime, int[] capacity) {",
+    "        int n = processSize.length, totalExec = 0;",
+    "        int[][] processes = new int[n][2];",
+    "        for (int i = 0; i < n; i++) {",
+    "            processes[i] = new int[]{processSize[i], execTime[i]};",
+    "            totalExec += execTime[i];",
+    "        }",
+    "        Arrays.sort(processes, (a, b) -> a[0] != b[0] ? b[0] - a[0] : b[1] - a[1]);",
+    "        Integer[] caps = Arrays.stream(capacity).boxed().toArray(Integer[]::new);",
+    "        Arrays.sort(caps, Collections.reverseOrder());",
+    "        ",
+    "        if (processes[0][0] > caps[0]) return -1;",
+    "        ",
+    "        int lo = 1, hi = totalExec + n - 1;",
+    "        while (lo < hi) {",
+    "            int mid = (lo + hi) / 2;",
+    "            if (canCompleteVariable(processes, caps, mid)) hi = mid;",
+    "            else lo = mid + 1;",
+    "        }",
+    "        return lo;",
+    "    }",
+    "    ",
+    "    private boolean canCompleteVariable(int[][] processes, Integer[] caps, int time) {",
+    "        int procIdx = 0, n = processes.length;",
+    "        for (int cap : caps) {",
+    "            int currentTime = 0;",
+    "            while (procIdx < n && processes[procIdx][0] <= cap) {",
+    "                int addTime = (currentTime == 0) ? processes[procIdx][1] : 1 + processes[procIdx][1];",
+    "                if (currentTime + addTime <= time) {",
+    "                    currentTime += addTime;",
+    "                    procIdx++;",
+    "                } else break;",
+    "            }",
+    "            if (procIdx == n) return true;",
+    "        }",
+    "        return procIdx == n;",
+    "    }",
+    "    ",
+    "    public static void main(String[] args) {",
+    "        Solution sol = new Solution();",
+    "        System.out.println(\"Parts 1-2: \" + sol.minTime(new int[]{2,5,3}, new int[]{6,2,4}));",
+    "        ",
+    "        System.out.println(\"\\n=== Part 3: Token Bucket ===\");",
+    "        TokenBucket bucket = new TokenBucket(3);",
+    "        System.out.println(\"add(A): \" + bucket.add(\"A\"));",
+    "        System.out.println(\"add(B): \" + bucket.add(\"B\"));",
+    "        System.out.println(\"add(C): \" + bucket.add(\"C\"));",
+    "        System.out.println(\"get(): \" + bucket.get());",
+    "        System.out.println(\"add(D): \" + bucket.add(\"D\") + \" (expected: false)\");",
+    "        ",
+    "        TokenBucket bucket2 = new TokenBucket(5);",
+    "        bucket2.setDripRate(2);",
+    "        bucket2.simulateWait(3);",
+    "        System.out.println(\"After drip: \" + bucket2.get());",
+    "        System.out.println(\"add(X): \" + bucket2.add(\"X\") + \" (expected: false)\");",
+    "    }",
+    "}",
+    "",
+    "class TokenBucket {",
+    "    private final int capacity;",
+    "    private final List<String> tokens;",
+    "    private double dripRate;",
+    "    private long lastUpdateNanos;",
+    "    private int dripCount;",
+    "    ",
+    "    public TokenBucket(int capacity) {",
     "        this.capacity = capacity;",
     "        this.tokens = new ArrayList<>();",
     "        this.dripRate = 0.0;",
-    "        this.timeSource = timeSource;",
-    "        this.lastUpdateTime = timeSource.get();",
-    "        this.fillLevel = 0.0;",
+    "        this.lastUpdateNanos = System.nanoTime();",
+    "        this.dripCount = 0;",
     "    }",
     "    ",
-    "    /**",
-    "     * Synchronize fill level with elapsed time.",
-    "     */",
-    "    private void sync() {",
-    "        double currentTime = timeSource.get();",
-    "        ",
-    "        if (dripRate > 0) {",
-    "            double elapsed = Math.max(0.0, currentTime - lastUpdateTime);",
-    "            fillLevel += elapsed * dripRate;",
-    "            fillLevel = Math.min(fillLevel, (double) capacity);",
-    "        }",
-    "        ",
-    "        lastUpdateTime = currentTime;",
+    "    private void updateDrips() {",
+    "        if (dripRate <= 0) return;",
+    "        long now = System.nanoTime();",
+    "        double elapsed = (now - lastUpdateNanos) / 1_000_000_000.0;",
+    "        int newDrips = (int) (elapsed * dripRate);",
+    "        int space = capacity - tokens.size() - dripCount;",
+    "        dripCount += Math.min(newDrips, Math.max(0, space));",
+    "        lastUpdateNanos = now;",
     "    }",
     "    ",
-    "    /**",
-    "     * Add a token to the bucket.",
-    "     * @return true if added, false if dropped (bucket full)",
-    "     */",
     "    public boolean add(String token) {",
-    "        sync();",
-    "        ",
-    "        if (fillLevel >= capacity) {",
-    "            return false;",
-    "        }",
-    "        ",
+    "        updateDrips();",
+    "        if (tokens.size() + dripCount >= capacity) return false;",
     "        tokens.add(token);",
-    "        fillLevel += 1;",
     "        return true;",
     "    }",
     "    ",
-    "    /**",
-    "     * Peek at an arbitrary token without removing it.",
-    "     * @return a token if available, null if empty",
-    "     */",
     "    public String get() {",
-    "        sync();",
-    "        ",
-    "        // Prefer explicit tokens",
-    "        if (!tokens.isEmpty()) {",
-    "            return tokens.get(0);",
-    "        }",
-    "        ",
-    "        // Check for dripped tokens",
-    "        int drippedCount = (int) fillLevel - tokens.size();",
-    "        if (drippedCount > 0) {",
-    "            return \"dripped_0\";",
-    "        }",
-    "        ",
+    "        updateDrips();",
+    "        if (!tokens.isEmpty()) return tokens.get(0);",
+    "        if (dripCount > 0) return \"dripped_0\";",
     "        return null;",
     "    }",
     "    ",
-    "    /**",
-    "     * Set the drip rate (tokens per second).",
-    "     */",
     "    public void setDripRate(double rate) {",
-    "        sync();  // Sync before changing rate",
-    "        this.dripRate = Math.max(0.0, rate);",
+    "        updateDrips();",
+    "        this.dripRate = rate;",
     "    }",
     "    ",
-    "    /**",
-    "     * Get current state for debugging.",
-    "     */",
-    "    public Map<String, Object> getState() {",
-    "        sync();",
-    "        Map<String, Object> state = new HashMap<>();",
-    "        state.put(\"capacity\", capacity);",
-    "        state.put(\"explicitTokens\", new ArrayList<>(tokens));",
-    "        state.put(\"fillLevel\", fillLevel);",
-    "        state.put(\"dripRate\", dripRate);",
-    "        state.put(\"drippedCount\", Math.max(0, (int) fillLevel - tokens.size()));",
-    "        return state;",
-    "    }",
-    "    ",
-    "    // ============================================================",
-    "    // DEMO AND TESTING",
-    "    // ============================================================",
-    "    ",
-    "    public static void main(String[] args) {",
-    "        demoBasic();",
-    "        demoDripping();",
-    "        runTestCases();",
-    "    }",
-    "    ",
-    "    private static void demoBasic() {",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"DEMO 1: Basic Token Bucket (No Dripping)\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        ",
-    "        TokenBucket bucket = new TokenBucket(3);",
-    "        ",
-    "        System.out.println(\"\\nCreated bucket with capacity 3\");",
-    "        ",
-    "        // Add tokens A, B, C",
-    "        for (String token : new String[]{\"A\", \"B\", \"C\"}) {",
-    "            boolean result = bucket.add(token);",
-    "            System.out.println(\"add('\" + token + \"') -> \" + result);",
-    "        }",
-    "        ",
-    "        // Get should return A",
-    "        String result = bucket.get();",
-    "        System.out.println(\"\\nget() -> '\" + result + \"'\");",
-    "        ",
-    "        // Add D should fail",
-    "        boolean added = bucket.add(\"D\");",
-    "        System.out.println(\"add('D') -> \" + added + \" (bucket full!)\");",
-    "    }",
-    "    ",
-    "    private static void demoDripping() {",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"DEMO 2: Token Bucket with Dripping\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        ",
-    "        // Mock time",
-    "        double[] mockTime = {0.0};",
-    "        ",
-    "        TokenBucket bucket = new TokenBucket(5, () -> mockTime[0]);",
-    "        bucket.setDripRate(2.0);",
-    "        ",
-    "        System.out.println(\"\\nCapacity=5, drip_rate=2/sec\");",
-    "        System.out.println(\"t=0: State: \" + bucket.getState());",
-    "        ",
-    "        // Advance time",
-    "        mockTime[0] = 3.0;",
-    "        System.out.println(\"\\nt=3: State: \" + bucket.getState());",
-    "        System.out.println(\"get() -> '\" + bucket.get() + \"'\");",
-    "        System.out.println(\"add('X') -> \" + bucket.add(\"X\") + \" (full!)\");",
-    "    }",
-    "    ",
-    "    private static void runTestCases() {",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"TEST CASES\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        ",
-    "        // Test 1: Basic",
-    "        System.out.println(\"\\nTest 1: Basic add/get...\");",
-    "        TokenBucket b = new TokenBucket(3);",
-    "        assert b.add(\"A\") == true;",
-    "        assert b.add(\"B\") == true;",
-    "        assert b.add(\"C\") == true;",
-    "        assert b.get().equals(\"A\");",
-    "        assert b.add(\"D\") == false;",
-    "        System.out.println(\"  PASSED \u2713\");",
-    "        ",
-    "        // Test 2: Dripping",
-    "        System.out.println(\"\\nTest 2: Dripping fills bucket...\");",
-    "        double[] mockTime = {0.0};",
-    "        b = new TokenBucket(5, () -> mockTime[0]);",
-    "        b.setDripRate(2.0);",
-    "        mockTime[0] = 3.0;",
-    "        assert b.get().equals(\"dripped_0\");",
-    "        assert b.add(\"X\") == false;",
-    "        System.out.println(\"  PASSED \u2713\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"ALL TESTS PASSED! \u2713\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "    void simulateWait(double seconds) {",
+    "        lastUpdateNanos -= (long)(seconds * 1_000_000_000);",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-10",
-      "explanation": "Module docstring and imports. Uses typing for type hints, time for default time source."
+      "lines": "1-2",
+      "explanation": "Imports: typing for type hints, time for timestamp tracking"
     },
     {
-      "lines": "13-25",
-      "explanation": "Class definition with comprehensive docstring explaining the bucket's capabilities and key insight about fill_level tracking."
+      "lines": "71-78",
+      "explanation": "TokenBucket constructor: Initialize capacity, empty token list, no dripping, record start time"
     },
     {
-      "lines": "27-42",
-      "explanation": "Constructor initializes capacity, empty token list, zero drip rate, injectable time source, and fill_level=0. Validates capacity is positive."
+      "lines": "80-90",
+      "explanation": "_update_drips(): The core lazy evaluation logic - compute elapsed time \u00d7 rate, add to drip_count capped at available space"
     },
     {
-      "lines": "44-57",
-      "explanation": "**_sync() method** - The heart of lazy evaluation. Computes elapsed time, adds dripped tokens to fill_level (elapsed \u00d7 rate), caps at capacity, updates timestamp."
+      "lines": "92-99",
+      "explanation": "add(): Update drips first, check if full (explicit + dripped >= capacity), append if space available"
     },
     {
-      "lines": "59-78",
-      "explanation": "**add() method** - Syncs state, checks if full (fill_level >= capacity), either appends token and increments fill_level returning true, or returns false."
+      "lines": "101-108",
+      "explanation": "get(): Update drips, return first explicit token OR 'dripped_0' for virtual drips, None if empty"
     },
     {
-      "lines": "80-99",
-      "explanation": "**get() method** - Syncs state, returns first explicit token if any exist, otherwise computes dripped_count and returns 'dripped_0' if positive, else null."
-    },
-    {
-      "lines": "101-110",
-      "explanation": "**set_drip_rate() method** - Syncs with old rate first (important!), then stores new rate. Ensures dripped tokens under old rate are counted."
-    },
-    {
-      "lines": "114-124",
-      "explanation": "Utility get_state() method for debugging - returns dict with all relevant state for inspection during testing."
+      "lines": "110-113",
+      "explanation": "set_drip_rate(): Update drips with old rate first (important!), then set new rate"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
+        "__init__": {
+          "complexity": "O(1)",
+          "explanation": "Just initialize fields"
+        },
         "add": {
           "complexity": "O(1)",
-          "explanation": "List append is amortized O(1), all other operations are constant-time arithmetic"
+          "explanation": "Drip update is O(1), list append is O(1) amortized"
         },
         "get": {
           "complexity": "O(1)",
-          "explanation": "Index access and arithmetic only"
+          "explanation": "Drip update is O(1), list access is O(1)"
         },
-        "setDripRate": {
+        "set_drip_rate": {
           "complexity": "O(1)",
-          "explanation": "Just stores the rate value"
-        },
-        "_sync": {
-          "complexity": "O(1)",
-          "explanation": "Pure arithmetic - no loops or data structure traversal"
+          "explanation": "Just update numeric field"
         }
       },
-      "overall_change": "All operations are O(1), making this suitable for high-throughput rate limiting scenarios"
+      "overall_change": "TokenBucket is independent of Solution - no impact on scheduling algorithms"
     },
     "space": {
-      "additional_space": "O(n) where n = number of explicit tokens added",
-      "explanation": "Only explicit tokens are stored. Dripped tokens are virtual (computed on-demand). Fixed overhead of ~5 fields regardless of drip time elapsed."
+      "additional_space": "O(n) where n = explicitly added tokens",
+      "explanation": "Dripped tokens are virtual (just a count), so only explicit tokens consume memory"
     }
   },
   "dry_run": {
-    "example_input": "Operations: TokenBucket(5), setDripRate(2), wait(3), get(), add('X')",
+    "example_input": "capacity=5, setDripRate(2), wait 3 seconds, get(), add('X')",
     "steps": [
       {
         "step": 1,
         "action": "TokenBucket(5)",
-        "state": "capacity=5, tokens=[], fill_level=0, drip_rate=0, last_time=0",
-        "explanation": "Initialize empty bucket with capacity 5"
+        "state": "tokens=[], drip_count=0, rate=0, last_update=t0",
+        "explanation": "Initialize empty bucket"
       },
       {
         "step": 2,
         "action": "setDripRate(2)",
-        "state": "drip_rate=2, last_time=0 (sync does nothing since rate was 0)",
-        "explanation": "Enable dripping at 2 tokens/second"
+        "state": "rate=2, last_update=t0",
+        "explanation": "Start dripping at 2/sec"
       },
       {
         "step": 3,
-        "action": "wait(3) [time advances to t=3]",
-        "state": "No state change yet (lazy)",
-        "explanation": "Time passes but sync hasn't been called"
+        "action": "wait 3 seconds",
+        "state": "Time advances to t0+3",
+        "explanation": "Simulate time passing (no actual drip update yet - lazy!)"
       },
       {
         "step": 4,
-        "action": "get() - first calls _sync()",
-        "state": "_sync: elapsed=3, dripped=3\u00d72=6, fill_level=min(6,5)=5",
-        "explanation": "Sync computes 6 dripped tokens, capped at capacity 5"
+        "action": "get()",
+        "state": "_update_drips: elapsed=3, newDrips=6, space=5, dripCount=min(6,5)=5",
+        "explanation": "Lazy update computes 6 drips but caps at capacity"
       },
       {
         "step": 5,
-        "action": "get() - checks tokens",
-        "state": "tokens=[] (empty), dripped_count=5-0=5",
-        "explanation": "No explicit tokens, so check dripped count"
+        "action": "get() returns",
+        "state": "tokens empty, dripCount=5 > 0",
+        "explanation": "Return 'dripped_0' for virtual dripped token"
       },
       {
         "step": 6,
-        "action": "get() - returns",
-        "state": "returns 'dripped_0'",
-        "explanation": "Return virtual token name since dripped_count > 0"
-      },
-      {
-        "step": 7,
-        "action": "add('X') - calls _sync()",
-        "state": "fill_level=5 (unchanged, already synced)",
-        "explanation": "Sync updates timestamp but fill_level already at cap"
-      },
-      {
-        "step": 8,
-        "action": "add('X') - checks capacity",
-        "state": "fill_level(5) >= capacity(5) \u2192 FULL",
-        "explanation": "Bucket is full from dripping, cannot add"
-      },
-      {
-        "step": 9,
-        "action": "add('X') - returns",
-        "state": "returns false",
-        "explanation": "Token X is dropped"
+        "action": "add('X')",
+        "state": "tokens.size()=0, dripCount=5, total=5 >= capacity=5",
+        "explanation": "Bucket full, return False"
       }
     ],
-    "final_output": "[null, null, null, 'dripped_0', false]"
+    "final_output": "get() returns 'dripped_0', add('X') returns False"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Empty bucket: get() returns null",
-      "Full bucket: add() returns false",
-      "Single add then get: returns same token"
+      "Empty bucket get() returns None",
+      "add() to capacity, then add() returns False",
+      "get() returns same token on repeated calls"
     ],
     "likely_bugs": [
-      "Forgetting to call _sync() before checking fill_level",
-      "Not capping fill_level at capacity",
-      "Using integer division instead of float for drip calculation",
-      "Not syncing before changing drip rate (loses accumulated drips)"
+      "Forgetting to call _update_drips() before operations",
+      "Not updating last_update after drip calculation",
+      "Integer overflow in drip calculation"
     ],
     "recommended_logs_or_asserts": [
-      "assert 0 <= fill_level <= capacity after every _sync()",
-      "assert len(tokens) <= fill_level after every operation",
-      "log fill_level and token count on every add/get in debug mode"
+      "assert drip_count >= 0",
+      "assert len(tokens) + drip_count <= capacity",
+      "Log elapsed time and new_drips in _update_drips"
     ],
-    "how_to_localize": "1. Check fill_level after _sync() - is it what you expect? 2. Verify elapsed time calculation. 3. Check if drip_rate is positive. 4. Ensure last_update_time is being updated."
+    "how_to_localize": "Add print statements in _update_drips() to trace elapsed time, new_drips, space calculations"
   },
   "edge_cases": [
     {
       "case": "Empty bucket get()",
-      "handling": "Return None/null",
-      "gotcha": "Don't throw exception - empty is valid state"
+      "handling": "Return None",
+      "gotcha": "Don't throw exception"
     },
     {
-      "case": "Zero drip rate",
-      "handling": "Skip drip calculation in _sync()",
-      "gotcha": "Must check rate > 0 before computing dripped"
+      "case": "Bucket full from explicit tokens",
+      "handling": "add() returns False, drips have no space",
+      "gotcha": "Drips still try to accumulate"
     },
     {
-      "case": "Drip rate set mid-operation",
-      "handling": "Sync with old rate first, then change",
-      "gotcha": "Don't lose accumulated drips under old rate"
+      "case": "Rate set to 0",
+      "handling": "_update_drips() early returns",
+      "gotcha": "Don't divide by zero"
     },
     {
-      "case": "Very long time elapsed",
-      "handling": "Cap at capacity",
-      "gotcha": "Prevent fill_level from growing unbounded"
+      "case": "Very small elapsed time",
+      "handling": "int() truncation gives 0 new drips",
+      "gotcha": "Frequent calls won't accumulate fractional drips"
     },
     {
-      "case": "Time going backward (clock skew)",
-      "handling": "Use max(0, elapsed)",
-      "gotcha": "Negative elapsed should not decrease fill_level"
-    },
-    {
-      "case": "Capacity of 1",
-      "handling": "Works correctly - single slot",
-      "gotcha": "First add fills bucket, all subsequent fail"
-    },
-    {
-      "case": "Add after partial drip fill",
-      "handling": "Add succeeds if fill_level < capacity",
-      "gotcha": "Explicit and dripped share same space"
+      "case": "Rate changed mid-stream",
+      "handling": "Update drips with old rate first, then set new rate",
+      "gotcha": "Order matters!"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic add and get",
-      "input": "TokenBucket(3), add('A'), add('B'), add('C'), get(), add('D')",
-      "expected": "[null, true, true, true, 'A', false]",
-      "explanation": "Fill bucket, get returns first, fourth add fails"
-    },
-    {
-      "name": "Empty bucket",
-      "input": "TokenBucket(5), get()",
-      "expected": "[null, null]",
-      "explanation": "Empty bucket returns null on get()"
+      "name": "Basic add/get/full",
+      "input": "TokenBucket(3); add(A,B,C); get(); add(D)",
+      "expected": "[true, true, true, 'A', false]",
+      "explanation": "Fill bucket, peek returns first, add fails when full"
     },
     {
       "name": "Dripping fills bucket",
-      "input": "TokenBucket(5), setDripRate(2), wait(3), get(), add('X')",
-      "expected": "[null, null, null, 'dripped_0', false]",
-      "explanation": "3s \u00d7 2/s = 6, capped at 5. Bucket full from dripping."
+      "input": "TokenBucket(5); setDripRate(2); wait(3); get(); add(X)",
+      "expected": "['dripped_0', false]",
+      "explanation": "6 drips (capped at 5), bucket full"
     },
     {
       "name": "Mixed explicit and dripped",
-      "input": "TokenBucket(5), add('A'), setDripRate(2), wait(1), get()",
-      "expected": "[null, true, null, null, 'A']",
-      "explanation": "Explicit token exists, so get() returns it (not dripped)"
+      "input": "TokenBucket(5); add(A,B); setDripRate(2); wait(2); add(C)",
+      "expected": "[true, true, false]",
+      "explanation": "2 explicit + 3 dripped (capped) = 5, full"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Not syncing before operations",
-      "why_wrong": "fill_level won't reflect accumulated drips, leading to incorrect add/get results",
-      "correct_approach": "Always call _sync() at the start of add() and get()",
-      "code_example_wrong": "def add(self, token):\\n    if self._fill_level >= self._capacity:  # fill_level is stale!\\n        return False",
-      "code_example_correct": "def add(self, token):\\n    self._sync()  # Update fill_level first\\n    if self._fill_level >= self._capacity:\\n        return False"
+      "mistake": "Actually storing dripped token objects",
+      "why_wrong": "Wastes memory, dripped tokens are fungible",
+      "correct_approach": "Track drip_count only, generate names on demand",
+      "code_example_wrong": "for i in range(new_drips): self.tokens.append(f'dripped_{i}')",
+      "code_example_correct": "self.drip_count += min(new_drips, space)"
     },
     {
-      "mistake": "Eagerly creating dripped token objects",
-      "why_wrong": "Wastes memory and time creating objects that may never be accessed",
-      "correct_approach": "Keep dripped count as computed value, only create name string when get() called",
-      "code_example_wrong": "for i in range(dripped):\\n    self.tokens.append(f'dripped_{i}')  # Creates many objects!",
-      "code_example_correct": "dripped_count = int(self._fill_level) - len(self._tokens)\\nif dripped_count > 0:\\n    return 'dripped_0'  # Virtual, created on demand"
+      "mistake": "Not updating drips before setDripRate",
+      "why_wrong": "Loses dripped tokens that accumulated at old rate",
+      "correct_approach": "Always call _update_drips() first in setDripRate()",
+      "code_example_wrong": "def set_drip_rate(self, rate): self.drip_rate = rate",
+      "code_example_correct": "def set_drip_rate(self, rate): self._update_drips(); self.drip_rate = rate"
     },
     {
-      "mistake": "Not syncing before changing drip rate",
-      "why_wrong": "Loses accumulated drips under the old rate",
-      "correct_approach": "Call _sync() to lock in accumulated drips, then change rate",
-      "code_example_wrong": "def set_drip_rate(self, rate):\\n    self._drip_rate = rate  # Lost drips from old rate!",
-      "code_example_correct": "def set_drip_rate(self, rate):\\n    self._sync()  # Account for drips at old rate\\n    self._drip_rate = rate"
+      "mistake": "Removing token on get()",
+      "why_wrong": "Problem says get() is a peek operation",
+      "correct_approach": "Return token without modifying tokens list",
+      "code_example_wrong": "return self.tokens.pop(0)",
+      "code_example_correct": "return self.tokens[0]"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by clarifying the requirements: 'So add() returns success/fail, get() peeks without removal, and dripping accumulates tokens over time?'. Then explain the key insight: 'I'll track a fill_level that represents total fullness - it increases from dripping and explicit adds. Dripped count is derived: fill_level minus explicit count.'",
+    "how_to_present": "Start by clarifying: 'This is a design problem, separate from the scheduling. Let me first explain the lazy evaluation approach...' Then sketch the data structure and key methods.",
     "what_to_mention": [
-      "Lazy evaluation is key - don't create objects eagerly",
-      "Time source injection enables testing",
-      "The fill_level abstraction simplifies reasoning about state",
-      "Thread-safety would be needed in production (mention but don't implement)"
+      "Lazy evaluation avoids threads/timers",
+      "Dripped tokens are virtual (just a count)",
+      "All operations are O(1)",
+      "Time-based systems need careful testing"
     ],
-    "time_allocation": "2 min clarify requirements, 3 min explain approach, 8 min implement, 2 min test",
+    "time_allocation": "2 min understand, 3 min design, 10 min code, 3 min test",
     "if_stuck": [
-      "Draw the bucket with fill_level as a single number",
-      "Think about what changes on each operation",
-      "Remember: dripped_count = fill_level - explicit_count"
+      "Think about what state you need to track",
+      "When do you actually need the dripped tokens?",
+      "Can you compute instead of store?"
     ]
   },
-  "connection_to_next_part": "A Part 4 could add: (1) Token removal/consumption from get(), (2) Multiple named buckets with shared quotas, (3) Sliding window rate limiting, (4) Thread-safe implementation. The fill_level abstraction extends naturally to these scenarios.",
+  "connection_to_next_part": "A Part 4 might add: token removal (consume), priority tokens, distributed buckets, or token expiration. The lazy evaluation pattern scales well for these extensions.",
   "communication_script": {
-    "transition_from_previous": "Okay, Part 3 is a new design problem - a Token Bucket rate limiter. Let me make sure I understand the requirements before diving in.",
-    "explaining_changes": "The key insight is using a 'fill_level' to track total bucket fullness. It increases from dripping (time \u00d7 rate) and explicit adds. Dripped tokens are virtual - we compute their count as fill_level minus explicit token count.",
+    "transition_from_previous": "OK, so Parts 1-2 handle process scheduling. Part 3 is a completely different problem - a token bucket rate limiter. This is a classic system design component.",
+    "explaining_changes": "The key insight is lazy evaluation. Instead of actually adding dripped tokens every second, I'll track the last update time and compute drips on-demand when add() or get() is called.",
     "while_extending_code": [
-      "I'm making time injectable for testing...",
-      "The _sync method is the heart - it updates fill_level based on elapsed time...",
-      "get() checks explicit first, then falls back to dripped..."
+      "Adding TokenBucket as a new class alongside Solution...",
+      "The _update_drips() helper does the lazy computation...",
+      "Using time.time() for timestamps, with a test helper for simulation..."
     ],
-    "after_completing": "The TokenBucket now handles both explicit adds and time-based dripping. All operations are O(1). The lazy evaluation means we never create unnecessary dripped token objects. Ready for any extensions?"
+    "after_completing": "TokenBucket now supports capacity-limited tokens with lazy dripping. All operations are O(1). The explicit tokens and virtual drip count together can't exceed capacity."
   },
   "time_milestones": {
-    "time_budget": "15-20 minutes for this part",
-    "by_2_min": "Clarify requirements - add/get semantics, dripping behavior, lazy evaluation hint",
-    "by_5_min": "Explain fill_level approach, start coding constructor and _sync()",
-    "by_10_min": "Complete add() and get() methods",
-    "by_15_min": "Add setDripRate(), write quick tests, handle edge cases",
-    "warning_signs": "If still designing at 8 min, simplify - get basic add/get working first, then add dripping"
+    "time_budget": "15-18 minutes for this part",
+    "by_3_min": "Understand the token bucket concept, identify lazy evaluation as the approach",
+    "by_8_min": "Design data structures (tokens list, drip_count, last_update), start coding",
+    "by_15_min": "Complete implementation, run through test cases",
+    "warning_signs": "If confused about dripping at 5 min, ask for clarification. If stuck on lazy eval, mention timer approach as fallback."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "This is a standalone design problem. If unsure about dripping, implement basic add/get first (simple list with capacity check), then layer on dripping.",
-    "if_new_requirement_unclear": "Ask: 'For dripping, does the bucket fill up continuously even if I don't call any methods? So I need to compute accumulated drips on each operation?'",
-    "if_running_behind": "Skip the time injection and use real time.time(). Mention: 'In production I'd make time injectable for testing, but I'll use system time for now.'"
+    "if_part_builds_wrong": "TokenBucket is independent - Part 1-2 bugs don't affect it. Focus on the new class.",
+    "if_new_requirement_unclear": "Ask: 'For dripping, do I need real-time guarantees or is lazy computation OK?'",
+    "if_running_behind": "Implement add() and get() first without dripping. Add setDripRate() and _update_drips() as follow-up."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing lazy evaluation as the key pattern",
-      "Proposing fill_level abstraction without hints",
-      "Mentioning time source injection for testability",
-      "Discussing thread-safety considerations proactively",
-      "Noting this is a classic rate limiting pattern (token bucket / leaky bucket)"
+      "Immediately recognizing the lazy evaluation pattern",
+      "Mentioning this is a classic rate limiter algorithm",
+      "Discussing testability with injectable time source",
+      "Proactively handling the 'update drips before changing rate' subtlety"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Lazy Evaluation with Time-Based State",
+    "pattern": "Lazy Evaluation / Virtual State",
     "indicators": [
-      "Dripping over time",
-      "Don't create objects until needed",
-      "Compute on access",
-      "Track 'last updated' timestamp"
+      "Time-based state changes",
+      "State computed on access",
+      "Avoiding background threads"
     ],
     "similar_problems": [
       "LC 359 - Logger Rate Limiter",
       "LC 362 - Design Hit Counter",
-      "Leaky Bucket Algorithm",
-      "Sliding Window Rate Limiter"
+      "Leaky Bucket algorithm"
     ],
-    "template": "```python\\nclass TimeBasedCounter:\\n    def __init__(self):\\n        self.last_update = time.time()\\n        self.count = 0\\n    \\n    def _sync(self):\\n        elapsed = time.time() - self.last_update\\n        self.count = f(self.count, elapsed)  # Update based on time\\n        self.last_update = time.time()\\n    \\n    def operation(self):\\n        self._sync()\\n        # ... do operation with updated count\\n```"
+    "template": "Track (last_update_time, virtual_count), compute on access: count += (now - last_update) * rate"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'tokens drip over time', I immediately think of lazy evaluation",
-      "why": "Eagerly creating tokens at each time step is wasteful - we should compute on demand"
+      "thought": "When I see 'tokens drip at rate r per second', I immediately think of timer/threads vs lazy evaluation",
+      "why": "Lazy is simpler and more testable for interviews"
     },
     {
       "step": 2,
-      "thought": "The 'fill_level' abstraction unifies explicit and dripped tokens",
-      "why": "Instead of tracking two separate lists, one number captures total fullness"
+      "thought": "The key constraint is capacity - drips + explicit <= capacity",
+      "why": "This forces careful tracking of both types"
     },
     {
       "step": 3,
-      "thought": "Time source should be injectable",
-      "why": "Can't test time-based logic reliably with real time - need deterministic mock"
-    },
-    {
-      "step": 4,
-      "thought": "Must sync before changing drip rate",
-      "why": "Accumulated drips under old rate must be counted before switching"
+      "thought": "get() doesn't remove means we just need to peek, not manage removal",
+      "why": "Simplifies the design significantly"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you design a clean data structure from requirements?",
+      "Can you switch contexts to a design problem?",
       "Do you recognize the lazy evaluation pattern?",
-      "Can you handle time-based state correctly?",
-      "Is your code testable (time injection)?"
+      "Is your code clean and testable?"
     ],
     "bonus_points": [
-      "Mentioning thread-safety considerations",
-      "Drawing the state diagram before coding",
-      "Recognizing this as classic rate limiting pattern",
-      "Discussing production concerns (logging, metrics)"
+      "Discussing thread-safety considerations",
+      "Mentioning this is a classic rate limiting algorithm",
+      "Providing test helpers for time simulation"
     ],
     "red_flags": [
-      "Eagerly creating dripped token objects",
-      "Forgetting to sync before operations",
-      "No consideration for testability",
-      "Overcomplicating with unnecessary data structures"
+      "Using actual threads/timers in interview",
+      "Over-complicating with stored dripped tokens",
+      "Forgetting to update drips before operations"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Let AI help with docstrings and type hints",
-      "Use AI for boilerplate test setup",
-      "Ask AI about edge cases you might have missed"
+      "Let AI help with time.time() boilerplate",
+      "Use AI for test case generation"
     ],
     "what_not_to_do": [
-      "Don't let AI design the fill_level approach - show your thinking",
-      "Understand the _sync() logic yourself",
-      "Don't blindly accept generated test cases - verify correctness"
+      "Don't let AI suggest threading solutions",
+      "Verify the lazy evaluation logic yourself"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without clarifying dripping semantics",
-      "Not drawing a diagram of bucket state",
-      "Ignoring the lazy evaluation hint"
+      "Not clarifying that this is a different problem type",
+      "Rushing without understanding dripping semantics"
     ],
     "technical": [
-      "Using actual list for dripped tokens",
-      "Not handling time edge cases (negative elapsed)",
-      "Forgetting capacity constraint on fill_level"
+      "Using threads/timers unnecessarily",
+      "Storing actual dripped token objects",
+      "Forgetting the peek-only nature of get()"
     ],
     "communication": [
-      "Not explaining why fill_level works",
-      "Not mentioning testability",
-      "Forgetting to test the dripping scenario"
+      "Not explaining why lazy evaluation works",
+      "Skipping the capacity constraint explanation"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does add() check fill_level against capacity after sync?",
-      "Does get() return explicit tokens before dripped?",
-      "Is fill_level capped at capacity in _sync()?",
-      "Is time source injectable for testing?",
-      "Did I test both basic and dripping scenarios?"
+      "add() returns False when full (explicit + dripped >= capacity)",
+      "get() doesn't remove tokens",
+      "_update_drips() called before all operations",
+      "setDripRate() updates drips with old rate first"
     ],
     "quick_code_review": [
-      "Type hints on all public methods",
-      "_sync() called at start of add() and get()",
-      "setDripRate() syncs before changing rate",
-      "max(0, elapsed) to handle clock skew",
-      "max(0, rate) in setDripRate()"
+      "TokenBucket is separate class (not nested)",
+      "Method names match signatures exactly",
+      "Test helper for time simulation included"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Thread-safety with locks or atomic operations",
-      "Metrics for add success/fail rates",
-      "Logging for debugging rate limiting decisions",
-      "Configurable virtual token naming scheme"
+      "Thread-safe synchronization",
+      "Metrics for add/drop rates",
+      "Injectable time source for testing",
+      "Token expiration"
     ],
-    "why_not_in_interview": "Focus on core algorithm; threading adds complexity that distracts from the design discussion",
-    "how_to_mention": "Say: 'In production, I'd add a lock around _sync() and the state mutation to make this thread-safe, but I'll skip that for interview purposes.'"
+    "why_not_in_interview": "Focus on core lazy evaluation pattern; mention these verbally",
+    "how_to_mention": "Say: 'In production, I'd add a lock for thread safety and inject the time source for testing.'"
   },
-  "generated_at": "2026-01-18T18:46:39.388568",
+  "generated_at": "2026-01-19T04:58:31.101196",
   "_meta": {
     "problem_id": "process_scheduling",
     "part_number": 3,

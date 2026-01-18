@@ -4,64 +4,57 @@
   "category": "DSA/Binary Search",
   "estimated_time": "35-45 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic binary search problem that appears simple but requires deep understanding. The naive approach (merge and find median) gives O(m+n), but the O(log(min(m,n))) requirement signals we need binary search on partitions, not elements. This is testing mastery of binary search invariants and boundary handling.",
-    "pattern_recognition": "Binary Search + Divide and Conquer + Partition Logic. The key pattern is 'binary search on answer space' - we're not searching for an element, but for a valid partition point. This is similar to LC 410 (Split Array Largest Sum) and LC 1011 (Capacity to Ship Packages).",
+    "first_impressions": "Classic hard binary search problem. The naive O(m+n) merge is easy, but O(log(min(m,n))) requires a fundamentally different approach - **partition-based binary search**. This tests deep understanding of binary search beyond simple 'find element in sorted array'.",
+    "pattern_recognition": "Binary Search + Divide and Conquer + Array Partitioning. The key pattern is **binary search on answer space** - we're not searching for a specific element, but searching for the correct partition point.",
     "key_constraints": [
-      "O(log(min(m,n))) complexity requirement - eliminates merge-based approaches",
-      "0 \u2264 m, n \u2264 1000 but m+n \u2265 1 - at least one element exists, handle empty arrays",
-      "Arrays are sorted in non-decreasing order - duplicates allowed, enables binary search",
-      "Answer within 10^-5 precision - floating point is acceptable, no need for Decimal",
-      "Elements range: -10^6 to 10^6 - use infinity for boundary handling, no overflow concern"
+      "O(log(min(m,n))) time complexity - this FORCES binary search, merge is disqualified",
+      "Arrays are already sorted - we can leverage this for binary search",
+      "At least one array is non-empty - no need to handle both empty",
+      "Precision within 10^-5 - floating point division is acceptable"
     ],
     "clarifying_questions": [
-      "Are both arrays guaranteed to be sorted in ascending order? - Confirms we can use binary search",
-      "Can both arrays be empty? - No, m+n \u2265 1, but one can be empty",
-      "How should we handle duplicates? - They're allowed, doesn't affect partition logic",
-      "What precision is needed for the result? - Within 10^-5, standard float is fine",
-      "Are negative numbers allowed? - Yes, -10^6 to 10^6, affects boundary value choice",
-      "Can I assume the arrays fit in memory? - Yes, max 2000 elements total",
-      "Should I optimize for one array being much smaller? - Yes, binary search on smaller array"
+      "Can both arrays be empty? - No, at least one element exists; affects edge case handling",
+      "Are there duplicate elements? - Yes, this doesn't affect our approach but good to clarify",
+      "Are arrays sorted ascending? - Yes, confirmed; critical for binary search correctness",
+      "Is the median always a valid number or could overflow occur? - Elements in [-10^6, 10^6], sum fits in double",
+      "Should I optimize for space as well? - O(1) space is expected since we're not merging"
     ],
     "edge_cases_to_consider": [
-      "One array is empty - median is just from the other array",
-      "Arrays don't overlap: [1,2] and [3,4] - all of one array goes to left half",
-      "One array entirely within another: [1,5] and [2,3,4]",
-      "Single element arrays: [1] and [2]",
-      "All elements are the same: [2,2,2] and [2,2]",
-      "Odd vs even total length - different median formula",
-      "Partition at boundary (i=0 or i=m) - use infinity for missing elements"
+      "One array is empty - median is simply the middle of the other array",
+      "Arrays don't overlap (e.g., [1,2] and [3,4]) - partition at boundary",
+      "Single element in one/both arrays - need careful boundary handling",
+      "All elements equal - any partition is valid",
+      "Even vs odd total length - different median formulas"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "O(log(min(m,n))) time complexity",
-        "how_met": "Binary search on smaller array with O(log(m)) iterations where m \u2264 n",
+        "requirement": "Return median of combined sorted arrays",
+        "how_met": "Partition approach finds the median without actually merging",
         "gotchas": [
-          "Must ensure we search on smaller array",
-          "Each iteration is O(1) operations"
+          "Even vs odd total length requires different formulas"
+        ]
+      },
+      {
+        "requirement": "O(log(min(m,n))) time complexity",
+        "how_met": "Binary search on smaller array only, each iteration halves search space",
+        "gotchas": [
+          "Must swap to ensure binary search on smaller array"
         ]
       },
       {
         "requirement": "O(1) space complexity",
-        "how_met": "Only use constant variables for partition indices and boundary values",
+        "how_met": "Only use constant extra variables, no merging or copying",
         "gotchas": [
-          "Don't create merged array",
-          "Don't use recursion with O(log n) stack"
+          "Don't accidentally create merged array for verification"
         ]
       },
       {
         "requirement": "Handle empty arrays",
-        "how_met": "Swap to ensure empty array is nums1, then partition at 0 with -inf boundary",
+        "how_met": "Use -inf and +inf as boundary sentinels when partition is at edges",
         "gotchas": [
-          "j calculation still valid when m=0"
-        ]
-      },
-      {
-        "requirement": "Precision within 10^-5",
-        "how_met": "Standard double/float arithmetic is sufficient",
-        "gotchas": [
-          "Remember to cast to float before division for even-length case"
+          "Off-by-one errors at partition boundaries"
         ]
       }
     ],
@@ -70,163 +63,159 @@
         "operation": "findMedianSortedArrays",
         "target": "O(log(min(m,n)))",
         "achieved": "O(log(min(m,n)))",
-        "why": "Binary search on smaller array, constant work per iteration"
+        "why": "Binary search on smaller array, each iteration halves search space"
       }
     ],
     "non_goals": [
-      "Handling unsorted arrays",
-      "Streaming/online median",
-      "Multiple queries",
-      "Modifying input arrays"
+      "Modifying input arrays",
+      "Handling unsorted input",
+      "Supporting streaming data"
     ]
   },
   "assumptions": [
-    "Arrays are already sorted - no need to verify or sort them",
+    "Arrays are sorted in non-decreasing order (confirmed by problem)",
     "At least one array has at least one element",
-    "Integer elements, returning float/double median",
-    "No concurrent access or thread-safety concerns"
+    "Floating point precision is sufficient (double in Java, float in Python)",
+    "We should return exact median, not approximation"
   ],
   "tradeoffs": [
     {
-      "decision": "Binary search on partitions vs. binary search on k-th element",
-      "chosen": "Partition approach",
-      "why": "More intuitive for median, directly finds valid split",
-      "alternative": "Find k-th element approach (Recursive)",
-      "when_to_switch": "For generalized k-th element problem (Part 2)"
+      "decision": "Binary search vs merge approach",
+      "chosen": "Binary search partition",
+      "why": "O(log(min(m,n))) vs O(m+n) - logarithmic is exponentially faster for large inputs",
+      "alternative": "Merge and find middle",
+      "when_to_switch": "Never for this problem - merge violates complexity requirement"
     },
     {
-      "decision": "Iterative vs. Recursive binary search",
-      "chosen": "Iterative",
-      "why": "O(1) space, avoids stack overhead, cleaner for interviews",
-      "alternative": "Recursive with O(log n) space",
-      "when_to_switch": "If cleaner for your mental model"
+      "decision": "Binary search on smaller vs larger array",
+      "chosen": "Always smaller array",
+      "why": "O(log(min(m,n))) vs O(log(max(m,n))) - could be significant difference",
+      "alternative": "Search on either",
+      "when_to_switch": "Never - smaller is always better or equal"
     },
     {
-      "decision": "Use infinity values vs. explicit boundary checks",
-      "chosen": "Infinity values (float('inf'))",
-      "why": "Cleaner code, fewer if-else branches, mathematically elegant",
-      "alternative": "Explicit null checks",
-      "when_to_switch": "If language doesn't support infinity well"
+      "decision": "Use sentinels (-inf, +inf) vs explicit boundary checks",
+      "chosen": "Sentinels for cleaner code",
+      "why": "Eliminates 4+ if-else branches, code is more readable",
+      "alternative": "Explicit checks at every boundary",
+      "when_to_switch": "In languages without infinity support"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "Partition logic is reusable for k-th element",
-      "Binary search template can extend to K sorted arrays",
-      "Clear separation of partition calculation and median extraction"
+      "Single responsibility - one function does one thing",
+      "Handle edge cases uniformly with sentinels",
+      "Binary search template is reusable"
     ],
-    "why_this_design_scales": "The partition approach naturally extends to: (1) finding k-th element by adjusting half size, (2) K sorted arrays via tournament/heap, (3) streaming via maintaining partitions incrementally",
+    "why_this_design_scales": "The partition concept generalizes to finding k-th element (Part 2) and extends to k sorted arrays (Part 3). The binary search framework remains the same.",
     "expected_followup_hooks": [
-      "Change partition size for k-th element",
-      "Use heap for K arrays",
-      "Add/remove elements while maintaining partition"
+      "Partition calculation can be parameterized for k-th element",
+      "Can wrap in class for streaming data (Part 4)",
+      "Median of medians for k arrays"
     ],
     "invariants": [
-      "Left half always contains exactly (m+n+1)/2 elements",
-      "All elements in left half \u2264 all elements in right half",
-      "Binary search bounds always contain valid partition"
+      "Left half always has (m+n+1)/2 elements",
+      "max(left) <= min(right) at valid partition",
+      "Binary search bounds always converge"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n                    THE PARTITION INSIGHT\n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    Goal: Split combined elements into LEFT and RIGHT halves\n          where max(LEFT) \u2264 min(RIGHT)\n    \n    nums1 = [1, 3, 8, 9, 15]    (m = 5)\n    nums2 = [7, 11, 18, 19, 21, 25]    (n = 6)\n    \n    Total = 11 elements \u2192 Left half needs \u230811/2\u2309 = 6 elements\n    \n    We DON'T merge! We partition BOTH arrays:\n    \n         i elements    m-i elements\n           from          from\n           nums1         nums1\n             \u2193             \u2193\n    nums1: [1, 3, 8, 9] | [15]\n    nums2: [7, 11]      | [18, 19, 21, 25]\n             \u2191             \u2191\n         j elements    n-j elements\n           from          from  \n           nums2         nums2\n    \n    LEFT HALF (6 elements): [1, 3, 8, 9, 7, 11]\n    RIGHT HALF (5 elements): [15, 18, 19, 21, 25]\n    \n    Valid partition if:\n      \u2022 maxLeft1(9) \u2264 minRight2(18)  \u2713\n      \u2022 maxLeft2(11) \u2264 minRight1(15) \u2713\n    \n    Median (odd total) = max(LEFT) = max(9, 11) = 11\n```",
-    "data_structure_state": "```\n              BINARY SEARCH STATE EVOLUTION\n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    Smaller array: nums1 = [1, 3, 8, 9, 15]  (m=5)\n    Larger array:  nums2 = [7, 11, 18, 19, 21, 25]  (n=6)\n    halfLen = (5 + 6 + 1) / 2 = 6\n    \n    Binary search range: [0, 5] (partition can be 0 to m)\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 Iteration 1: low=0, high=5                           \u2502\n    \u2502   i = 2 (mid of 0-5)                                 \u2502\n    \u2502   j = 6 - 2 = 4                                      \u2502\n    \u2502                                                      \u2502\n    \u2502   nums1: [1, 3] | [8, 9, 15]     maxL1=3, minR1=8   \u2502\n    \u2502   nums2: [7,11,18,19] | [21,25]  maxL2=19, minR2=21 \u2502\n    \u2502                                                      \u2502\n    \u2502   Check: maxL2(19) > minR1(8)  \u2717                    \u2502\n    \u2502   \u2192 i too small, need more from nums1               \u2502\n    \u2502   \u2192 low = i + 1 = 3                                 \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 Iteration 2: low=3, high=5                           \u2502\n    \u2502   i = 4 (mid of 3-5)                                 \u2502\n    \u2502   j = 6 - 4 = 2                                      \u2502\n    \u2502                                                      \u2502\n    \u2502   nums1: [1,3,8,9] | [15]        maxL1=9, minR1=15  \u2502\n    \u2502   nums2: [7, 11] | [18,19,21,25] maxL2=11, minR2=18 \u2502\n    \u2502                                                      \u2502\n    \u2502   Check: maxL1(9) \u2264 minR2(18)  \u2713                    \u2502\n    \u2502          maxL2(11) \u2264 minR1(15) \u2713                    \u2502\n    \u2502   \u2192 VALID PARTITION FOUND!                          \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    Result: maxLeft = max(9, 11) = 11\n            Total is odd \u2192 Median = 11\n```",
+    "problem_visualization": "```\n         THE CORE INSIGHT: PARTITIONING\n         \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\n    Instead of merging, we PARTITION both arrays:\n    \n    nums1: [1, 3 | 8, 9, 15]        \u2190 partition at index 2\n    nums2: [7, 11, 18 | 19, 21, 25] \u2190 partition at index 3\n           \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n           LEFT HALF   RIGHT HALF\n           (5 elems)   (6 elems)\n    \n    Key property we need:\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  max(left_half) \u2264 min(right_half)           \u2502\n    \u2502                                             \u2502\n    \u2502  nums1[1]=3  \u2264  nums2[3]=19  \u2713             \u2502\n    \u2502  nums2[2]=18 \u2264  nums1[2]=8   \u2717 INVALID!   \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    When invalid: adjust partition using binary search\n```",
+    "data_structure_state": "```\n    BINARY SEARCH STATE PROGRESSION\n    \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n    \n    nums1 = [1, 3, 8, 9, 15]  (m=5)\n    nums2 = [7, 11, 18, 19, 21, 25]  (n=6)\n    half = (5+6+1)/2 = 6  \u2190 left half needs 6 elements\n    \n    Iteration 1: left=0, right=5\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 i = (0+5)/2 = 2                         \u2502\n    \u2502 j = 6 - 2 = 4                           \u2502\n    \u2502                                         \u2502\n    \u2502 nums1: [1, 3 | 8, 9, 15]               \u2502\n    \u2502 nums2: [7, 11, 18, 19 | 21, 25]        \u2502\n    \u2502                                         \u2502\n    \u2502 maxL1=3, minR1=8, maxL2=19, minR2=21   \u2502\n    \u2502 3\u226421\u2713 but 19>8\u2717 \u2192 i too small         \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    Iteration 2: left=3, right=5\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 i = (3+5)/2 = 4                         \u2502\n    \u2502 j = 6 - 4 = 2                           \u2502\n    \u2502                                         \u2502\n    \u2502 nums1: [1, 3, 8, 9 | 15]               \u2502\n    \u2502 nums2: [7, 11 | 18, 19, 21, 25]        \u2502\n    \u2502                                         \u2502\n    \u2502 maxL1=9, minR1=15, maxL2=11, minR2=18  \u2502\n    \u2502 9\u226418\u2713 AND 11\u226415\u2713 \u2192 VALID!             \u2502\n    \u2502                                         \u2502\n    \u2502 Total odd \u2192 median = max(9,11) = 11    \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
         "description": "Ensure nums1 is smaller array",
-        "visualization": "if m > n: swap(nums1, nums2)",
-        "key_point": "Binary search on smaller for O(log(min(m,n)))"
+        "visualization": "if len(nums1) > len(nums2): swap",
+        "key_point": "Always binary search on smaller for O(log(min(m,n)))"
       },
       {
         "step": 2,
         "description": "Initialize binary search bounds",
-        "visualization": "low = 0, high = m\nhalfLen = (m + n + 1) / 2",
-        "key_point": "Partition can be at any position 0 to m"
+        "visualization": "left=0, right=m, half=(m+n+1)/2",
+        "key_point": "half is size of left partition we need"
       },
       {
         "step": 3,
-        "description": "Binary search loop",
-        "visualization": "while low <= high:\n  i = (low + high) / 2\n  j = halfLen - i",
-        "key_point": "i + j = halfLen always (left half size)"
+        "description": "Calculate partition points",
+        "visualization": "i = mid in nums1, j = half - i in nums2",
+        "key_point": "If we take i from nums1, we need half-i from nums2"
       },
       {
         "step": 4,
-        "description": "Get boundary values with infinity handling",
-        "visualization": "maxL1 = -\u221e if i=0 else nums1[i-1]\nminR1 = +\u221e if i=m else nums1[i]\nmaxL2 = -\u221e if j=0 else nums2[j-1]\nminR2 = +\u221e if j=n else nums2[j]",
-        "key_point": "Infinity handles edge partitions elegantly"
+        "description": "Get boundary values with sentinels",
+        "visualization": "maxL1 = -inf if i=0 else nums1[i-1]",
+        "key_point": "Sentinels handle edge cases elegantly"
       },
       {
         "step": 5,
-        "description": "Check partition validity and adjust",
-        "visualization": "if maxL1 > minR2:\n  high = i - 1  // i too big\nelif maxL2 > minR1:\n  low = i + 1   // i too small\nelse:\n  FOUND!",
-        "key_point": "Cross-comparison determines direction"
+        "description": "Check partition validity",
+        "visualization": "maxL1\u2264minR2 AND maxL2\u2264minR1?",
+        "key_point": "Cross-check ensures correct global ordering"
       },
       {
         "step": 6,
-        "description": "Calculate median from valid partition",
-        "visualization": "maxLeft = max(maxL1, maxL2)\nminRight = min(minR1, minR2)\n\nif (m+n) is odd:\n  return maxLeft\nelse:\n  return (maxLeft + minRight) / 2",
-        "key_point": "Odd: max of left; Even: average of boundary"
+        "description": "Adjust binary search or return median",
+        "visualization": "if valid: return median, else adjust left/right",
+        "key_point": "maxL1>minR2 means i too big; maxL2>minR1 means i too small"
       }
     ],
-    "dry_run_table": "| Step | low | high | i | j | maxL1 | minR1 | maxL2 | minR2 | Check | Action |\n|------|-----|------|---|---|-------|-------|-------|-------|-------|--------|\n| Init | 0 | 5 | - | - | - | - | - | - | halfLen=6 | Start search |\n| 1 | 0 | 5 | 2 | 4 | 3 | 8 | 19 | 21 | 19>8 \u2717 | low=3 |\n| 2 | 3 | 5 | 4 | 2 | 9 | 15 | 11 | 18 | 9\u226418\u2713 11\u226415\u2713 | FOUND |\n| Result | - | - | 4 | 2 | 9 | 15 | 11 | 18 | max(9,11)=11 | **Return 11** |"
+    "dry_run_table": "| Step | left | right | i | j | maxL1 | minR1 | maxL2 | minR2 | Action |\n|------|------|-------|---|---|-------|-------|-------|-------|--------|\n| 1 | 0 | 5 | 2 | 4 | 3 | 8 | 19 | 21 | 19>8 \u2192 left=3 |\n| 2 | 3 | 5 | 4 | 2 | 9 | 15 | 11 | 18 | Valid! max(9,11)=**11** |"
   },
   "thinking_process": {
     "step_by_step": [
-      "When I see 'median of two sorted arrays' with O(log) requirement, I immediately think binary search - but on WHAT?",
-      "The key insight: We're not searching for an element, we're searching for a PARTITION POINT",
-      "If we could merge arrays, median would be at position (m+n)/2. But merging is O(m+n) - too slow.",
-      "Instead, think: median splits elements into two halves. We need to find WHERE to split each array.",
-      "If we take i elements from nums1 and j elements from nums2 for left half, then i + j = (m+n+1)/2",
-      "Once we fix i, j is determined! So we binary search only on i in range [0, m]",
-      "Valid partition means: max(left_half) \u2264 min(right_half)",
-      "Since arrays are sorted, this simplifies to: nums1[i-1] \u2264 nums2[j] AND nums2[j-1] \u2264 nums1[i]",
-      "Binary search on smaller array gives O(log(min(m,n))) - always swap to make nums1 smaller",
-      "Handle boundaries with infinity: if i=0, nothing on left from nums1, treat as -\u221e"
+      "When I see 'median of two sorted arrays' with O(log) requirement, I immediately think binary search - but WHERE to apply it?",
+      "The naive O(m+n) merge is easy but violates the complexity requirement. I need a fundamentally different approach.",
+      "Key insight: Median divides a sorted list into two equal halves. I don't need to MERGE arrays, just PARTITION them correctly!",
+      "If I partition both arrays such that left_half has (m+n)/2 elements and max(left) \u2264 min(right), I've found the median.",
+      "Binary search finds the partition point: for partition i in nums1, partition in nums2 is forced to be (m+n+1)/2 - i.",
+      "The condition maxLeft1 \u2264 minRight2 AND maxLeft2 \u2264 minRight1 tells me if the partition is correct.",
+      "If maxLeft1 > minRight2, I've taken too many from nums1, so move left. Otherwise, move right.",
+      "Always search on smaller array to ensure O(log(min(m,n)))."
     ],
-    "key_insight": "The median divides the combined sorted array into two equal halves. Instead of finding which element is at the middle, we find WHERE to partition both arrays such that left half and right half have equal sizes AND every element in left \u2264 every element in right. This transforms the problem from 'find k-th element' to 'binary search for valid partition'.",
-    "why_this_works": "Because both arrays are sorted, once we partition them, we only need to check the boundary elements (the elements right next to the partition line). If maxLeft1 \u2264 minRight2 AND maxLeft2 \u2264 minRight1, then ALL elements in left half are \u2264 ALL elements in right half. The binary search adjusts i based on which cross-comparison fails."
+    "key_insight": "**We're not searching for an element - we're searching for a PARTITION POINT.** Once we fix partition in one array, the other is determined. Valid partition = correct median.",
+    "why_this_works": "The median is the boundary between the smaller and larger halves. By ensuring max(left) \u2264 min(right), we guarantee our partition correctly separates smaller from larger elements across both arrays."
   },
   "approaches": [
     {
       "name": "Brute Force - Merge and Find",
-      "description": "Merge both sorted arrays into one sorted array, then directly find the median at the middle position(s).",
-      "pseudocode": "merged = merge(nums1, nums2)  // O(m+n) time and space\nn = len(merged)\nif n is odd:\n  return merged[n/2]\nelse:\n  return (merged[n/2-1] + merged[n/2]) / 2",
-      "time_complexity": "O(m+n)",
-      "space_complexity": "O(m+n)",
+      "description": "Merge both sorted arrays into one, then find the middle element(s).",
+      "pseudocode": "merged = merge(nums1, nums2)\nn = len(merged)\nif n is odd:\n    return merged[n/2]\nelse:\n    return (merged[n/2-1] + merged[n/2]) / 2",
+      "time_complexity": "O(m + n)",
+      "space_complexity": "O(m + n)",
       "pros": [
         "Simple to implement",
         "Easy to understand",
-        "No edge cases with partitions"
+        "Always correct"
       ],
       "cons": [
-        "Doesn't meet O(log(min(m,n))) requirement",
-        "Uses extra space",
-        "Does unnecessary work - we only need middle elements"
+        "Violates O(log(min(m,n))) requirement",
+        "Uses O(m+n) extra space",
+        "Not acceptable answer for this problem"
       ],
-      "when_to_use": "Quick solution if complexity isn't constrained, or to verify optimal solution"
+      "when_to_use": "Only mention as baseline to show you understand the straightforward approach before optimizing"
     },
     {
-      "name": "Two Pointers - Find K-th Element",
-      "description": "Use two pointers to iterate through both arrays simultaneously, counting until we reach the middle position(s).",
-      "pseudocode": "k = (m + n) / 2\np1, p2 = 0, 0\nfor i in range(k):\n  if nums1[p1] < nums2[p2]:\n    p1 += 1\n  else:\n    p2 += 1\n// nums1[p1] or nums2[p2] is the k-th element",
-      "time_complexity": "O(m+n) worst case, O((m+n)/2) average",
+      "name": "Two Pointers - Count to Median",
+      "description": "Use two pointers to virtually merge arrays, stop when we reach the median position.",
+      "pseudocode": "p1, p2 = 0, 0\nfor i in range((m+n)/2 + 1):\n    move smaller pointer forward\n    track last two values\nreturn median based on parity",
+      "time_complexity": "O(m + n)",
       "space_complexity": "O(1)",
       "pros": [
         "O(1) space",
-        "Still relatively simple",
-        "No merging needed"
+        "Conceptually simpler than binary search"
       ],
       "cons": [
         "Still O(m+n) time",
-        "Doesn't meet complexity requirement"
+        "Doesn't meet requirement"
       ],
-      "when_to_use": "If O(log) is not required and you want O(1) space"
+      "when_to_use": "If interviewer only needs O(1) space and relaxes time constraint"
     },
     {
-      "name": "Optimal: Binary Search on Partition",
-      "description": "Binary search on the smaller array to find a partition point i such that when j = halfLen - i elements are taken from the second array, the partition is valid (all left elements \u2264 all right elements).",
-      "pseudocode": "if m > n: swap arrays  // ensure nums1 is smaller\nlow, high = 0, m\nhalfLen = (m + n + 1) / 2\n\nwhile low <= high:\n  i = (low + high) / 2\n  j = halfLen - i\n  \n  maxL1 = -\u221e if i==0 else nums1[i-1]\n  minR1 = +\u221e if i==m else nums1[i]\n  maxL2 = -\u221e if j==0 else nums2[j-1]\n  minR2 = +\u221e if j==n else nums2[j]\n  \n  if maxL1 > minR2:\n    high = i - 1  // i is too big\n  elif maxL2 > minR1:\n    low = i + 1   // i is too small\n  else:\n    // Found valid partition\n    maxLeft = max(maxL1, maxL2)\n    if (m+n) % 2 == 1:\n      return maxLeft\n    minRight = min(minR1, minR2)\n    return (maxLeft + minRight) / 2",
-      "time_complexity": "O(log(min(m,n)))",
+      "name": "Optimal: Binary Search Partitioning",
+      "description": "Binary search on the smaller array to find correct partition point. Partner partition in larger array is determined automatically.",
+      "pseudocode": "ensure nums1 is smaller\nleft, right = 0, m\nwhile left <= right:\n    i = mid point in nums1\n    j = half - i  // partner in nums2\n    if valid_partition(i, j):\n        return calculate_median()\n    elif maxLeft1 > minRight2:\n        right = i - 1  // too many from nums1\n    else:\n        left = i + 1   // too few from nums1",
+      "time_complexity": "O(log(min(m, n)))",
       "space_complexity": "O(1)",
       "pros": [
         "Meets complexity requirement",
@@ -234,701 +223,516 @@
         "Elegant once understood"
       ],
       "cons": [
-        "Complex to derive and explain",
-        "Tricky edge cases with boundaries",
-        "Easy to make off-by-one errors"
+        "Complex to derive",
+        "Boundary cases are tricky"
       ],
-      "key_insight": "Binary search for partition point, not for element. The partition divides both arrays such that left half size = right half size (\u00b11) and max(left) \u2264 min(right)."
+      "key_insight": "The partition in nums2 is FORCED once we choose partition in nums1. We only binary search one dimension!"
     }
   ],
   "optimal_solution": {
-    "name": "Binary Search on Partition with Infinity Boundary Handling",
-    "explanation_md": "## Approach\n\nThe key insight is that finding the median is equivalent to **partitioning both arrays** such that:\n1. Left half contains exactly `(m + n + 1) / 2` elements\n2. Every element in left half \u2264 every element in right half\n\n### Why Partition Works\n\nIf we take `i` elements from `nums1` for the left half, we must take `j = (m+n+1)/2 - i` elements from `nums2`. Since both arrays are sorted:\n- `nums1[i-1]` is the largest element from nums1 in left half\n- `nums2[j-1]` is the largest element from nums2 in left half\n- `nums1[i]` is the smallest element from nums1 in right half\n- `nums2[j]` is the smallest element from nums2 in right half\n\nFor valid partition: `nums1[i-1] \u2264 nums2[j]` AND `nums2[j-1] \u2264 nums1[i]`\n\n### Binary Search Logic\n\n```\nIf nums1[i-1] > nums2[j]:  \n  \u2192 nums1's contribution is too large\n  \u2192 Decrease i (high = i - 1)\n\nIf nums2[j-1] > nums1[i]:\n  \u2192 nums1's contribution is too small  \n  \u2192 Increase i (low = i + 1)\n\nOtherwise:\n  \u2192 Valid partition found!\n```\n\n### Handling Boundaries\n\nWhen `i = 0`: No elements from nums1 in left half \u2192 treat `maxLeft1 = -\u221e`\nWhen `i = m`: All elements from nums1 in left half \u2192 treat `minRight1 = +\u221e`\n\nSame logic applies for `j = 0` and `j = n`.",
+    "name": "Binary Search Partitioning",
+    "explanation_md": "## Approach\n\n### Core Idea\nInstead of merging arrays, we **partition** both arrays into left and right halves such that:\n1. `len(left_half) = (m + n + 1) / 2`\n2. `max(left_half) \u2264 min(right_half)`\n\n### Why This Works\nThe median is by definition the element that separates the smaller half from the larger half. If we can partition both arrays correctly, the median is:\n- **Odd total**: `max(left_half)`\n- **Even total**: `(max(left_half) + min(right_half)) / 2`\n\n### Binary Search Logic\n- Binary search on **smaller array** for partition index `i`\n- Partner partition in larger array: `j = (m+n+1)/2 - i`\n- Valid partition: `nums1[i-1] \u2264 nums2[j]` AND `nums2[j-1] \u2264 nums1[i]`\n- Use `-inf` and `+inf` as sentinels for boundary cases",
     "data_structures": [
       {
-        "structure": "Two pointers (low, high)",
-        "purpose": "Binary search bounds on partition position in nums1"
+        "structure": "Two integer variables (left, right)",
+        "purpose": "Binary search bounds on smaller array"
       },
       {
-        "structure": "Four boundary variables",
-        "purpose": "maxLeft1, minRight1, maxLeft2, minRight2 for partition validation"
+        "structure": "Four boundary variables (maxLeft1, minRight1, maxLeft2, minRight2)",
+        "purpose": "Partition boundary values for validation"
       }
     ],
     "algorithm_steps": [
-      "1. Ensure nums1 is the smaller array (swap if needed)",
-      "2. Initialize binary search: low=0, high=m, halfLen=(m+n+1)/2",
-      "3. Binary search loop: calculate i=(low+high)/2, j=halfLen-i",
-      "4. Get boundary values with infinity for edge cases",
-      "5. Check cross-conditions and adjust low/high accordingly",
-      "6. When valid partition found, compute median based on parity"
+      "1. **Swap if needed**: Ensure nums1 is the smaller array",
+      "2. **Initialize**: left=0, right=m, half=(m+n+1)/2",
+      "3. **Binary search**: Calculate i and j partition points",
+      "4. **Get boundaries**: Use sentinels for edge partitions",
+      "5. **Validate**: Check cross-conditions for valid partition",
+      "6. **Adjust or return**: Move binary search bounds or compute median"
     ],
-    "why_decimal": "Not needed here - standard float division is sufficient since precision requirement is 10^-5"
+    "why_decimal": "Not applicable here - we use float division which has sufficient precision for the 10^-5 requirement"
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Median of Two Sorted Arrays - LeetCode 4",
-    "Time: O(log(min(m,n))), Space: O(1)",
-    "\"\"\"",
     "from typing import List",
-    "",
     "",
     "class Solution:",
     "    def findMedianSortedArrays(self, nums1: List[int], nums2: List[int]) -> float:",
     "        \"\"\"",
-    "        Find median of two sorted arrays using binary search on partitions.",
+    "        Find median of two sorted arrays using binary search partitioning.",
+    "        Time: O(log(min(m,n))), Space: O(1)",
     "        ",
-    "        The key insight is to partition both arrays such that:",
-    "        - Left half has (m+n+1)//2 elements",
-    "        - max(left_half) <= min(right_half)",
-    "        ",
-    "        Args:",
-    "            nums1: First sorted array",
-    "            nums2: Second sorted array",
-    "            ",
-    "        Returns:",
-    "            Median of the combined sorted arrays",
-    "            ",
-    "        Examples:",
-    "            >>> Solution().findMedianSortedArrays([1, 3], [2])",
-    "            2.0",
-    "            >>> Solution().findMedianSortedArrays([1, 2], [3, 4])",
-    "            2.5",
+    "        Key insight: Partition both arrays so max(left) <= min(right).",
+    "        Binary search finds the correct partition in O(log(min(m,n))).",
     "        \"\"\"",
     "        # Ensure nums1 is the smaller array for O(log(min(m,n)))",
     "        if len(nums1) > len(nums2):",
     "            nums1, nums2 = nums2, nums1",
     "        ",
     "        m, n = len(nums1), len(nums2)",
+    "        left, right = 0, m",
+    "        half = (m + n + 1) // 2  # Size of left partition",
     "        ",
-    "        # Binary search on the smaller array",
-    "        low, high = 0, m",
-    "        half_len = (m + n + 1) // 2  # Size of left half (ceiling for odd total)",
-    "        ",
-    "        while low <= high:",
-    "            # Partition indices",
-    "            i = (low + high) // 2  # Elements from nums1 in left half",
-    "            j = half_len - i        # Elements from nums2 in left half",
+    "        while left <= right:",
+    "            i = (left + right) // 2  # Partition index in nums1",
+    "            j = half - i              # Corresponding partition in nums2",
     "            ",
-    "            # Get boundary values with infinity for edge cases",
-    "            # When partition is at 0: no elements on left from that array",
-    "            # When partition is at array length: no elements on right",
-    "            max_left1 = float('-inf') if i == 0 else nums1[i - 1]",
-    "            min_right1 = float('inf') if i == m else nums1[i]",
-    "            max_left2 = float('-inf') if j == 0 else nums2[j - 1]",
-    "            min_right2 = float('inf') if j == n else nums2[j]",
+    "            # Get boundary values using sentinels for edge cases",
+    "            maxLeft1 = float('-inf') if i == 0 else nums1[i - 1]",
+    "            minRight1 = float('inf') if i == m else nums1[i]",
+    "            maxLeft2 = float('-inf') if j == 0 else nums2[j - 1]",
+    "            minRight2 = float('inf') if j == n else nums2[j]",
     "            ",
-    "            # Check if partition is valid",
-    "            if max_left1 > min_right2:",
-    "                # nums1's left part is too large, move partition left",
-    "                high = i - 1",
-    "            elif max_left2 > min_right1:",
-    "                # nums1's left part is too small, move partition right",
-    "                low = i + 1",
-    "            else:",
-    "                # Valid partition found!",
-    "                # max(left_half) = max(max_left1, max_left2)",
-    "                max_left = max(max_left1, max_left2)",
-    "                ",
-    "                # For odd total, median is max of left half",
+    "            # Check if we found valid partition",
+    "            if maxLeft1 <= minRight2 and maxLeft2 <= minRight1:",
+    "                # Valid partition found - calculate median",
     "                if (m + n) % 2 == 1:",
-    "                    return float(max_left)",
-    "                ",
-    "                # For even total, median is average of max(left) and min(right)",
-    "                min_right = min(min_right1, min_right2)",
-    "                return (max_left + min_right) / 2.0",
+    "                    return float(max(maxLeft1, maxLeft2))",
+    "                else:",
+    "                    return (max(maxLeft1, maxLeft2) + min(minRight1, minRight2)) / 2",
+    "            elif maxLeft1 > minRight2:",
+    "                # Too many elements from nums1, move partition left",
+    "                right = i - 1",
+    "            else:",
+    "                # Too few elements from nums1, move partition right",
+    "                left = i + 1",
     "        ",
-    "        # Should never reach here if input is valid",
-    "        raise ValueError(\"No valid partition found - check input validity\")",
+    "        return 0.0  # Should never reach here with valid input",
     "",
     "",
-    "def run_tests():",
-    "    \"\"\"Run comprehensive test cases.\"\"\"",
-    "    solution = Solution()",
+    "if __name__ == '__main__':",
+    "    sol = Solution()",
     "    ",
-    "    test_cases = [",
-    "        # (nums1, nums2, expected, description)",
-    "        ([1, 3], [2], 2.0, \"Odd total - simple case\"),",
-    "        ([1, 2], [3, 4], 2.5, \"Even total - two middle elements\"),",
-    "        ([], [1], 1.0, \"One empty array\"),",
-    "        ([2], [], 2.0, \"Other array empty\"),",
-    "        ([1, 3, 8, 9, 15], [7, 11, 18, 19, 21, 25], 11.0, \"Interleaved arrays\"),",
-    "        ([1, 2, 3], [4, 5, 6], 3.5, \"Non-overlapping arrays\"),",
-    "        ([4, 5, 6], [1, 2, 3], 3.5, \"Non-overlapping reversed\"),",
-    "        ([1], [2, 3, 4, 5, 6], 3.5, \"One small, one large\"),",
-    "        ([-5, -4, -3, -2, -1], [0], -2.5, \"Negative numbers\"),",
-    "        ([1, 1, 1], [1, 1, 1], 1.0, \"All same elements\"),",
-    "    ]",
+    "    # Test 1: Odd total length",
+    "    print(\"Test 1: nums1=[1,3], nums2=[2]\")",
+    "    print(f\"Median: {sol.findMedianSortedArrays([1, 3], [2])}\")",
+    "    print(\"Expected: 2.0\\n\")",
     "    ",
-    "    print(\"=\" * 70)",
-    "    print(\"MEDIAN OF TWO SORTED ARRAYS - TEST RESULTS\")",
-    "    print(\"=\" * 70)",
+    "    # Test 2: Even total length",
+    "    print(\"Test 2: nums1=[1,2], nums2=[3,4]\")",
+    "    print(f\"Median: {sol.findMedianSortedArrays([1, 2], [3, 4])}\")",
+    "    print(\"Expected: 2.5\\n\")",
     "    ",
-    "    all_passed = True",
-    "    for nums1, nums2, expected, description in test_cases:",
-    "        result = solution.findMedianSortedArrays(nums1, nums2)",
-    "        passed = abs(result - expected) < 1e-5",
-    "        status = \"PASS\" if passed else \"FAIL\"",
-    "        all_passed = all_passed and passed",
-    "        ",
-    "        print(f\"\\n{status}: {description}\")",
-    "        print(f\"  Input:    nums1={nums1}, nums2={nums2}\")",
-    "        print(f\"  Expected: {expected}\")",
-    "        print(f\"  Got:      {result}\")",
+    "    # Test 3: Empty array",
+    "    print(\"Test 3: nums1=[], nums2=[1]\")",
+    "    print(f\"Median: {sol.findMedianSortedArrays([], [1])}\")",
+    "    print(\"Expected: 1.0\\n\")",
     "    ",
-    "    print(\"\\n\" + \"=\" * 70)",
-    "    print(f\"OVERALL: {'ALL TESTS PASSED' if all_passed else 'SOME TESTS FAILED'}\")",
-    "    print(\"=\" * 70)",
-    "",
-    "",
-    "def demonstrate_algorithm():",
-    "    \"\"\"Visual demonstration of the algorithm steps.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 70)",
-    "    print(\"ALGORITHM DEMONSTRATION\")",
-    "    print(\"=\" * 70)",
+    "    # Test 4: Larger interleaving arrays",
+    "    print(\"Test 4: nums1=[1,3,8,9,15], nums2=[7,11,18,19,21,25]\")",
+    "    print(f\"Median: {sol.findMedianSortedArrays([1,3,8,9,15], [7,11,18,19,21,25])}\")",
+    "    print(\"Expected: 11.0\\n\")",
     "    ",
-    "    nums1 = [1, 3, 8, 9, 15]",
-    "    nums2 = [7, 11, 18, 19, 21, 25]",
-    "    ",
-    "    print(f\"\\nInput arrays:\")",
-    "    print(f\"  nums1 = {nums1}  (m = {len(nums1)})\")",
-    "    print(f\"  nums2 = {nums2}  (n = {len(nums2)})\")",
-    "    print(f\"  Total elements = {len(nums1) + len(nums2)} (odd -> median is middle element)\")",
-    "    print(f\"  Half length = {(len(nums1) + len(nums2) + 1) // 2}\")",
-    "    ",
-    "    # Manual trace",
-    "    m, n = len(nums1), len(nums2)",
-    "    half_len = (m + n + 1) // 2",
-    "    low, high = 0, m",
-    "    iteration = 0",
-    "    ",
-    "    print(f\"\\nBinary Search Trace:\")",
-    "    print(\"-\" * 60)",
-    "    ",
-    "    while low <= high:",
-    "        iteration += 1",
-    "        i = (low + high) // 2",
-    "        j = half_len - i",
-    "        ",
-    "        max_left1 = float('-inf') if i == 0 else nums1[i - 1]",
-    "        min_right1 = float('inf') if i == m else nums1[i]",
-    "        max_left2 = float('-inf') if j == 0 else nums2[j - 1]",
-    "        min_right2 = float('inf') if j == n else nums2[j]",
-    "        ",
-    "        print(f\"\\nIteration {iteration}: low={low}, high={high}\")",
-    "        print(f\"  i={i}, j={j}\")",
-    "        print(f\"  nums1 partition: {nums1[:i]} | {nums1[i:]}\")",
-    "        print(f\"  nums2 partition: {nums2[:j]} | {nums2[j:]}\")",
-    "        print(f\"  maxL1={max_left1}, minR1={min_right1}\")",
-    "        print(f\"  maxL2={max_left2}, minR2={min_right2}\")",
-    "        ",
-    "        if max_left1 > min_right2:",
-    "            print(f\"  maxL1({max_left1}) > minR2({min_right2}): move high to {i-1}\")",
-    "            high = i - 1",
-    "        elif max_left2 > min_right1:",
-    "            print(f\"  maxL2({max_left2}) > minR1({min_right1}): move low to {i+1}\")",
-    "            low = i + 1",
-    "        else:",
-    "            max_left = max(max_left1, max_left2)",
-    "            print(f\"  VALID PARTITION FOUND!\")",
-    "            print(f\"  max(left half) = max({max_left1}, {max_left2}) = {max_left}\")",
-    "            print(f\"  Median (odd total) = {max_left}\")",
-    "            break",
-    "    ",
-    "    print(\"\\n\" + \"=\" * 70)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    run_tests()",
-    "    demonstrate_algorithm()"
+    "    # Test 5: Non-overlapping arrays",
+    "    print(\"Test 5: nums1=[1,2], nums2=[3,4,5,6]\")",
+    "    print(f\"Median: {sol.findMedianSortedArrays([1, 2], [3, 4, 5, 6])}\")",
+    "    print(\"Expected: 3.5\")"
   ],
   "solution_java_lines": [
-    "/**",
-    " * Median of Two Sorted Arrays - LeetCode 4",
-    " * Time: O(log(min(m,n))), Space: O(1)",
-    " */",
-    "",
-    "public class MedianOfTwoSortedArrays {",
-    "    ",
+    "public class Solution {",
     "    /**",
-    "     * Find median of two sorted arrays using binary search on partitions.",
+    "     * Find median of two sorted arrays using binary search partitioning.",
+    "     * Time: O(log(min(m,n))), Space: O(1)",
     "     * ",
-    "     * @param nums1 First sorted array",
-    "     * @param nums2 Second sorted array",
-    "     * @return Median of the combined sorted arrays",
+    "     * Key insight: Partition both arrays so max(left) <= min(right).",
     "     */",
     "    public double findMedianSortedArrays(int[] nums1, int[] nums2) {",
-    "        // Ensure nums1 is the smaller array for O(log(min(m,n)))",
+    "        // Ensure nums1 is the smaller array",
     "        if (nums1.length > nums2.length) {",
-    "            return findMedianSortedArrays(nums2, nums1);",
+    "            int[] temp = nums1;",
+    "            nums1 = nums2;",
+    "            nums2 = temp;",
     "        }",
     "        ",
     "        int m = nums1.length;",
     "        int n = nums2.length;",
+    "        int left = 0, right = m;",
+    "        int half = (m + n + 1) / 2;",
     "        ",
-    "        // Binary search on the smaller array",
-    "        int low = 0;",
-    "        int high = m;",
-    "        int halfLen = (m + n + 1) / 2;  // Size of left half",
-    "        ",
-    "        while (low <= high) {",
-    "            // Partition indices",
-    "            int i = (low + high) / 2;  // Elements from nums1 in left half",
-    "            int j = halfLen - i;        // Elements from nums2 in left half",
+    "        while (left <= right) {",
+    "            int i = (left + right) / 2;  // Partition in nums1",
+    "            int j = half - i;             // Partition in nums2",
     "            ",
-    "            // Get boundary values with infinity for edge cases",
+    "            // Get boundary values with edge case handling",
     "            int maxLeft1 = (i == 0) ? Integer.MIN_VALUE : nums1[i - 1];",
     "            int minRight1 = (i == m) ? Integer.MAX_VALUE : nums1[i];",
     "            int maxLeft2 = (j == 0) ? Integer.MIN_VALUE : nums2[j - 1];",
     "            int minRight2 = (j == n) ? Integer.MAX_VALUE : nums2[j];",
     "            ",
-    "            // Check if partition is valid",
-    "            if (maxLeft1 > minRight2) {",
-    "                // nums1's left part is too large, move partition left",
-    "                high = i - 1;",
-    "            } else if (maxLeft2 > minRight1) {",
-    "                // nums1's left part is too small, move partition right",
-    "                low = i + 1;",
-    "            } else {",
-    "                // Valid partition found!",
-    "                int maxLeft = Math.max(maxLeft1, maxLeft2);",
-    "                ",
-    "                // For odd total, median is max of left half",
+    "            if (maxLeft1 <= minRight2 && maxLeft2 <= minRight1) {",
+    "                // Valid partition - calculate median",
     "                if ((m + n) % 2 == 1) {",
-    "                    return maxLeft;",
+    "                    return Math.max(maxLeft1, maxLeft2);",
+    "                } else {",
+    "                    return (Math.max(maxLeft1, maxLeft2) + ",
+    "                            Math.min(minRight1, minRight2)) / 2.0;",
     "                }",
-    "                ",
-    "                // For even total, median is average of max(left) and min(right)",
-    "                int minRight = Math.min(minRight1, minRight2);",
-    "                return (maxLeft + minRight) / 2.0;",
+    "            } else if (maxLeft1 > minRight2) {",
+    "                right = i - 1;  // Move partition left",
+    "            } else {",
+    "                left = i + 1;   // Move partition right",
     "            }",
     "        }",
     "        ",
-    "        // Should never reach here if input is valid",
-    "        throw new IllegalArgumentException(\"Invalid input\");",
+    "        return 0.0;  // Should never reach here",
     "    }",
     "    ",
     "    public static void main(String[] args) {",
-    "        MedianOfTwoSortedArrays solution = new MedianOfTwoSortedArrays();",
-    "        ",
-    "        // Test cases",
-    "        System.out.println(\"=\" .repeat(60));",
-    "        System.out.println(\"MEDIAN OF TWO SORTED ARRAYS - TEST RESULTS\");",
-    "        System.out.println(\"=\" .repeat(60));",
+    "        Solution sol = new Solution();",
     "        ",
     "        // Test 1: Odd total",
-    "        int[] nums1_1 = {1, 3};",
-    "        int[] nums2_1 = {2};",
-    "        double result1 = solution.findMedianSortedArrays(nums1_1, nums2_1);",
-    "        System.out.println(\"\\nTest 1: [1,3] and [2]\");",
-    "        System.out.println(\"Expected: 2.0, Got: \" + result1);",
-    "        System.out.println(Math.abs(result1 - 2.0) < 1e-5 ? \"PASS\" : \"FAIL\");",
+    "        System.out.println(\"Test 1: \" + ",
+    "            sol.findMedianSortedArrays(new int[]{1, 3}, new int[]{2}));",
+    "        System.out.println(\"Expected: 2.0\\n\");",
     "        ",
     "        // Test 2: Even total",
-    "        int[] nums1_2 = {1, 2};",
-    "        int[] nums2_2 = {3, 4};",
-    "        double result2 = solution.findMedianSortedArrays(nums1_2, nums2_2);",
-    "        System.out.println(\"\\nTest 2: [1,2] and [3,4]\");",
-    "        System.out.println(\"Expected: 2.5, Got: \" + result2);",
-    "        System.out.println(Math.abs(result2 - 2.5) < 1e-5 ? \"PASS\" : \"FAIL\");",
+    "        System.out.println(\"Test 2: \" + ",
+    "            sol.findMedianSortedArrays(new int[]{1, 2}, new int[]{3, 4}));",
+    "        System.out.println(\"Expected: 2.5\\n\");",
     "        ",
     "        // Test 3: Empty array",
-    "        int[] nums1_3 = {};",
-    "        int[] nums2_3 = {1};",
-    "        double result3 = solution.findMedianSortedArrays(nums1_3, nums2_3);",
-    "        System.out.println(\"\\nTest 3: [] and [1]\");",
-    "        System.out.println(\"Expected: 1.0, Got: \" + result3);",
-    "        System.out.println(Math.abs(result3 - 1.0) < 1e-5 ? \"PASS\" : \"FAIL\");",
+    "        System.out.println(\"Test 3: \" + ",
+    "            sol.findMedianSortedArrays(new int[]{}, new int[]{1}));",
+    "        System.out.println(\"Expected: 1.0\\n\");",
     "        ",
-    "        // Test 4: Larger interleaved arrays",
-    "        int[] nums1_4 = {1, 3, 8, 9, 15};",
-    "        int[] nums2_4 = {7, 11, 18, 19, 21, 25};",
-    "        double result4 = solution.findMedianSortedArrays(nums1_4, nums2_4);",
-    "        System.out.println(\"\\nTest 4: [1,3,8,9,15] and [7,11,18,19,21,25]\");",
-    "        System.out.println(\"Expected: 11.0, Got: \" + result4);",
-    "        System.out.println(Math.abs(result4 - 11.0) < 1e-5 ? \"PASS\" : \"FAIL\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
+    "        // Test 4: Larger arrays",
+    "        System.out.println(\"Test 4: \" + ",
+    "            sol.findMedianSortedArrays(",
+    "                new int[]{1,3,8,9,15}, new int[]{7,11,18,19,21,25}));",
+    "        System.out.println(\"Expected: 11.0\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-5",
-      "section": "Docstring and Imports",
-      "explanation": "We import List from typing for type hints. The docstring provides context about complexity."
+      "lines": "1-11",
+      "section": "Class and Method Setup",
+      "explanation": "We define the Solution class with comprehensive docstring explaining the O(log(min(m,n))) time complexity and the key insight about partitioning."
     },
     {
-      "lines": "8-27",
-      "section": "Class and Method Signature with Documentation",
-      "explanation": "Comprehensive docstring following Google style. Includes explanation of the partition approach, parameters, return value, and examples. This shows professionalism and helps with code review."
+      "lines": "12-15",
+      "section": "Ensure nums1 is Smaller",
+      "explanation": "**Critical for complexity**: By always binary searching on the smaller array, we guarantee O(log(min(m,n))) instead of O(log(max(m,n))). This swap is essential."
     },
     {
-      "lines": "28-31",
-      "section": "Ensure Smaller Array First",
-      "explanation": "**Critical optimization**: Binary search on smaller array gives O(log(min(m,n))). If nums1 is larger, swap them. This is often missed by candidates!"
+      "lines": "17-19",
+      "section": "Initialize Variables",
+      "explanation": "`half = (m+n+1)//2` calculates how many elements should be in the left partition. The +1 handles odd lengths correctly, placing the extra element on the left."
     },
     {
-      "lines": "33-35",
-      "section": "Initialize Binary Search Variables",
-      "explanation": "low=0, high=m: partition in nums1 can be at any position from 0 to m. half_len uses (m+n+1)//2 to handle both odd and even totals - the +1 ensures left half has equal or one more element."
+      "lines": "21-27",
+      "section": "Calculate Partition Points and Boundaries",
+      "explanation": "`i` is our partition guess in nums1. `j = half - i` is FORCED - if we take i elements from nums1, we need half-i from nums2. Sentinels (`-inf`, `+inf`) elegantly handle edge cases when partition is at array boundaries."
     },
     {
-      "lines": "37-44",
-      "section": "Binary Search Loop - Calculate Partition Points",
-      "explanation": "i = partition point in nums1 (how many elements go to left half). j = halfLen - i (the rest comes from nums2). Key invariant: i + j = halfLen always."
+      "lines": "29-36",
+      "section": "Check Valid Partition",
+      "explanation": "**The heart of the algorithm**: Valid partition means elements 'cross correctly' - left1 \u2264 right2 AND left2 \u2264 right1. If valid, we can compute the median immediately."
     },
     {
-      "lines": "46-50",
-      "section": "Boundary Values with Infinity Handling",
-      "explanation": "**This is the trickiest part!** When i=0: no elements from nums1 on left, so maxLeft1 = -\u221e. When i=m: all elements from nums1 on left, so minRight1 = +\u221e. Same for j. Using infinity avoids complex if-else chains."
-    },
-    {
-      "lines": "52-56",
-      "section": "Check Partition Validity - Adjust High",
-      "explanation": "If maxLeft1 > minRight2, the largest element in nums1's left half is greater than the smallest in nums2's right half. This means we took too many from nums1 - decrease i by moving high left."
-    },
-    {
-      "lines": "57-60",
-      "section": "Check Partition Validity - Adjust Low",
-      "explanation": "If maxLeft2 > minRight1, we took too few from nums1 - increase i by moving low right."
-    },
-    {
-      "lines": "61-70",
-      "section": "Valid Partition Found - Calculate Median",
-      "explanation": "When both conditions pass, we found the valid partition. maxLeft = max(maxLeft1, maxLeft2) is the largest element in left half. For odd total, this IS the median. For even total, average with minRight."
-    },
-    {
-      "lines": "72-73",
-      "section": "Error Handling",
-      "explanation": "Should never reach here with valid input. Raising an error helps catch bugs during development."
+      "lines": "37-41",
+      "section": "Adjust Binary Search Bounds",
+      "explanation": "If maxLeft1 > minRight2, we've taken too many from nums1 (need to move partition left). Otherwise, we've taken too few (move partition right). Classic binary search adjustment."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. Test with simple cases first: [1,3] and [2] (odd total). 2. Then [1,2] and [3,4] (even total). 3. Then empty array cases. 4. Then larger interleaved arrays. 5. Finally, edge cases like all same elements.",
+    "how_to_test_incrementally": "1. First verify swap works with larger first array. 2. Test single element arrays. 3. Test empty array edge case. 4. Test interleaving values. 5. Test non-overlapping arrays.",
     "what_to_print_or_assert": [
       "print(f'i={i}, j={j}, maxL1={maxLeft1}, minR1={minRight1}, maxL2={maxLeft2}, minR2={minRight2}')",
-      "assert i + j == halfLen, 'Partition size invariant violated'",
-      "assert 0 <= j <= n, 'j out of bounds - check halfLen calculation'"
+      "assert left <= right, 'Binary search bounds crossed'"
     ],
     "common_failure_modes": [
-      "Off-by-one in boundary values (nums1[i] vs nums1[i-1])",
-      "Wrong formula for halfLen ((m+n)/2 vs (m+n+1)/2)",
-      "Forgetting to swap when nums1 is larger",
-      "Integer overflow in Java when computing maxLeft + minRight (use long)",
-      "Wrong comparison direction (maxLeft1 > minRight2 vs <)"
+      "Off-by-one in partition index",
+      "Wrong direction in binary search adjustment",
+      "Forgetting to swap arrays",
+      "Integer overflow in (left + right) / 2 for very large arrays"
     ],
-    "how_to_fix_fast": "1. Check halfLen formula - it should be (m+n+1)/2 to handle odd correctly. 2. Verify boundary indices: maxLeft uses [i-1], minRight uses [i]. 3. Trace through manually with i=0 and i=m to verify infinity handling. 4. For wrong median, check if you're using max(left) for odd but average for even."
+    "how_to_fix_fast": "If getting wrong median: print partition boundaries at each step and verify the cross-conditions manually. If infinite loop: check binary search direction logic."
   },
   "complexity_analysis": {
     "time": {
       "findMedianSortedArrays": {
-        "complexity": "O(log(min(m,n)))",
-        "explanation": "Binary search on smaller array. Each iteration does O(1) work (constant comparisons and arithmetic). Number of iterations is at most log(min(m,n))."
+        "complexity": "O(log(min(m, n)))",
+        "explanation": "Binary search on smaller array. Each iteration halves the search space from 0 to m."
       },
-      "overall": "O(log(min(m,n))) - meets the requirement"
+      "overall": "O(log(min(m, n))) - logarithmic in the size of the smaller array"
     },
     "space": {
       "complexity": "O(1)",
-      "breakdown": "- Four boundary variables: O(1)\\n- Binary search pointers (low, high, i, j): O(1)\\n- No recursion stack\\n- No auxiliary data structures",
-      "note": "The algorithm modifies nothing and creates no data structures proportional to input size"
+      "breakdown": "- 6 integer/float variables for bounds and boundaries\n- No additional arrays or data structures\n- Input arrays are not modified",
+      "note": "Constant space regardless of input size"
     },
-    "can_we_do_better": "No - O(log(min(m,n))) is optimal. Any algorithm must examine at least one element from each 'half' of the partition, and there are log(min(m,n)) possible partition configurations to check."
+    "can_we_do_better": "No - O(log(min(m,n))) is optimal. Any algorithm must examine at least O(log(min(m,n))) elements to determine the median. This is provable by adversarial argument."
   },
   "dry_run": {
     "example": "nums1 = [1, 3, 8, 9, 15], nums2 = [7, 11, 18, 19, 21, 25]",
-    "trace_table": "| Iteration | low | high | i | j | nums1 partition | nums2 partition | maxL1 | minR1 | maxL2 | minR2 | Check | Action |\n|-----------|-----|------|---|---|-----------------|-----------------|-------|-------|-------|-------|-------|--------|\n| Setup | 0 | 5 | - | - | - | - | - | - | - | - | m=5, n=6, halfLen=6 | Start |\n| 1 | 0 | 5 | 2 | 4 | [1,3]\\|[8,9,15] | [7,11,18,19]\\|[21,25] | 3 | 8 | 19 | 21 | 19>8? YES | low=3 |\n| 2 | 3 | 5 | 4 | 2 | [1,3,8,9]\\|[15] | [7,11]\\|[18,19,21,25] | 9 | 15 | 11 | 18 | 9\u226418\u2713 11\u226415\u2713 | FOUND! |\n| Result | - | - | 4 | 2 | max(9,11)=11 | odd total | - | - | - | - | - | **Return 11.0** |",
+    "trace_table": "| Step | left | right | i | j | maxL1 | minR1 | maxL2 | minR2 | Condition | Action |\n|------|------|-------|---|---|-------|-------|-------|-------|-----------|--------|\n| Init | 0 | 5 | - | - | - | - | - | - | m=5,n=6,half=6 | Start search |\n| 1 | 0 | 5 | 2 | 4 | 3 | 8 | 19 | 21 | 19>8 | left=3 |\n| 2 | 3 | 5 | 4 | 2 | 9 | 15 | 11 | 18 | 9\u226418 \u2713, 11\u226415 \u2713 | Valid! |\n| Result | - | - | - | - | - | - | - | - | Odd total: max(9,11) | **Return 11** |",
     "final_answer": "11.0"
   },
   "test_cases": [
     {
-      "name": "Odd total - simple interleaved",
-      "category": "Happy Path",
-      "input": "nums1 = [1, 3], nums2 = [2]",
+      "name": "Simple Odd Length",
+      "category": "Basic",
+      "input": "nums1=[1,3], nums2=[2]",
       "expected": "2.0",
-      "explanation": "Merged: [1,2,3], middle element is 2"
+      "explanation": "Combined: [1,2,3], middle element is 2"
     },
     {
-      "name": "Even total - average of middle two",
-      "category": "Happy Path",
-      "input": "nums1 = [1, 2], nums2 = [3, 4]",
+      "name": "Simple Even Length",
+      "category": "Basic",
+      "input": "nums1=[1,2], nums2=[3,4]",
       "expected": "2.5",
-      "explanation": "Merged: [1,2,3,4], middle two are 2 and 3, average is 2.5"
+      "explanation": "Combined: [1,2,3,4], average of 2 and 3"
     },
     {
-      "name": "One array empty",
+      "name": "Empty First Array",
       "category": "Edge Case",
-      "input": "nums1 = [], nums2 = [1]",
+      "input": "nums1=[], nums2=[1]",
       "expected": "1.0",
-      "explanation": "Partition at i=0, j=1. maxLeft2=1 is the median"
+      "explanation": "Single element is the median"
     },
     {
-      "name": "Non-overlapping arrays",
+      "name": "Empty Second Array",
       "category": "Edge Case",
-      "input": "nums1 = [1, 2], nums2 = [3, 4, 5, 6]",
-      "expected": "3.5",
-      "explanation": "All of nums1 goes to left half. Partition: [1,2,3] | [4,5,6], median = (3+4)/2"
-    },
-    {
-      "name": "Larger interleaved arrays",
-      "category": "Complex",
-      "input": "nums1 = [1,3,8,9,15], nums2 = [7,11,18,19,21,25]",
-      "expected": "11.0",
-      "explanation": "11 elements, median is 6th element = 11"
-    },
-    {
-      "name": "Negative numbers",
-      "category": "Edge Case",
-      "input": "nums1 = [-5,-4,-3], nums2 = [-2,-1,0]",
-      "expected": "-2.5",
-      "explanation": "6 elements, median = (-3 + -2) / 2 = -2.5"
-    },
-    {
-      "name": "All same elements",
-      "category": "Edge Case",
-      "input": "nums1 = [2,2,2], nums2 = [2,2]",
+      "input": "nums1=[2], nums2=[]",
       "expected": "2.0",
-      "explanation": "Any partition is valid, median is always 2"
+      "explanation": "Swap ensures we search smaller array (empty one)"
     },
     {
-      "name": "Single elements",
+      "name": "Non-Overlapping Arrays",
       "category": "Edge Case",
-      "input": "nums1 = [1], nums2 = [2]",
-      "expected": "1.5",
-      "explanation": "Even total, median = (1+2)/2 = 1.5"
+      "input": "nums1=[1,2], nums2=[3,4,5,6]",
+      "expected": "3.5",
+      "explanation": "Combined: [1,2,3,4,5,6], avg(3,4)=3.5. Partition at boundary."
+    },
+    {
+      "name": "Interleaving Values",
+      "category": "Standard",
+      "input": "nums1=[1,3,8,9,15], nums2=[7,11,18,19,21,25]",
+      "expected": "11.0",
+      "explanation": "11 elements, median is 6th = 11"
+    },
+    {
+      "name": "Negative Numbers",
+      "category": "Edge Case",
+      "input": "nums1=[-5,-3,-1], nums2=[-4,-2,0]",
+      "expected": "-2.5",
+      "explanation": "Combined: [-5,-4,-3,-2,-1,0], avg(-3,-2)=-2.5"
+    },
+    {
+      "name": "All Same Values",
+      "category": "Edge Case",
+      "input": "nums1=[2,2,2], nums2=[2,2]",
+      "expected": "2.0",
+      "explanation": "Any partition is valid, median is 2"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Binary searching on the larger array",
-      "why_wrong": "Results in O(log(max(m,n))) instead of O(log(min(m,n))). May also cause j to go negative!",
-      "correct_approach": "Always swap to ensure nums1 is smaller",
-      "code_wrong": "// No swap check\nint low = 0, high = nums1.length;",
-      "code_correct": "if (nums1.length > nums2.length):\n    nums1, nums2 = nums2, nums1"
+      "mistake": "Binary searching on larger array instead of smaller",
+      "why_wrong": "Changes complexity from O(log(min)) to O(log(max)), violating requirement",
+      "correct_approach": "Always swap to ensure nums1 is smaller before searching",
+      "code_wrong": "# No swap, just proceed\nleft, right = 0, len(nums1)",
+      "code_correct": "if len(nums1) > len(nums2):\n    nums1, nums2 = nums2, nums1"
     },
     {
-      "mistake": "Wrong halfLen formula: (m+n)/2 instead of (m+n+1)/2",
-      "why_wrong": "For odd total like 5, (5)/2 = 2, but left half should have 3 elements. This causes wrong median for odd totals.",
-      "correct_approach": "Use (m+n+1)/2 to ensure left half has ceiling of half elements",
-      "code_wrong": "halfLen = (m + n) // 2",
-      "code_correct": "halfLen = (m + n + 1) // 2"
+      "mistake": "Off-by-one in partition indices",
+      "why_wrong": "Partition at index i means i elements on left. nums1[i-1] is last left element.",
+      "correct_approach": "Remember: partition i means elements 0 to i-1 are on left",
+      "code_wrong": "maxLeft1 = nums1[i]  # Wrong! This is first of right half",
+      "code_correct": "maxLeft1 = nums1[i-1] if i > 0 else float('-inf')"
     },
     {
-      "mistake": "Off-by-one in boundary values",
-      "why_wrong": "maxLeft should use [i-1] (element before partition), minRight should use [i] (element at partition)",
-      "correct_approach": "Think: i elements are in left half, so indices 0 to i-1. The last one is at i-1.",
-      "code_wrong": "maxLeft1 = nums1[i]  // Wrong!",
-      "code_correct": "maxLeft1 = nums1[i - 1]  // Correct"
+      "mistake": "Incorrect median calculation for even vs odd",
+      "why_wrong": "Using wrong formula gives off-by-0.5 errors",
+      "correct_approach": "Odd: max(left), Even: (max(left) + min(right)) / 2",
+      "code_wrong": "return (maxLeft1 + maxLeft2) / 2  # Wrong for odd length",
+      "code_correct": "if (m + n) % 2 == 1:\n    return max(maxLeft1, maxLeft2)\nelse:\n    return (max(maxLeft1, maxLeft2) + min(minRight1, minRight2)) / 2"
     },
     {
-      "mistake": "Forgetting to handle partition at boundaries",
-      "why_wrong": "When i=0, there's no nums1[i-1]. When i=m, there's no nums1[i]. This causes index out of bounds.",
-      "correct_approach": "Use infinity values for missing boundaries",
-      "code_wrong": "maxLeft1 = nums1[i - 1]  // Crashes when i=0",
-      "code_correct": "maxLeft1 = float('-inf') if i == 0 else nums1[i - 1]"
+      "mistake": "Wrong binary search direction",
+      "why_wrong": "Moving left when should move right causes infinite loop or wrong answer",
+      "correct_approach": "maxLeft1 > minRight2 means nums1 contributes too much, move LEFT",
+      "code_wrong": "if maxLeft1 > minRight2: left = i + 1  # WRONG direction!",
+      "code_correct": "if maxLeft1 > minRight2: right = i - 1  # Move left"
     },
     {
-      "mistake": "Wrong median formula for even total",
-      "why_wrong": "For even total, must average the two middle elements, not just return max of left",
-      "correct_approach": "Check parity and compute accordingly",
-      "code_wrong": "return max(maxLeft1, maxLeft2)  // Wrong for even!",
-      "code_correct": "if (m + n) % 2 == 1:\n    return maxLeft\nreturn (maxLeft + minRight) / 2.0"
-    },
-    {
-      "mistake": "Integer overflow in Java",
-      "why_wrong": "maxLeft + minRight can overflow if both are near Integer.MAX_VALUE",
-      "correct_approach": "Cast to double before addition",
-      "code_wrong": "return (maxLeft + minRight) / 2.0;  // Can overflow!",
-      "code_correct": "return ((double)maxLeft + minRight) / 2.0;"
+      "mistake": "Not handling boundary sentinels",
+      "why_wrong": "When i=0 or i=m, accessing nums1[i-1] or nums1[i] causes IndexError",
+      "correct_approach": "Use -inf and +inf as sentinels for boundary cases",
+      "code_wrong": "maxLeft1 = nums1[i-1]  # IndexError when i=0",
+      "code_correct": "maxLeft1 = float('-inf') if i == 0 else nums1[i-1]"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. This is the classic 'Median of Two Sorted Arrays' - one of my favorite binary search problems because it requires a non-obvious insight. Before I code, let me clarify a few things and explain my approach.",
+    "opening": "Thank you for this problem. I recognize this as the classic median of two sorted arrays problem. Before coding, let me clarify a few things and outline my approach.",
     "clarifying_questions_to_ask": [
-      "Are both arrays guaranteed to be sorted in ascending order? (Yes - enables binary search)",
+      "Should I optimize for time or space? (Expecting O(log(min(m,n))) time requirement)",
       "Can both arrays be empty? (No, at least one element total)",
-      "What precision is needed? (10^-5 - standard float is fine)",
-      "Can there be duplicates? (Yes - doesn't affect the algorithm)",
-      "Are the arrays in memory or is this a streaming problem? (In memory - we can random access)"
+      "Are the arrays strictly increasing or can there be duplicates?",
+      "What precision is expected for the result?"
     ],
     "what_to_mention_proactively": [
-      "The O(log(min(m,n))) requirement means we can't merge arrays - must use binary search",
-      "Key insight: binary search on PARTITION position, not on element values",
-      "I'll binary search on the smaller array for optimal complexity",
-      "I'll use infinity values to cleanly handle boundary cases",
-      "Let me draw the partition to make my thinking clear"
+      "The naive merge approach is O(m+n), but I'll use binary search partitioning for O(log(min(m,n)))",
+      "I'll always search on the smaller array to achieve the optimal complexity",
+      "The key insight is that we're searching for a PARTITION, not an element"
     ],
     "communication_during_coding": [
-      "I'm swapping to ensure nums1 is smaller - this gives us the optimal log(min(m,n))",
-      "halfLen uses (m+n+1)/2 so left half gets the extra element for odd totals",
-      "When i=0, no elements from nums1 in left half, so maxLeft1 is negative infinity",
-      "If maxLeft1 > minRight2, I took too many from nums1, so I decrease i",
-      "Found valid partition - for odd total, median is max of left half"
+      "I'm swapping here to ensure nums1 is smaller - this is critical for O(log(min))",
+      "Using sentinels (-inf, +inf) handles edge cases elegantly",
+      "This cross-condition check verifies our partition is correct globally"
     ],
     "if_stuck": [
-      "Step back: What would it mean to have a valid partition? All left \u2264 all right.",
-      "Since arrays are sorted, I only need to check boundary elements",
-      "Let me draw: what does partition i in nums1 imply for nums2?",
-      "The key is: i + j = halfLen, so fixing i determines j"
+      "Think about WHAT we're searching for - not an element, but a partition point",
+      "If we take i from nums1, we MUST take half-i from nums2",
+      "Draw the partition and check: does max(left) \u2264 min(right)?"
     ],
-    "time_management": "0-5min: Clarify + explain partition insight | 5-12min: Draw visual, explain algorithm | 12-28min: Code | 28-35min: Trace through example | 35-45min: Follow-up questions"
+    "time_management": "0-5min: Clarify & outline | 5-15min: Explain approach with diagram | 15-30min: Code | 30-40min: Test & debug | 40-45min: Complexity & follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Binary Search on Answer Space / Partition Binary Search",
+    "pattern_name": "Binary Search on Answer Space / Partitioning",
     "indicators": [
-      "O(log n) requirement",
+      "Logarithmic time requirement",
       "Two sorted arrays",
-      "Finding k-th element or median",
-      "Can't afford O(n) merge"
+      "Finding a position/boundary rather than specific element"
     ],
     "similar_problems": [
-      "LC 4 - Median of Two Sorted Arrays (this problem)",
-      "LC 410 - Split Array Largest Sum (binary search on answer)",
-      "LC 1011 - Capacity to Ship Packages (binary search on capacity)",
-      "LC 378 - Kth Smallest Element in a Sorted Matrix",
-      "LC 719 - Find K-th Smallest Pair Distance"
+      "LC 33 - Search in Rotated Sorted Array: Binary search with modified conditions",
+      "LC 153 - Find Minimum in Rotated Sorted Array: Search for partition point",
+      "LC 378 - Kth Smallest in Sorted Matrix: Binary search on value range",
+      "LC 719 - Find K-th Smallest Pair Distance: Binary search on answer"
     ],
-    "template": "Binary search for a partition/threshold where the partition condition (left \u2264 right) is satisfied. Adjust search bounds based on which cross-comparison fails."
+    "template": "Binary search on one dimension when other dimension is constrained/forced. Verify correctness with cross-boundary checks."
   },
   "follow_up_preparation": {
-    "part_2_hint": "Part 2 asks for K-th element in two sorted arrays. Same partition logic, but halfLen becomes k instead of (m+n+1)/2. Everything else stays the same!",
-    "part_3_hint": "Part 3 is median of K sorted arrays. Use a min-heap to track minimum from each array, pop k times. Or use binary search on value + count elements \u2264 value in all arrays.",
-    "data_structure_evolution": "Part 1: Direct partition \u2192 Part 2: Generalize k \u2192 Part 3: Heap or binary search on value"
+    "part_2_hint": "**Find K-th Element**: Instead of median (fixed at half), parameterize k. The partition approach generalizes directly - just change half to k.",
+    "part_3_hint": "**Median of K Sorted Arrays**: Use heap-based merge or recursively find median of medians. Harder to achieve true O(log) complexity.",
+    "data_structure_evolution": "Part 1: Direct binary search \u2192 Part 2: Parameterized k \u2192 Part 3: Heap/tournament tree \u2192 Part 4: Online algorithm with balanced BST"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. This is a classic - finding the median of two sorted arrays with O(log(min(m,n))) complexity. The key insight I'll use is that finding the median is equivalent to finding a valid partition of both arrays. Let me clarify a few things first...",
-    "after_clarification": "Great, so both arrays are sorted, at least one has elements, and I need O(log(min(m,n))) time with O(1) space. My approach is to binary search on the smaller array for a partition point where all elements in the left half are \u2264 all elements in the right half. Let me draw this out...",
+    "opening_verbatim": "Thank you for this problem. This is the classic median of two sorted arrays problem. I know the naive O(m+n) merge approach, but given the hard difficulty, I'll use binary search partitioning for O(log(min(m,n))). Let me first clarify a few things...",
+    "after_clarification": "Great. So my approach is: partition both arrays such that the left half has exactly half the elements and max(left) \u2264 min(right). I'll binary search on the smaller array to find the correct partition. Let me draw this out...",
     "while_coding": [
-      "I'm ensuring nums1 is smaller so I get log(min(m,n))...",
-      "Using infinity here handles the edge case where partition is at boundary...",
-      "This condition checks if we took too many from nums1..."
+      "I'm swapping to ensure nums1 is smaller - critical for the complexity...",
+      "Using sentinels here handles the edge cases when partition is at boundaries...",
+      "This cross-check validates our partition is correct globally..."
     ],
-    "after_coding": "Let me trace through with the example [1,3,8,9,15] and [7,11,18,19,21,25]. Total is 11, so we need 6 in left half...",
-    "when_stuck_verbatim": "Let me think about this... The key question is: what makes a partition valid? If I partition nums1 at position i, what must be true about nums2's partition?",
-    "after_mistake": "Good catch - I had the comparison direction wrong. It should be maxLeft1 > minRight2 means i is too big. Let me fix that.",
-    "before_moving_on": "This solution is O(log(min(m,n))) time and O(1) space, meeting the requirements. The key insight was binary searching for a partition, not an element. Ready for the next part!"
+    "after_coding": "Let me trace through the example: nums1=[1,3], nums2=[2]. We need partition such that left has 2 elements...",
+    "when_stuck_verbatim": "Let me think about what we're really searching for here... We need a partition point, not a specific element. If I take i elements from nums1, the rest is forced...",
+    "after_mistake": "Ah, I see the issue - I had the binary search direction backwards. When maxLeft1 > minRight2, we've taken too many from nums1, so we should move LEFT, not right. Let me fix that.",
+    "before_moving_on": "This solution is O(log(min(m,n))) time and O(1) space. The key insight is that we're searching for a partition point where the cross-boundary conditions are satisfied. Ready for the follow-up?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Understanding of binary search on non-obvious domains",
-      "Ability to handle complex boundary conditions",
-      "Clear communication of the partition insight",
-      "Methodical testing with edge cases",
-      "Grace under pressure when the problem is hard"
+      "Understanding of binary search beyond basic 'find element'",
+      "Ability to handle complex edge cases",
+      "Clear communication of non-trivial algorithm",
+      "Systematic debugging approach"
     ],
     "bonus_points": [
-      "Drawing the partition visual unprompted",
-      "Explaining WHY halfLen uses (m+n+1)/2",
-      "Identifying the boundary infinity trick early",
-      "Mentioning this generalizes to k-th element",
-      "Writing clean code on first pass without major rewrites"
+      "Drawing partition diagram before coding",
+      "Explaining WHY we search on smaller array",
+      "Mentioning the sentinel technique proactively",
+      "Discussing why O(log(min)) is optimal"
     ],
     "red_flags": [
-      "Jumping to merge-based O(m+n) solution without acknowledging complexity requirement",
-      "Not swapping to ensure binary search on smaller array",
-      "Silent struggle with boundary conditions for too long",
-      "Not tracing through an example after coding",
-      "Hardcoding test case values in the solution"
+      "Jumping to brute force merge without mentioning complexity",
+      "Confusion about what we're binary searching for",
+      "Unable to explain why the cross-conditions work",
+      "Getting stuck on boundary cases without systematic approach"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates recognize this as a partition problem early, draw a clear visual, explain the binary search invariant, handle boundaries elegantly with infinity, and trace through confidently. They treat the complexity of this problem as a feature to demonstrate depth, not a bug to avoid."
+    "what_differentiates_strong_candidates": "Strong candidates recognize this as a partition problem, not a merge problem. They can explain the algorithm intuitively with diagrams, handle edge cases systematically, and articulate WHY the approach works."
   },
   "time_milestones": {
-    "by_5_min": "Problem understood, clarifying questions asked, recognize it's partition-based binary search",
-    "by_12_min": "Drew partition visual, explained binary search on smaller array, got interviewer buy-in on approach",
-    "by_28_min": "Core implementation complete, handling boundary cases with infinity",
-    "by_35_min": "Dry run through example, complexity discussed, all edge cases handled",
-    "by_45_min": "Prepared for follow-up (k-th element generalization)",
-    "warning_signs": "If you're still figuring out the approach at 15 min, you're behind. Ask for a hint about partitions. If coding at 35 min, simplify and explain what you'd add."
+    "by_5_min": "Problem understood, clarifying questions asked, approach outlined (partition-based binary search)",
+    "by_15_min": "Algorithm explained with visual diagram, key insight articulated, edge cases identified",
+    "by_25_min": "Core implementation complete, basic test passing",
+    "by_35_min": "Edge cases handled, dry run complete, complexity analyzed",
+    "by_45_min": "Follow-up questions discussed (k-th element, k arrays)",
+    "warning_signs": "If still explaining approach at 15 min or stuck on implementation at 30 min, simplify or ask for hints"
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Say: 'I see an issue - when i is 0, I'm accessing nums1[-1]. Let me add the infinity boundary handling.' Fix it calmly.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember if Python uses INT_MIN or float(\"-inf\") - let me use the float version which I'm sure works.'",
-    "when_approach_is_wrong": "Say: 'Actually, merging won't give O(log) complexity. Let me reconsider - what if I binary search on the partition position instead of the value?'",
-    "when_completely_stuck": "Say: 'I understand we need to split both arrays into left and right halves. Could you hint at how to determine where to split?'",
-    "when_running_out_of_time": "Say: 'I'm short on time. Let me focus on the core binary search loop and mention that boundary handling uses infinity. Here's the structure...'"
+    "when_you_make_a_bug": "Don't panic. Say: 'Let me trace through this carefully...' Walk through step by step to find the issue. Binary search direction and off-by-one are most common.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember exact Python/Java syntax for infinity, but conceptually I need a value larger than any element.' Use comments to show intent.",
+    "when_approach_is_wrong": "If stuck on merge approach, say: 'The merge is O(m+n), but we need O(log). Let me think about what logarithmic implies - binary search. What can we binary search on?'",
+    "when_completely_stuck": "Say: 'I'm stuck on how to handle the partitioning. Could you give me a hint about what invariant the partition should maintain?' Getting unstuck is better than silence.",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me write pseudocode for the remaining edge cases and explain verbally how I'd complete this.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "AI tools are allowed but you must demonstrate understanding. The interviewer is testing YOUR problem-solving, not the AI's.",
+    "when_using_cursor_or_copilot": "This problem is well-known, so AI will likely suggest the correct approach. Use AI for syntax and boilerplate, but demonstrate YOU understand WHY it works.",
     "what_to_do": [
-      "Let AI autocomplete obvious syntax",
+      "Let AI help with sentinel syntax",
       "Use AI for test case generation",
-      "Let it suggest the class structure",
-      "Use for fixing minor typos"
+      "Accept boilerplate code suggestions"
     ],
     "what_not_to_do": [
-      "Don't paste problem and accept full solution",
-      "Don't accept the partition logic without explaining it",
-      "Don't let AI write the boundary handling without understanding why",
-      "Don't rely on AI for the core insight"
+      "Don't paste 'find median of two sorted arrays' and accept solution",
+      "Don't accept partition logic without being able to explain it",
+      "Don't skip tracing through example because AI says it's correct"
     ],
-    "how_to_demonstrate_understanding": "If Copilot suggests the partition approach, explain: 'Yes, this uses partitions because we need to divide both arrays such that left half \u2264 right half. The halfLen formula is (m+n+1)/2 to handle odd totals correctly...'",
-    "expectation_adjustment": "With AI, you should finish faster and have more time for optimization, testing, and follow-ups. If you're slower with AI than without, don't use it."
+    "how_to_demonstrate_understanding": "After AI suggests code, explain: 'This works because we're binary searching for a partition where max(left) \u2264 min(right). Let me trace through to verify...'",
+    "expectation_adjustment": "With AI tools, you should complete this problem faster and have time for follow-ups. If AI slows you down, write it yourself."
   },
   "signal_points": {
     "wow_factors": [
-      "Immediately recognizing this as partition binary search, not value binary search",
-      "Drawing the partition visual before coding",
-      "Explaining why (m+n+1)/2 handles odd totals correctly",
-      "Using infinity elegantly for boundary cases",
-      "Mentioning this pattern appears in LC 410, 378, 719"
+      "Drawing the partition diagram unprompted before coding",
+      "Explaining why O(log(min)) is optimal (adversarial argument)",
+      "Discussing how this generalizes to k-th element immediately",
+      "Clean code with perfect variable names on first pass"
     ],
     "subtle_signals_of_experience": [
-      "Swapping arrays for complexity optimization as a reflexive first step",
-      "Testing with boundary cases (i=0, i=m) explicitly",
-      "Avoiding integer overflow by casting before arithmetic",
-      "Naming variables clearly (maxLeft1 vs ml1)",
-      "Keeping the solution iterative rather than recursive for O(1) space"
+      "Using sentinels instead of multiple conditionals",
+      "Testing boundary cases methodically",
+      "Mentioning the swap as 'critical for complexity'",
+      "Immediately recognizing this as a partition problem"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Getting frustrated with the problem difficulty",
-      "Saying 'this is too hard' or 'I've never seen this'",
-      "Going silent for more than 60 seconds",
-      "Not asking for hints when truly stuck"
+      "Long silence while trying to remember the algorithm",
+      "Defensive when interviewer points out the merge approach is too slow",
+      "Not drawing diagrams for a visual problem"
     ],
     "technical": [
-      "Using O(m+n) merge when O(log) is required",
-      "Not handling empty array cases",
-      "Off-by-one errors in partition indices",
-      "Confusing i (partition) with actual array index",
-      "Integer overflow in sum for median"
+      "Confusing partition index with array index",
+      "Wrong binary search direction causing infinite loop",
+      "Forgetting to handle empty array case",
+      "Using left <= right vs left < right incorrectly"
     ],
     "communication": [
-      "Not explaining the partition insight clearly",
-      "Jumping to code without visual/plan",
-      "Using variable names like 'x' and 'y'",
-      "Not summarizing complexity at the end"
+      "Saying 'I've seen this before' without explaining the insight",
+      "Using 'partition' without defining what it means",
+      "Not explaining the cross-condition logic"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
       "Did I swap to ensure binary search on smaller array?",
-      "Did I use (m+n+1)/2 for halfLen?",
-      "Did I handle i=0 and i=m with infinity?",
+      "Did I handle empty array cases with sentinels?",
+      "Did I check both cross-conditions (maxL1\u2264minR2 AND maxL2\u2264minR1)?",
+      "Did I handle even vs odd total length correctly?",
       "Did I trace through at least one example?",
-      "Did I mention O(log(min(m,n))) time, O(1) space?",
-      "Did I test empty array case mentally?"
+      "Did I state time O(log(min(m,n))) and space O(1)?"
     ],
     "quick_code_review": [
-      "No magic numbers except halfLen formula",
-      "Consistent naming (maxLeft1, not maxL1)",
-      "Proper indentation",
-      "Comments on tricky parts",
-      "Return float not int"
+      "Sentinels for boundaries",
+      "Correct median formula",
+      "Binary search direction",
+      "Swap at beginning",
+      "Return type is float"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "Input validation: check arrays are not null, at least one non-empty",
-      "Verify arrays are sorted (optional, O(n) check)",
-      "Logging for debugging in distributed systems",
-      "Consider streaming variant if arrays don't fit in memory",
-      "Unit tests covering all edge cases"
+      "Input validation for null/empty arrays",
+      "Assertion that arrays are actually sorted",
+      "Handling potential integer overflow for very large arrays",
+      "Unit tests covering all edge cases",
+      "Documentation with complexity analysis"
     ],
-    "why_not_in_interview": "Keep interview code focused. Mention these verbally: 'In production, I'd add null checks and verify sorted property, but for interview I'll focus on the algorithm.'",
-    "how_to_mention": "At the end: 'For production, I'd add input validation, consider if streaming is needed, and add comprehensive unit tests.'"
+    "why_not_in_interview": "Keep focus on algorithm correctness. Mention these verbally as 'things I'd add in production'.",
+    "how_to_mention": "Say: 'In production, I'd add validation that arrays are sorted and handle null inputs, but for this interview I'll assume valid input.'"
   },
-  "generated_at": "2026-01-18T18:42:45.341074",
+  "generated_at": "2026-01-19T04:02:48.942969",
   "_meta": {
     "problem_id": "median_two_sorted_arrays",
     "part_number": null,

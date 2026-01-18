@@ -4,740 +4,405 @@
   "category": "DSA/Graphs",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic **DAG (Directed Acyclic Graph)** problem combining **topological sorting** with **critical path analysis**. The two parts - finding valid order and calculating minimum time - are intertwined through the same traversal. When I see 'dependencies' and 'order', my mind immediately goes to topological sort. The 'unlimited parallel workers' signals that we need critical path, not sequential sum.",
-    "pattern_recognition": "**Topological Sort (Kahn's BFS)** + **Critical Path Method (CPM)** + **Cycle Detection**. This combines graph traversal with dynamic programming on DAGs. The key is processing nodes in topological order while tracking completion times.",
+    "first_impressions": "This is a **classic graph problem** combining two key concepts: (1) **Topological Sort** to find valid execution order, and (2) **Critical Path Analysis** to find minimum completion time with parallel execution. The dependency relationships form a **Directed Acyclic Graph (DAG)** - if there's a cycle, no valid schedule exists.",
+    "pattern_recognition": "**Topological Sort + Dynamic Programming**. The topological sort gives us processing order, and we use DP to track completion times. This pattern appears in: Course Schedule (LC 207/210), Build Order, Parallel Courses (LC 1136), Alien Dictionary (LC 269).",
     "key_constraints": [
-      "Task IDs may not be consecutive (1, 5, 100) - **must use HashMap** not array indexing",
-      "Up to 10^4 tasks and 10^5 dependencies - need O(V + E) algorithm, not O(V\u00b2)",
-      "Unlimited parallel workers - total time is critical path, not sum of durations",
-      "Cycle means impossible - must detect and return [-1, []]"
+      "**Task IDs not consecutive** (1, 5, 100) - must use HashMap, not array indexing",
+      "**Up to 10^4 tasks, 10^5 dependencies** - O(V+E) solution required, O(V*E) will TLE",
+      "**Unlimited parallel workers** - critical path determines total time, not sequential sum",
+      "**Cycle detection required** - return [-1, []] if impossible"
     ],
     "clarifying_questions": [
-      "Are task IDs guaranteed to be positive integers? - Affects HashMap key type",
-      "Can a dependency reference a task not in taskList? - Need validation",
-      "Is self-dependency (a \u2192 a) considered a cycle? - Yes, should detect it",
-      "Should the order be lexicographically smallest when multiple valid? - No, any valid order works",
-      "Can there be duplicate dependencies (same pair twice)? - Should handle gracefully",
-      "What if taskList is empty? - Return [0, []]",
-      "Can durations be 0? - Constraint says \u22651, so no"
+      "**Are task IDs guaranteed to be unique?** - Yes, important for HashMap keys",
+      "**Can dependencies reference non-existent tasks?** - Assume no, but worth validating in production",
+      "**What if taskList is empty?** - Return [0, []] (no work = zero time)",
+      "**Is self-dependency (A depends on A) considered a cycle?** - Yes, treat as invalid",
+      "**Multiple valid orders - any preference?** - Any valid topological order is acceptable",
+      "**Can a task appear multiple times in dependencyList?** - Possible duplicate edges, should handle gracefully"
     ],
     "edge_cases_to_consider": [
-      "Single task with no dependencies",
-      "All tasks independent (no edges) - total = max(durations)",
-      "Linear chain - total = sum(durations)",
-      "Self-dependency cycle (a \u2192 a)",
-      "Disconnected components in the graph",
-      "Diamond pattern with varying path lengths",
-      "Large fan-out (one task with many dependents)"
+      "Empty task list \u2192 [0, []]",
+      "Single task with no dependencies \u2192 [duration, [task_id]]",
+      "All tasks independent \u2192 max(durations), any order valid",
+      "Linear chain (no parallelism) \u2192 sum of all durations",
+      "Self-dependency cycle \u2192 [-1, []]",
+      "Diamond pattern (multiple paths merge) \u2192 critical path analysis",
+      "Disconnected components \u2192 can all run in parallel"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "Return valid topological order",
-        "how_met": "Use Kahn's algorithm (BFS) to process nodes when all prerequisites are complete",
+        "how_met": "Kahn's Algorithm (BFS-based topo sort) builds order list as we process",
         "gotchas": [
-          "Order must respect ALL dependencies, not just direct ones"
+          "Must initialize in-degree for ALL tasks, not just those with dependencies"
         ]
       },
       {
-        "requirement": "Calculate minimum total time with parallel execution",
-        "how_met": "Track completion_time[task] = max(completion_time[prereqs]) + duration[task]",
+        "requirement": "Calculate minimum total time with unlimited workers",
+        "how_met": "Track completion_time[task] = max(completion_time[prereqs]) + duration[task], then take max",
         "gotchas": [
-          "Don't sum durations - take max of completion times"
+          "NOT sum of all durations - parallel execution reduces total time"
         ]
       },
       {
         "requirement": "Detect cycles and return [-1, []]",
-        "how_met": "If len(processed) < len(tasks) after Kahn's algorithm, cycle exists",
+        "how_met": "If len(order) != len(tasks) after Kahn's algorithm, cycle exists",
         "gotchas": [
-          "Self-loops are also cycles",
-          "Cycle can be anywhere in graph"
-        ]
-      },
-      {
-        "requirement": "Handle non-consecutive task IDs",
-        "how_met": "Use Dict/HashMap for all task-indexed data structures",
-        "gotchas": [
-          "Don't use array[task_id] - IDs can be sparse"
+          "Don't just check if queue empties - need to verify ALL tasks processed"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "Build graph",
-        "target": "O(V + E)",
-        "achieved": "O(V + E)",
-        "why": "Single pass through tasks and dependencies"
-      },
-      {
-        "operation": "Topological sort",
-        "target": "O(V + E)",
-        "achieved": "O(V + E)",
-        "why": "Each node/edge processed once"
-      },
-      {
-        "operation": "Critical path",
-        "target": "O(V + E)",
-        "achieved": "O(V + E)",
-        "why": "Calculated during topological traversal"
-      },
-      {
-        "operation": "Overall",
-        "target": "O(V + E)",
-        "achieved": "O(V + E)",
-        "why": "All operations combined in single pass"
+        "operation": "schedule_tasks",
+        "target": "O(V+E)",
+        "achieved": "O(V+E)",
+        "why": "Each task and dependency processed exactly once"
       }
     ],
     "non_goals": [
-      "Returning lexicographically smallest order (any valid order is acceptable)",
-      "Optimizing for limited workers (that's Part 2)",
-      "Finding the actual critical path tasks (that's Part 3)",
-      "Handling dynamic task additions (that's Part 4)"
+      "Handling limited workers (that's Part 2)",
+      "Returning the actual critical path (that's Part 3)",
+      "Dynamic task addition (that's Part 4)"
     ]
   },
   "assumptions": [
-    "All task IDs in dependencyList exist in taskList (no dangling references)",
-    "No duplicate [taskId, duration] pairs in taskList",
-    "Dependencies are directed edges (a\u2192b means a must complete before b starts)",
-    "Tasks take exactly their stated duration (no variance)",
-    "A task starts immediately when all prerequisites complete (no scheduling delay)"
+    "Task IDs in dependencyList all exist in taskList",
+    "No duplicate tasks in taskList",
+    "Durations are positive integers",
+    "Dependencies are well-formed [from, to] pairs"
   ],
   "tradeoffs": [
     {
-      "decision": "Use Kahn's BFS vs DFS for topological sort",
-      "chosen": "Kahn's BFS",
-      "why": "Naturally integrates with completion time calculation - process nodes level by level. Cycle detection is trivial (count processed nodes).",
-      "alternative": "DFS with post-order",
-      "when_to_switch": "If you need to find ALL topological orders, DFS is more natural"
+      "decision": "BFS (Kahn's) vs DFS for topological sort",
+      "chosen": "BFS (Kahn's Algorithm)",
+      "why": "Natural integration with completion time calculation - process in order of availability. Easier cycle detection (count processed nodes). More intuitive for interview.",
+      "alternative": "DFS with finish times",
+      "when_to_switch": "DFS preferred when you need post-order traversal or recursive structure fits better"
     },
     {
-      "decision": "Track completion time during vs after topological sort",
-      "chosen": "During (single pass)",
-      "why": "More efficient - O(V+E) instead of two passes. Completion time calculated when node is added to queue.",
-      "alternative": "Separate passes",
-      "when_to_switch": "If you need to process the order for other purposes first"
-    },
-    {
-      "decision": "Store reverse graph vs compute predecessors on demand",
-      "chosen": "Store reverse graph",
-      "why": "O(1) lookup of prerequisites vs O(E) search. Uses O(E) extra space but worth it.",
-      "alternative": "Compute on demand",
-      "when_to_switch": "If memory is extremely constrained"
+      "decision": "Track completion times during vs after topo sort",
+      "chosen": "During topological sort",
+      "why": "Single pass through graph, avoids second iteration. Completion time only valid when all prereqs processed (guaranteed by topo order).",
+      "alternative": "Separate pass after getting order",
+      "when_to_switch": "If requirements change and you need order without times, separate is cleaner"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "Separate graph building from algorithm execution",
-      "Store both forward and reverse edges for flexibility",
-      "Use completion_time map - easily extended for more complex scheduling"
+      "Single pass algorithm - topo sort and critical path in one traversal",
+      "Use HashMaps for sparse/non-consecutive task IDs",
+      "Track both forward graph (task\u2192dependents) and reverse (task\u2192prerequisites)"
     ],
-    "why_this_design_scales": "The completion_time map naturally extends to Part 2 (limited workers - use priority queue by end time), Part 3 (find critical path - track which predecessor gave max time), and Part 4 (dynamic tasks - incrementally update affected completion times).",
+    "why_this_design_scales": "The reverse_graph enables O(1) lookup of prerequisites when calculating completion times. The same graph structure works for Part 2 (limited workers - use priority queue by completion time) and Part 3 (finding critical path - backtrack from max completion node).",
     "expected_followup_hooks": [
-      "completion_time calculation will change for limited workers",
-      "Need to track 'critical predecessor' for finding critical path",
-      "Graph structure should support incremental updates"
+      "**Part 2**: Replace simple queue with PriorityQueue sorted by completion_time to simulate limited workers",
+      "**Part 3**: Track 'critical predecessor' for each task to reconstruct path",
+      "**Part 4**: Incremental topo sort using dynamic graph updates"
     ],
     "invariants": [
-      "A task's completion time \u2265 max(prerequisites' completion times) + its duration",
-      "Processed count after Kahn's = number of tasks iff no cycle",
-      "Total time = max(all completion times)"
+      "completion_time[task] \u2265 duration[task] always",
+      "len(order) == len(tasks) iff no cycle",
+      "completion_time computed in topological order guarantees correctness"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    TASK DEPENDENCY GRAPH                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                 \u2502\n\u2502    Input Graph:                 Parallel Timeline:              \u2502\n\u2502                                                                 \u2502\n\u2502         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510                Time: 0   3   5   8  11        \u2502\n\u2502         \u2502 1(3) \u2502                      \u2502   \u2502   \u2502   \u2502   \u2502        \u2502\n\u2502         \u2514\u2500\u2500\u252c\u2500\u2500\u2500\u2518                                                \u2502\n\u2502        \u250c\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2510                Task 1: \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588                \u2502\n\u2502        \u25bc       \u25bc                                                \u2502\n\u2502    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510            Task 2:     \u2588\u2588\u2588\u2588                \u2502\n\u2502    \u2502 2(2) \u2502 \u2502 3(5) \u2502                                            \u2502\n\u2502    \u2514\u2500\u2500\u252c\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u252c\u2500\u2500\u2500\u2518            Task 3:     \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588      \u2502\n\u2502        \u2514\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2518                                                \u2502\n\u2502            \u25bc                    Task 4:              \u2588\u2588\u2588\u2588\u2588\u2588     \u2502\n\u2502        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2510                                                 \u2502\n\u2502        \u2502 4(3) \u2502                 Critical Path: 1\u21923\u21924 = 11      \u2502\n\u2502        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518                                                 \u2502\n\u2502                                                                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    DATA STRUCTURES                              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                 \u2502\n\u2502  duration = {1: 3, 2: 2, 3: 5, 4: 3}                           \u2502\n\u2502                                                                 \u2502\n\u2502  graph (forward edges):        reverse_graph (prerequisites):   \u2502\n\u2502  \u250c\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510            \u250c\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510              \u2502\n\u2502  \u2502 1 \u2502 [2, 3]     \u2502            \u2502 2 \u2502 [1]        \u2502              \u2502\n\u2502  \u2502 2 \u2502 [4]        \u2502            \u2502 3 \u2502 [1]        \u2502              \u2502\n\u2502  \u2502 3 \u2502 [4]        \u2502            \u2502 4 \u2502 [2, 3]     \u2502              \u2502\n\u2502  \u2502 4 \u2502 []         \u2502            \u2502 1 \u2502 []         \u2502              \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518            \u2514\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518              \u2502\n\u2502                                                                 \u2502\n\u2502  in_degree = {1: 0, 2: 1, 3: 1, 4: 2}                          \u2502\n\u2502                                                                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    TASK SCHEDULING OVERVIEW                    \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                \u2502\n\u2502  INPUT:                          OUTPUT:                       \u2502\n\u2502  tasks = [[1,3],[2,2],           order = [1,2,3,4]            \u2502\n\u2502           [3,5],[4,3]]           total_time = 11               \u2502\n\u2502  deps = [[1,2],[1,3],                                          \u2502\n\u2502          [2,4],[3,4]]                                          \u2502\n\u2502                                                                \u2502\n\u2502  DEPENDENCY GRAPH:               PARALLEL TIMELINE:            \u2502\n\u2502       \u250c\u2500\u2500\u25001(3)\u2500\u2500\u2500\u2510               t=0   t=3   t=5   t=8  t=11  \u2502\n\u2502       \u2502          \u2502                \u2502     \u2502     \u2502     \u2502     \u2502    \u2502\n\u2502       \u25bc          \u25bc               \u2550\u256a\u2550\u2550\u2550\u2550\u2550\u256a\u2550\u2550\u2550\u2550\u2550\u256a\u2550\u2550\u2550\u2550\u2550\u256a\u2550\u2550\u2550\u2550\u2550\u256a\u2550   \u2502\n\u2502     2(2)       3(5)               \u2502\u2593\u2593\u25931\u2593\u2502                      \u2502\n\u2502       \u2502          \u2502                \u2502     \u2502\u2593\u25932\u2593\u2502                 \u2502\n\u2502       \u25bc          \u25bc                \u2502     \u2502\u2593\u2593\u2593\u2593\u2593\u25933\u2593\u2593\u2593\u2502          \u2502\n\u2502       \u2514\u2500\u2500\u25004(3)\u2500\u2500\u2500\u2518                \u2502                 \u2502\u2593\u2593\u25934\u2593\u2502    \u2502\n\u2502                                                                \u2502\n\u2502  Critical Path: 1 \u2192 3 \u2192 4 = 3 + 5 + 3 = 11                    \u2502\n\u2502  (Path 1\u21922\u21924 = 3+2+3 = 8, shorter, not critical)              \u2502\n\u2502                                                                \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    DATA STRUCTURES STATE                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                 \u2502\n\u2502  duration = {1: 3, 2: 2, 3: 5, 4: 3}                           \u2502\n\u2502                                                                 \u2502\n\u2502  graph (forward):              reverse_graph (prerequisites):   \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510             \u250c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502\n\u2502  \u2502 1   \u2502 [2, 3]  \u2502             \u2502 1   \u2502 []      \u2502               \u2502\n\u2502  \u2502 2   \u2502 [4]     \u2502             \u2502 2   \u2502 [1]     \u2502               \u2502\n\u2502  \u2502 3   \u2502 [4]     \u2502             \u2502 3   \u2502 [1]     \u2502               \u2502\n\u2502  \u2502 4   \u2502 []      \u2502             \u2502 4   \u2502 [2, 3]  \u2502               \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518             \u2514\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2502\n\u2502                                                                 \u2502\n\u2502  in_degree:  {1: 0, 2: 1, 3: 1, 4: 2}                          \u2502\n\u2502               \u2191 starts in queue                                 \u2502\n\u2502                                                                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "Initialize - Find all tasks with in_degree = 0",
-        "visualization": "```\nqueue: [1]  (task 1 has no prerequisites)\ncompletion_time: {1: 3}  (starts at 0, ends at 0+3=3)\norder: []\n```",
-        "key_point": "Tasks with no prerequisites can start immediately at time 0"
+        "description": "Initialize: Find all tasks with in_degree=0 (no prerequisites)",
+        "visualization": "```\nqueue = [1]  (only task 1 has no prerequisites)\nin_degree = {1:0, 2:1, 3:1, 4:2}\ncompletion_time = {}\norder = []\n```",
+        "key_point": "Tasks with in_degree=0 can start immediately at t=0"
       },
       {
         "step": 2,
-        "description": "Process task 1 - Update dependents 2 and 3",
-        "visualization": "```\nProcess: 1\n\u251c\u2500 Dependent 2: in_degree 1\u21920, can start!\n\u2502  \u2514\u2500 start = max(completion[1]) = 3\n\u2502  \u2514\u2500 completion[2] = 3 + 2 = 5\n\u251c\u2500 Dependent 3: in_degree 1\u21920, can start!\n\u2502  \u2514\u2500 start = max(completion[1]) = 3\n\u2502  \u2514\u2500 completion[3] = 3 + 5 = 8\n\nqueue: [2, 3]\ncompletion_time: {1: 3, 2: 5, 3: 8}\norder: [1]\n```",
-        "key_point": "When in_degree becomes 0, ALL prerequisites are done"
+        "description": "Process task 1: Calculate completion time, update dependents",
+        "visualization": "```\nProcess task 1:\n  prereqs of 1 = [] \u2192 max_prereq_time = 0\n  completion_time[1] = 0 + 3 = 3\n  \nDecrement in_degree of dependents [2, 3]:\n  in_degree[2] = 1-1 = 0 \u2192 add to queue\n  in_degree[3] = 1-1 = 0 \u2192 add to queue\n\nqueue = [2, 3], order = [1]\n```",
+        "key_point": "When in_degree becomes 0, task is ready to execute"
       },
       {
         "step": 3,
-        "description": "Process tasks 2 and 3 - Task 4 waits for both",
-        "visualization": "```\nProcess: 2\n\u251c\u2500 Dependent 4: in_degree 2\u21921, wait...\n\nProcess: 3\n\u251c\u2500 Dependent 4: in_degree 1\u21920, can start!\n\u2502  \u2514\u2500 prereqs = [2, 3]\n\u2502  \u2514\u2500 start = max(completion[2], completion[3])\n\u2502  \u2514\u2500 start = max(5, 8) = 8\n\u2502  \u2514\u2500 completion[4] = 8 + 3 = 11\n\nqueue: [4]\ncompletion_time: {1: 3, 2: 5, 3: 8, 4: 11}\norder: [1, 2, 3]\n```",
-        "key_point": "Task 4 must wait for the SLOWER path (3, not 2)"
+        "description": "Process task 2: Completion time = prereq time + duration",
+        "visualization": "```\nProcess task 2:\n  prereqs of 2 = [1] \u2192 max_prereq_time = 3\n  completion_time[2] = 3 + 2 = 5\n  \nDecrement in_degree of dependents [4]:\n  in_degree[4] = 2-1 = 1 \u2192 NOT ready yet\n\nqueue = [3], order = [1, 2]\n```",
+        "key_point": "Task 4 still waiting on task 3"
       },
       {
         "step": 4,
-        "description": "Process task 4 - Complete!",
-        "visualization": "```\nProcess: 4 (no dependents)\n\nqueue: []\ncompletion_time: {1: 3, 2: 5, 3: 8, 4: 11}\norder: [1, 2, 3, 4]\n\nlen(order) == 4 == len(tasks) \u2192 No cycle!\ntotal_time = max(3, 5, 8, 11) = 11\n```",
-        "key_point": "Final answer: (11, [1, 2, 3, 4])"
+        "description": "Process task 3: This is on the critical path!",
+        "visualization": "```\nProcess task 3:\n  prereqs of 3 = [1] \u2192 max_prereq_time = 3\n  completion_time[3] = 3 + 5 = 8   \u2190 LONGER than path through 2!\n  \nDecrement in_degree of dependents [4]:\n  in_degree[4] = 1-1 = 0 \u2192 add to queue\n\nqueue = [4], order = [1, 2, 3]\n```",
+        "key_point": "Task 3 finishes at t=8, task 2 finished at t=5. Task 4 waits for BOTH."
+      },
+      {
+        "step": 5,
+        "description": "Process task 4: Must wait for ALL prerequisites",
+        "visualization": "```\nProcess task 4:\n  prereqs of 4 = [2, 3]\n  max_prereq_time = max(5, 8) = 8  \u2190 Takes the LATER completion\n  completion_time[4] = 8 + 3 = 11\n\nqueue = [], order = [1, 2, 3, 4]\n```",
+        "key_point": "Task 4 starts at t=8 (waits for slower prereq), ends at t=11"
+      },
+      {
+        "step": 6,
+        "description": "Finalize: Check for cycles, return result",
+        "visualization": "```\nlen(order) = 4 = len(tasks) \u2192 No cycle!\ntotal_time = max(completion_time.values())\n          = max(3, 5, 8, 11) = 11\n\nReturn: (11, [1, 2, 3, 4])\n```",
+        "key_point": "If len(order) < len(tasks), cycle exists"
       }
     ],
-    "dry_run_table": "| Step | Queue | Processing | In-degrees | Completion Times | Order |\n|------|-------|------------|------------|------------------|-------|\n| Init | [1] | - | {1:0, 2:1, 3:1, 4:2} | {1:3} | [] |\n| 1 | [2,3] | 1 | {1:0, 2:0, 3:0, 4:2} | {1:3, 2:5, 3:8} | [1] |\n| 2 | [3] | 2 | {1:0, 2:0, 3:0, 4:1} | {1:3, 2:5, 3:8} | [1,2] |\n| 3 | [4] | 3 | {1:0, 2:0, 3:0, 4:0} | {1:3, 2:5, 3:8, 4:11} | [1,2,3] |\n| 4 | [] | 4 | {1:0, 2:0, 3:0, 4:0} | {1:3, 2:5, 3:8, 4:11} | [1,2,3,4] |"
+    "dry_run_table": "| Step | Queue | Process | Prereq Max | Completion | in_degree after | Order |\n|------|-------|---------|------------|------------|-----------------|-------|\n| Init | [1] | - | - | {} | {1:0,2:1,3:1,4:2} | [] |\n| 1 | [2,3] | 1 | 0 | {1:3} | {2:0,3:0,4:2} | [1] |\n| 2 | [3] | 2 | 3 | {1:3,2:5} | {3:0,4:1} | [1,2] |\n| 3 | [4] | 3 | 3 | {1:3,2:5,3:8} | {4:0} | [1,2,3] |\n| 4 | [] | 4 | max(5,8)=8 | {1:3,2:5,3:8,4:11} | {} | [1,2,3,4] |\n| Done | - | - | - | **max=11** | - | **[1,2,3,4]** |"
   },
   "thinking_process": {
     "step_by_step": [
-      "When I see 'tasks with dependencies' and 'valid execution order', I immediately think **topological sort** - this is the classic formulation.",
-      "When I see 'unlimited parallel workers', I realize total time is NOT the sum of durations. It's the **critical path** - the longest chain of dependent tasks.",
-      "The key insight is that these two requirements (order + time) can be computed in a **single traversal** using Kahn's algorithm.",
-      "For critical path: `completion_time[task] = max(completion_time[all prerequisites]) + duration[task]`",
-      "For cycle detection: If Kahn's algorithm doesn't process all nodes, there's a cycle (some nodes have in_degree > 0 that never becomes 0).",
-      "Task IDs are non-consecutive, so I must use **HashMap** for all task-indexed structures, not arrays.",
-      "I need both forward edges (task \u2192 dependents) and reverse edges (task \u2192 prerequisites) for efficient processing."
+      "When I see **'tasks with dependencies'**, I immediately think **Directed Graph** where edges represent 'must complete before' relationships",
+      "When I see **'valid execution order'**, I think **Topological Sort** - the classic algorithm for ordering nodes respecting directed edges",
+      "When I see **'minimum time with unlimited workers'**, I realize this is NOT just sum of durations - parallel execution means we need **Critical Path Analysis**",
+      "The key insight: **completion_time[task] = max(completion_time[all prereqs]) + duration[task]**. A task can't start until ALL its prerequisites finish",
+      "I should use **Kahn's Algorithm (BFS)** because: (1) naturally gives topological order, (2) easy cycle detection, (3) can compute completion times in same pass",
+      "For cycle detection: if we process fewer tasks than exist, remaining tasks are in a cycle (can't get in_degree to 0)"
     ],
-    "key_insight": "**Process nodes in topological order while tracking completion times.** When a node is ready to process (in_degree = 0), ALL its prerequisites have known completion times, so we can compute its start time as the MAX of those times. This elegantly solves both problems in O(V+E).",
-    "why_this_works": "Topological order guarantees that when we process a task, all its prerequisites have already been processed. Therefore, their completion times are already calculated. The max of those times gives us the earliest possible start time for the current task. The cycle detection falls out naturally - if we can't process all nodes, the remaining nodes form a cycle."
+    "key_insight": "**The minimum total time is the Critical Path** - the longest chain of dependent tasks. Parallel execution doesn't help the critical path; it just ensures non-critical paths don't slow us down. We compute this by tracking when each task can START (= max completion of prereqs) and when it ENDS (= start + duration).",
+    "why_this_works": "Topological order guarantees that when we process a task, ALL its prerequisites have already been processed and have valid completion times. This means our DP recurrence `completion[t] = max(completion[prereqs]) + duration[t]` is always computed from known values. The final answer is the maximum completion time across all tasks."
   },
   "approaches": [
     {
-      "name": "Brute Force - DFS for each task",
-      "description": "For each task, use DFS to find the longest path ending at that task",
-      "pseudocode": "for each task:\n  longest_path[task] = duration[task] + max(DFS(prereq) for prereq in prerequisites)\ntotal = max(longest_path.values())",
-      "time_complexity": "O(V * (V + E)) - DFS for each task",
-      "space_complexity": "O(V + E) for graph + recursion stack",
+      "name": "Brute Force: DFS from each node",
+      "description": "For each task, do DFS to find the longest path ending at that task, then take maximum",
+      "pseudocode": "for each task t:\n    longest_path_to[t] = DFS to find max path length\ntotal_time = max(longest_path_to)\n\nDFS(t):\n    if t has no prereqs: return duration[t]\n    return duration[t] + max(DFS(prereq) for prereq in prereqs[t])",
+      "time_complexity": "O(V * (V+E)) - DFS from each node",
+      "space_complexity": "O(V) for recursion stack",
       "pros": [
-        "Simple to understand",
-        "Naturally handles the critical path concept"
+        "Intuitive recursive thinking",
+        "Easy to understand"
       ],
       "cons": [
         "Redundant computation - same subpaths computed multiple times",
-        "Cycle detection requires separate pass"
+        "TLE for large graphs",
+        "Cycle detection harder"
       ],
-      "when_to_use": "Only for very small graphs or as a correctness check"
+      "when_to_use": "Only for very small graphs or when explaining the concept"
     },
     {
-      "name": "DFS with Memoization",
-      "description": "Use memoization to cache longest path from each task",
-      "pseudocode": "def dfs(task):\n  if task in memo: return memo[task]\n  max_prereq = max(dfs(p) for p in prereqs[task]) or 0\n  memo[task] = max_prereq + duration[task]\n  return memo[task]",
-      "time_complexity": "O(V + E) - each node/edge visited once",
-      "space_complexity": "O(V) for memo + O(V) for recursion stack",
-      "pros": [
-        "Correct complexity",
-        "Intuitive recursive structure"
-      ],
-      "cons": [
-        "Risk of stack overflow for deep graphs",
-        "Cycle detection needs colored states (white/gray/black)"
-      ],
-      "when_to_use": "Good for understanding, but BFS is safer in interviews"
-    },
-    {
-      "name": "Optimal: Kahn's Algorithm (BFS) with Completion Times",
-      "description": "Use BFS-based topological sort, tracking completion times as we go",
-      "pseudocode": "queue = [tasks with in_degree 0]\nwhile queue:\n  task = queue.pop()\n  order.append(task)\n  for dependent in graph[task]:\n    in_degree[dependent] -= 1\n    if in_degree[dependent] == 0:\n      start = max(completion_time[p] for p in prereqs[dependent])\n      completion_time[dependent] = start + duration[dependent]\n      queue.append(dependent)\nreturn max(completion_time.values()), order",
-      "time_complexity": "O(V + E) - each node/edge processed once",
+      "name": "Optimal: Kahn's Algorithm + DP in Single Pass",
+      "description": "Use BFS-based topological sort. As we process each task, compute its completion time using already-computed prerequisite times. Cycle detection is automatic.",
+      "pseudocode": "1. Build graph, reverse_graph, in_degree\n2. queue = [tasks with in_degree=0]\n3. while queue not empty:\n     task = queue.pop()\n     completion[task] = max(completion[prereq] for prereq in reverse_graph[task]) + duration[task]\n     order.append(task)\n     for dependent in graph[task]:\n       in_degree[dependent] -= 1\n       if in_degree[dependent] == 0:\n         queue.append(dependent)\n4. if len(order) < len(tasks): return [-1, []]\n5. return [max(completion.values()), order]",
+      "time_complexity": "O(V + E) - each node and edge processed once",
       "space_complexity": "O(V + E) for graph storage",
       "pros": [
-        "No recursion - no stack overflow risk",
+        "Optimal time complexity",
+        "Single pass",
         "Clean cycle detection",
-        "Single pass for both order and time"
+        "Natural for interview"
       ],
       "cons": [
-        "Need to store both forward and reverse edges"
+        "Requires understanding of topological sort"
       ],
-      "key_insight": "When in_degree becomes 0, ALL prerequisites have been processed, so their completion times are available"
+      "key_insight": "Processing in topological order guarantees prerequisites are done first - perfect for DP!"
     }
   ],
   "optimal_solution": {
     "name": "Kahn's Algorithm with Critical Path Calculation",
-    "explanation_md": "## Approach: BFS Topological Sort + Dynamic Programming\n\n### Core Algorithm\n\n1. **Build the Graph**\n   - Create adjacency list `graph[task]` \u2192 list of dependent tasks\n   - Create reverse adjacency list `prereqs[task]` \u2192 list of prerequisites\n   - Track `in_degree[task]` for Kahn's algorithm\n   - Store `duration[task]` for completion time calculation\n\n2. **Initialize**\n   - Add all tasks with `in_degree = 0` to queue\n   - Their completion time = duration (start at time 0)\n\n3. **Process Queue (Kahn's Algorithm)**\n   - Pop task from queue, add to order\n   - For each dependent task:\n     - Decrement its in_degree\n     - If in_degree becomes 0:\n       - Calculate start_time = max(completion_time[prereqs])\n       - Set completion_time = start_time + duration\n       - Add to queue\n\n4. **Cycle Detection**\n   - If `len(order) < num_tasks`, there's a cycle\n\n5. **Result**\n   - Total time = max(all completion times)\n   - Return (total_time, order)\n\n### Why This Works\n\nThe key insight is that **in_degree = 0** means **all prerequisites are done**. At that moment:\n- All prerequisite completion times are known\n- We can compute the earliest start time (max of prereq end times)\n- We can compute this task's completion time\n\nThis is essentially **dynamic programming on a DAG** processed in topological order.",
+    "explanation_md": "## Approach\n\nWe solve two problems simultaneously:\n1. **Topological Sort** using Kahn's Algorithm (BFS with in-degree tracking)\n2. **Critical Path** using dynamic programming on completion times\n\n### Why Kahn's Algorithm?\n\nKahn's algorithm processes nodes in **topological order** by:\n1. Starting with nodes that have no incoming edges (in-degree = 0)\n2. Processing a node, then decrementing in-degrees of its dependents\n3. Adding newly-ready nodes (in-degree becomes 0) to the queue\n\nThis is perfect for our DP: when we process a task, all its prerequisites are **already processed**, so their completion times are known.\n\n### Critical Path Calculation\n\nFor each task: `completion_time[task] = max(completion_time[prereq] for all prereqs) + duration[task]`\n\nIf no prereqs, the task starts at t=0, so `completion_time = duration`.\n\n### Cycle Detection\n\nIf there's a cycle, some tasks will **never** reach in-degree 0. After BFS completes, if we haven't processed all tasks, a cycle exists.\n\n### Time Complexity: O(V + E)\n- Build graph: O(V + E)\n- BFS: Each node dequeued once O(V), each edge checked once O(E)\n- Total: O(V + E)",
     "data_structures": [
       {
-        "structure": "Dict[int, List[int]] graph",
-        "purpose": "Forward edges: task \u2192 dependent tasks for processing dependents"
+        "structure": "HashMap<task_id, duration>",
+        "purpose": "O(1) lookup of task duration by ID"
       },
       {
-        "structure": "Dict[int, List[int]] prereqs",
-        "purpose": "Reverse edges: task \u2192 prerequisites for computing start time"
+        "structure": "HashMap<task_id, List<dependent_ids>> (graph)",
+        "purpose": "Forward edges: which tasks depend on this one"
       },
       {
-        "structure": "Dict[int, int] duration",
-        "purpose": "Task durations for completion time calculation"
+        "structure": "HashMap<task_id, List<prereq_ids>> (reverse_graph)",
+        "purpose": "Backward edges: which tasks must complete before this one"
       },
       {
-        "structure": "Dict[int, int] in_degree",
-        "purpose": "Track remaining prerequisites for Kahn's algorithm"
+        "structure": "HashMap<task_id, int> (in_degree)",
+        "purpose": "Count of unprocessed prerequisites"
       },
       {
-        "structure": "Dict[int, int] completion_time",
+        "structure": "HashMap<task_id, int> (completion_time)",
         "purpose": "Earliest completion time for each task"
       },
       {
-        "structure": "Deque queue",
-        "purpose": "BFS queue for Kahn's algorithm"
+        "structure": "Deque (queue)",
+        "purpose": "BFS queue for tasks ready to process"
       }
     ],
     "algorithm_steps": [
-      "1. Parse taskList to populate duration map and initialize in_degree to 0",
-      "2. Parse dependencyList to build graph, prereqs, and increment in_degrees",
-      "3. Find all tasks with in_degree = 0, add to queue with completion_time = duration",
-      "4. While queue not empty: pop task, add to order, process dependents",
-      "5. For each dependent: decrement in_degree, if 0 compute completion_time and enqueue",
-      "6. After loop: if order length != task count, return [-1, []] (cycle)",
-      "7. Return (max(completion_times), order)"
+      "1. **Parse input**: Build duration map from taskList",
+      "2. **Build graphs**: Create forward graph (dependencies) and reverse graph (prerequisites) from dependencyList",
+      "3. **Initialize in-degrees**: Count incoming edges for each task",
+      "4. **Initialize queue**: Add all tasks with in_degree=0 (no prerequisites)",
+      "5. **BFS loop**: For each task in queue:\n   - Calculate completion_time = max(prereq completion times) + duration\n   - Add to order list\n   - Decrement in_degree of dependents, enqueue if becomes 0",
+      "6. **Check for cycle**: If len(order) != len(tasks), cycle exists \u2192 return [-1, []]",
+      "7. **Return result**: [max(completion_times), order]"
     ],
     "why_decimal": "Not applicable for this problem - durations are integers"
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Task Scheduling with Dependencies",
-    "",
-    "Problem: Given tasks with durations and dependencies, find:",
-    "1. A valid execution order (topological sort)",
-    "2. Minimum total time with unlimited parallel workers (critical path)",
-    "",
-    "Algorithm: Kahn's Algorithm (BFS Topological Sort) + Critical Path Calculation",
-    "Time Complexity: O(V + E) where V = tasks, E = dependencies",
-    "Space Complexity: O(V + E) for graph storage",
-    "\"\"\"",
-    "",
     "from collections import defaultdict, deque",
-    "from typing import List, Tuple, Dict",
+    "from typing import List, Tuple",
     "",
-    "",
-    "class TaskScheduler:",
+    "def schedule_tasks(task_list: List[List[int]], dependency_list: List[List[int]]) -> Tuple[int, List[int]]:",
     "    \"\"\"",
-    "    A task scheduler that handles dependencies and calculates optimal execution.",
-    "    ",
-    "    This class uses Kahn's algorithm for topological sorting combined with",
-    "    critical path analysis to determine the minimum execution time when",
-    "    unlimited parallel workers are available.",
-    "    ",
-    "    Example:",
-    "        >>> scheduler = TaskScheduler()",
-    "        >>> tasks = [[1, 3], [2, 2], [3, 5], [4, 3]]",
-    "        >>> deps = [[1, 2], [1, 3], [2, 4], [3, 4]]",
-    "        >>> time, order = scheduler.schedule_tasks(tasks, deps)",
-    "        >>> print(f'Total time: {time}, Order: {order}')",
-    "        Total time: 11, Order: [1, 2, 3, 4]",
+    "    Schedule tasks with dependencies using topological sort + critical path.",
+    "    Returns (min_total_time, valid_execution_order) or (-1, []) if cycle.",
     "    \"\"\"",
+    "    if not task_list:",
+    "        return (0, [])",
     "    ",
-    "    def __init__(self) -> None:",
-    "        \"\"\"Initialize empty data structures for graph representation.\"\"\"",
-    "        self._graph: Dict[int, List[int]] = defaultdict(list)",
-    "        self._prereqs: Dict[int, List[int]] = defaultdict(list)",
-    "        self._duration: Dict[int, int] = {}",
-    "        self._in_degree: Dict[int, int] = defaultdict(int)",
+    "    # Build duration map and initialize data structures",
+    "    duration = {task_id: dur for task_id, dur in task_list}",
+    "    graph = defaultdict(list)         # task -> [dependent tasks]",
+    "    reverse_graph = defaultdict(list) # task -> [prerequisite tasks]",
+    "    in_degree = {task_id: 0 for task_id in duration}",
     "    ",
-    "    def _reset(self) -> None:",
-    "        \"\"\"Reset all internal state for a new scheduling problem.\"\"\"",
-    "        self._graph = defaultdict(list)",
-    "        self._prereqs = defaultdict(list)",
-    "        self._duration = {}",
-    "        self._in_degree = defaultdict(int)",
+    "    # Build graph from dependencies: [a, b] means a must complete before b",
+    "    for task_a, task_b in dependency_list:",
+    "        graph[task_a].append(task_b)",
+    "        reverse_graph[task_b].append(task_a)",
+    "        in_degree[task_b] += 1",
     "    ",
-    "    def _build_graph(",
-    "        self,",
-    "        task_list: List[List[int]],",
-    "        dependency_list: List[List[int]]",
-    "    ) -> bool:",
-    "        \"\"\"",
-    "        Build the dependency graph from input lists.",
-    "        ",
-    "        Args:",
-    "            task_list: List of [task_id, duration] pairs",
-    "            dependency_list: List of [prereq, dependent] pairs",
-    "            ",
-    "        Returns:",
-    "            True if graph is valid, False if invalid references found",
-    "        \"\"\"",
-    "        # Initialize all tasks with in_degree 0",
-    "        for task_id, duration in task_list:",
-    "            self._duration[task_id] = duration",
-    "            self._in_degree[task_id] = 0",
-    "        ",
-    "        # Build adjacency lists and track in-degrees",
-    "        for prereq, dependent in dependency_list:",
-    "            # Validate task references",
-    "            if prereq not in self._duration or dependent not in self._duration:",
-    "                return False",
-    "            ",
-    "            # Skip self-loops (they would cause cycles anyway)",
-    "            if prereq == dependent:",
-    "                continue",
-    "            ",
-    "            self._graph[prereq].append(dependent)",
-    "            self._prereqs[dependent].append(prereq)",
-    "            self._in_degree[dependent] += 1",
-    "        ",
-    "        return True",
+    "    # Kahn's algorithm: start with tasks having no prerequisites",
+    "    queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "    order = []",
+    "    completion_time = {}",
     "    ",
-    "    def _topological_sort_with_critical_path(self) -> Tuple[int, List[int]]:",
-    "        \"\"\"",
-    "        Perform topological sort while calculating critical path.",
+    "    while queue:",
+    "        task = queue.popleft()",
+    "        order.append(task)",
     "        ",
-    "        Uses Kahn's algorithm (BFS-based) to process tasks in dependency order.",
-    "        Simultaneously tracks completion times for critical path calculation.",
+    "        # Completion time = max(prereq completion times) + this task's duration",
+    "        # If no prereqs, task starts at t=0",
+    "        max_prereq_time = 0",
+    "        for prereq in reverse_graph[task]:",
+    "            max_prereq_time = max(max_prereq_time, completion_time[prereq])",
+    "        completion_time[task] = max_prereq_time + duration[task]",
     "        ",
-    "        Returns:",
-    "            Tuple of (total_time, execution_order)",
-    "            Returns (-1, []) if a cycle is detected",
-    "        \"\"\"",
-    "        queue: deque = deque()",
-    "        completion_time: Dict[int, int] = {}",
-    "        order: List[int] = []",
-    "        ",
-    "        # Initialize: Add all tasks with no prerequisites",
-    "        # These tasks start at time 0, so completion = duration",
-    "        for task_id in self._duration:",
-    "            if self._in_degree[task_id] == 0:",
-    "                queue.append(task_id)",
-    "                completion_time[task_id] = self._duration[task_id]",
-    "        ",
-    "        # Process tasks in BFS order (Kahn's algorithm)",
-    "        while queue:",
-    "            current_task = queue.popleft()",
-    "            order.append(current_task)",
-    "            ",
-    "            # Process all dependent tasks",
-    "            for dependent in self._graph[current_task]:",
-    "                self._in_degree[dependent] -= 1",
-    "                ",
-    "                # When all prerequisites are done, we can schedule this task",
-    "                if self._in_degree[dependent] == 0:",
-    "                    # Calculate earliest start time",
-    "                    # = max completion time of all prerequisites",
-    "                    prereq_list = self._prereqs[dependent]",
-    "                    start_time = max(",
-    "                        completion_time[prereq]",
-    "                        for prereq in prereq_list",
-    "                    )",
-    "                    ",
-    "                    # Calculate completion time",
-    "                    completion_time[dependent] = (",
-    "                        start_time + self._duration[dependent]",
-    "                    )",
-    "                    queue.append(dependent)",
-    "        ",
-    "        # Cycle detection: If not all tasks processed, cycle exists",
-    "        if len(order) != len(self._duration):",
-    "            return (-1, [])",
-    "        ",
-    "        # Calculate total time (max of all completion times)",
-    "        total_time = max(completion_time.values()) if completion_time else 0",
-    "        ",
-    "        return (total_time, order)",
+    "        # Decrement in-degree of dependent tasks",
+    "        for dependent in graph[task]:",
+    "            in_degree[dependent] -= 1",
+    "            if in_degree[dependent] == 0:",
+    "                queue.append(dependent)",
     "    ",
-    "    def schedule_tasks(",
-    "        self,",
-    "        task_list: List[List[int]],",
-    "        dependency_list: List[List[int]]",
-    "    ) -> Tuple[int, List[int]]:",
-    "        \"\"\"",
-    "        Schedule tasks respecting dependencies and calculate minimum time.",
-    "        ",
-    "        Given a list of tasks with their durations and a list of dependencies,",
-    "        this method determines a valid execution order and the minimum total",
-    "        time to complete all tasks assuming unlimited parallel workers.",
-    "        ",
-    "        Args:",
-    "            task_list: List of [task_id, duration] pairs.",
-    "                       Task IDs are unique integers, durations are positive.",
-    "            dependency_list: List of [prereq_id, dependent_id] pairs.",
-    "                            prereq must complete before dependent can start.",
-    "        ",
-    "        Returns:",
-    "            Tuple of (total_time, execution_order) where:",
-    "            - total_time: Minimum time to complete all tasks with parallel execution",
-    "            - execution_order: A valid topological order of task IDs",
-    "            Returns (-1, []) if dependencies contain a cycle.",
-    "        ",
-    "        Examples:",
-    "            >>> scheduler = TaskScheduler()",
-    "            >>> # Diamond pattern: 1 -> 2,3 -> 4",
-    "            >>> scheduler.schedule_tasks(",
-    "            ...     [[1,3], [2,2], [3,5], [4,3]],",
-    "            ...     [[1,2], [1,3], [2,4], [3,4]]",
-    "            ... )",
-    "            (11, [1, 2, 3, 4])",
-    "            ",
-    "            >>> # Independent tasks (all parallel)",
-    "            >>> scheduler.schedule_tasks([[1,5], [2,3], [3,4]], [])",
-    "            (5, [1, 2, 3])",
-    "            ",
-    "            >>> # Cycle detection",
-    "            >>> scheduler.schedule_tasks(",
-    "            ...     [[1,2], [2,3], [3,1]],",
-    "            ...     [[1,2], [2,3], [3,1]]",
-    "            ... )",
-    "            (-1, [])",
-    "        \"\"\"",
-    "        # Handle edge case: empty task list",
-    "        if not task_list:",
-    "            return (0, [])",
-    "        ",
-    "        # Reset state for new problem",
-    "        self._reset()",
-    "        ",
-    "        # Build the dependency graph",
-    "        if not self._build_graph(task_list, dependency_list):",
-    "            # Invalid task reference in dependencies",
-    "            return (-1, [])",
-    "        ",
-    "        # Run topological sort with critical path calculation",
-    "        return self._topological_sort_with_critical_path()",
-    "",
-    "",
-    "# ============================================================================",
-    "# Standalone function version (for direct use without class instantiation)",
-    "# ============================================================================",
-    "",
-    "def schedule_tasks(",
-    "    task_list: List[List[int]],",
-    "    dependency_list: List[List[int]]",
-    ") -> Tuple[int, List[int]]:",
-    "    \"\"\"",
-    "    Standalone function to schedule tasks with dependencies.",
+    "    # Cycle detection: if not all tasks processed, cycle exists",
+    "    if len(order) != len(duration):",
+    "        return (-1, [])",
     "    ",
-    "    See TaskScheduler.schedule_tasks for full documentation.",
-    "    \"\"\"",
-    "    scheduler = TaskScheduler()",
-    "    return scheduler.schedule_tasks(task_list, dependency_list)",
-    "",
-    "",
-    "# ============================================================================",
-    "# Demo and Test Cases",
-    "# ============================================================================",
-    "",
-    "def run_test_case(",
-    "    name: str,",
-    "    task_list: List[List[int]],",
-    "    dependency_list: List[List[int]],",
-    "    expected_time: int,",
-    "    check_order: bool = True",
-    ") -> bool:",
-    "    \"\"\"Run a single test case and verify results.\"\"\"",
-    "    scheduler = TaskScheduler()",
-    "    result_time, result_order = scheduler.schedule_tasks(task_list, dependency_list)",
-    "    ",
-    "    passed = result_time == expected_time",
-    "    ",
-    "    # For cycle cases, order should be empty",
-    "    if expected_time == -1:",
-    "        passed = passed and result_order == []",
-    "    elif check_order:",
-    "        # Verify the order is valid (respects all dependencies)",
-    "        position = {task_id: i for i, task_id in enumerate(result_order)}",
-    "        for prereq, dependent in dependency_list:",
-    "            if position.get(prereq, -1) >= position.get(dependent, float('inf')):",
-    "                passed = False",
-    "                break",
-    "    ",
-    "    status = '\u2713 PASS' if passed else '\u2717 FAIL'",
-    "    print(f'{status}: {name}')",
-    "    print(f'       Time: {result_time} (expected {expected_time})')",
-    "    print(f'       Order: {result_order}')",
-    "    print()",
-    "    ",
-    "    return passed",
+    "    # Total time = maximum completion time (critical path)",
+    "    total_time = max(completion_time.values())",
+    "    return (total_time, order)",
     "",
     "",
     "if __name__ == '__main__':",
-    "    print('=' * 60)",
-    "    print('Task Scheduling with Dependencies - Test Suite')",
-    "    print('=' * 60)",
-    "    print()",
+    "    print(\"=\" * 60)",
+    "    print(\"Task Scheduling with Dependencies - Demo\")",
+    "    print(\"=\" * 60)",
     "    ",
-    "    all_passed = True",
+    "    # Example 1: Diamond pattern",
+    "    tasks1 = [[1, 3], [2, 2], [3, 5], [4, 3]]",
+    "    deps1 = [[1, 2], [1, 3], [2, 4], [3, 4]]",
+    "    result1 = schedule_tasks(tasks1, deps1)",
+    "    print(f\"\\nDiamond Pattern:\")",
+    "    print(f\"  Tasks: {tasks1}\")",
+    "    print(f\"  Dependencies: {deps1}\")",
+    "    print(f\"  Result: time={result1[0]}, order={result1[1]}\")",
+    "    print(f\"  Expected: time=11, critical path 1->3->4 (3+5+3)\")",
     "    ",
-    "    # Test 1: Basic Diamond Pattern",
-    "    all_passed &= run_test_case(",
-    "        'Basic Diamond Pattern',",
-    "        task_list=[[1, 3], [2, 2], [3, 5], [4, 3]],",
-    "        dependency_list=[[1, 2], [1, 3], [2, 4], [3, 4]],",
-    "        expected_time=11",
-    "    )",
+    "    # Example 2: Independent tasks (all parallel)",
+    "    tasks2 = [[1, 5], [2, 3], [3, 4]]",
+    "    deps2 = []",
+    "    result2 = schedule_tasks(tasks2, deps2)",
+    "    print(f\"\\nIndependent Tasks:\")",
+    "    print(f\"  Tasks: {tasks2}\")",
+    "    print(f\"  Result: time={result2[0]}, order={result2[1]}\")",
+    "    print(f\"  Expected: time=5 (max duration, all parallel)\")",
     "    ",
-    "    # Test 2: Independent Tasks (all parallel)",
-    "    all_passed &= run_test_case(",
-    "        'Independent Tasks (parallel)',",
-    "        task_list=[[1, 5], [2, 3], [3, 4]],",
-    "        dependency_list=[],",
-    "        expected_time=5",
-    "    )",
+    "    # Example 3: Linear chain (no parallelism)",
+    "    tasks3 = [[1, 2], [2, 3], [3, 1]]",
+    "    deps3 = [[1, 2], [2, 3]]",
+    "    result3 = schedule_tasks(tasks3, deps3)",
+    "    print(f\"\\nLinear Chain:\")",
+    "    print(f\"  Tasks: {tasks3}\")",
+    "    print(f\"  Dependencies: {deps3}\")",
+    "    print(f\"  Result: time={result3[0]}, order={result3[1]}\")",
+    "    print(f\"  Expected: time=6 (2+3+1, sequential)\")",
     "    ",
-    "    # Test 3: Linear Chain",
-    "    all_passed &= run_test_case(",
-    "        'Linear Chain',",
-    "        task_list=[[1, 2], [2, 3], [3, 1]],",
-    "        dependency_list=[[1, 2], [2, 3]],",
-    "        expected_time=6",
-    "    )",
+    "    # Example 4: Cycle detection",
+    "    tasks4 = [[1, 2], [2, 3], [3, 1]]",
+    "    deps4 = [[1, 2], [2, 3], [3, 1]]  # Cycle: 1->2->3->1",
+    "    result4 = schedule_tasks(tasks4, deps4)",
+    "    print(f\"\\nCycle Detection:\")",
+    "    print(f\"  Tasks: {tasks4}\")",
+    "    print(f\"  Dependencies: {deps4}\")",
+    "    print(f\"  Result: {result4}\")",
+    "    print(f\"  Expected: (-1, []) - cycle detected!\")",
     "    ",
-    "    # Test 4: Cycle Detection",
-    "    all_passed &= run_test_case(",
-    "        'Cycle Detection',",
-    "        task_list=[[1, 2], [2, 3], [3, 1]],",
-    "        dependency_list=[[1, 2], [2, 3], [3, 1]],",
-    "        expected_time=-1",
-    "    )",
-    "    ",
-    "    # Test 5: Single Task",
-    "    all_passed &= run_test_case(",
-    "        'Single Task',",
-    "        task_list=[[1, 5]],",
-    "        dependency_list=[],",
-    "        expected_time=5",
-    "    )",
-    "    ",
-    "    # Test 6: Two Independent Tasks",
-    "    all_passed &= run_test_case(",
-    "        'Two Independent Tasks',",
-    "        task_list=[[1, 3], [2, 4]],",
-    "        dependency_list=[],",
-    "        expected_time=4",
-    "    )",
-    "    ",
-    "    # Test 7: Multiple Roots",
-    "    all_passed &= run_test_case(",
-    "        'Multiple Roots',",
-    "        task_list=[[1, 2], [2, 3], [3, 1], [4, 4]],",
-    "        dependency_list=[[1, 3], [2, 3]],",
-    "        expected_time=4  # max(2+1, 3+1, 4) = 4",
-    "    )",
-    "    ",
-    "    # Test 8: Non-consecutive Task IDs",
-    "    all_passed &= run_test_case(",
-    "        'Non-consecutive IDs',",
-    "        task_list=[[1, 2], [5, 3], [100, 4]],",
-    "        dependency_list=[[1, 5], [5, 100]],",
-    "        expected_time=9  # 2+3+4 = 9 (linear chain)",
-    "    )",
-    "    ",
-    "    # Test 9: Empty Task List",
-    "    all_passed &= run_test_case(",
-    "        'Empty Task List',",
-    "        task_list=[],",
-    "        dependency_list=[],",
-    "        expected_time=0",
-    "    )",
-    "    ",
-    "    # Test 10: Complex DAG",
-    "    # 1 -> 2 -> 4 -> 6",
-    "    # 1 -> 3 -> 4",
-    "    # 1 -> 3 -> 5 -> 6 (critical path)",
-    "    all_passed &= run_test_case(",
-    "        'Complex DAG with Multiple Paths',",
-    "        task_list=[[1, 1], [2, 2], [3, 3], [4, 3], [5, 5], [6, 4]],",
-    "        dependency_list=[[1, 2], [1, 3], [2, 4], [3, 4], [3, 5], [4, 6], [5, 6]],",
-    "        expected_time=13  # 1 -> 3 -> 5 -> 6 = 1+3+5+4 = 13",
-    "    )",
-    "    ",
-    "    print('=' * 60)",
-    "    if all_passed:",
-    "        print('All tests passed! \u2713')",
-    "    else:",
-    "        print('Some tests failed! \u2717')",
-    "    print('=' * 60)"
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"All demos complete!\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Task Scheduling with Dependencies",
-    " * ",
-    " * Problem: Given tasks with durations and dependencies, find:",
-    " * 1. A valid execution order (topological sort)",
-    " * 2. Minimum total time with unlimited parallel workers (critical path)",
-    " * ",
-    " * Algorithm: Kahn's Algorithm (BFS Topological Sort) + Critical Path",
-    " * Time Complexity: O(V + E) where V = tasks, E = dependencies",
-    " * Space Complexity: O(V + E) for graph storage",
-    " */",
     "public class TaskScheduler {",
     "    ",
-    "    private Map<Integer, List<Integer>> graph;      // task -> dependents",
-    "    private Map<Integer, List<Integer>> prereqs;    // task -> prerequisites",
-    "    private Map<Integer, Integer> duration;         // task -> duration",
-    "    private Map<Integer, Integer> inDegree;         // task -> remaining prereqs",
-    "    ",
-    "    public TaskScheduler() {",
-    "        reset();",
-    "    }",
-    "    ",
-    "    private void reset() {",
-    "        graph = new HashMap<>();",
-    "        prereqs = new HashMap<>();",
-    "        duration = new HashMap<>();",
-    "        inDegree = new HashMap<>();",
-    "    }",
-    "    ",
     "    /**",
-    "     * Build the dependency graph from input arrays.",
-    "     * ",
-    "     * @param taskList Array of [task_id, duration] pairs",
-    "     * @param dependencyList Array of [prereq_id, dependent_id] pairs",
-    "     * @return true if graph is valid, false otherwise",
+    "     * Schedule tasks with dependencies using topological sort + critical path.",
+    "     * @return [min_total_time, ...valid_execution_order] or [-1] if cycle",
     "     */",
-    "    private boolean buildGraph(int[][] taskList, int[][] dependencyList) {",
-    "        // Initialize all tasks",
+    "    public int[] scheduleTasks(int[][] taskList, int[][] dependencyList) {",
+    "        if (taskList == null || taskList.length == 0) {",
+    "            return new int[]{0};",
+    "        }",
+    "        ",
+    "        // Build duration map and initialize data structures",
+    "        Map<Integer, Integer> duration = new HashMap<>();",
+    "        Map<Integer, List<Integer>> graph = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
+    "        Map<Integer, Integer> inDegree = new HashMap<>();",
+    "        ",
     "        for (int[] task : taskList) {",
-    "            int taskId = task[0];",
-    "            int dur = task[1];",
+    "            int taskId = task[0], dur = task[1];",
     "            duration.put(taskId, dur);",
-    "            inDegree.put(taskId, 0);",
     "            graph.put(taskId, new ArrayList<>());",
-    "            prereqs.put(taskId, new ArrayList<>());",
+    "            reverseGraph.put(taskId, new ArrayList<>());",
+    "            inDegree.put(taskId, 0);",
     "        }",
     "        ",
-    "        // Build edges",
+    "        // Build graph from dependencies: [a, b] means a before b",
     "        for (int[] dep : dependencyList) {",
-    "            int prereq = dep[0];",
-    "            int dependent = dep[1];",
-    "            ",
-    "            // Validate task references",
-    "            if (!duration.containsKey(prereq) || !duration.containsKey(dependent)) {",
-    "                return false;",
-    "            }",
-    "            ",
-    "            // Skip self-loops",
-    "            if (prereq == dependent) {",
-    "                continue;",
-    "            }",
-    "            ",
-    "            graph.get(prereq).add(dependent);",
-    "            prereqs.get(dependent).add(prereq);",
-    "            inDegree.put(dependent, inDegree.get(dependent) + 1);",
+    "            int taskA = dep[0], taskB = dep[1];",
+    "            graph.get(taskA).add(taskB);",
+    "            reverseGraph.get(taskB).add(taskA);",
+    "            inDegree.put(taskB, inDegree.get(taskB) + 1);",
     "        }",
     "        ",
-    "        return true;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Perform topological sort with critical path calculation.",
-    "     * Uses Kahn's algorithm (BFS-based).",
-    "     * ",
-    "     * @return [totalTime, order...] or [-1] if cycle detected",
-    "     */",
-    "    private int[] topologicalSortWithCriticalPath() {",
+    "        // Kahn's algorithm: start with tasks having no prerequisites",
     "        Queue<Integer> queue = new LinkedList<>();",
-    "        Map<Integer, Integer> completionTime = new HashMap<>();",
-    "        List<Integer> order = new ArrayList<>();",
-    "        ",
-    "        // Initialize: add tasks with no prerequisites",
     "        for (int taskId : duration.keySet()) {",
     "            if (inDegree.get(taskId) == 0) {",
     "                queue.offer(taskId);",
-    "                completionTime.put(taskId, duration.get(taskId));",
     "            }",
     "        }",
     "        ",
-    "        // Process in BFS order (Kahn's algorithm)",
+    "        List<Integer> order = new ArrayList<>();",
+    "        Map<Integer, Integer> completionTime = new HashMap<>();",
+    "        ",
     "        while (!queue.isEmpty()) {",
-    "            int currentTask = queue.poll();",
-    "            order.add(currentTask);",
+    "            int task = queue.poll();",
+    "            order.add(task);",
     "            ",
-    "            for (int dependent : graph.get(currentTask)) {",
-    "                int newDegree = inDegree.get(dependent) - 1;",
-    "                inDegree.put(dependent, newDegree);",
-    "                ",
-    "                if (newDegree == 0) {",
-    "                    // Calculate start time = max of prereq completion times",
-    "                    int startTime = 0;",
-    "                    for (int p : prereqs.get(dependent)) {",
-    "                        startTime = Math.max(startTime, completionTime.get(p));",
-    "                    }",
-    "                    completionTime.put(dependent, startTime + duration.get(dependent));",
+    "            // Completion = max(prereq times) + duration",
+    "            int maxPrereqTime = 0;",
+    "            for (int prereq : reverseGraph.get(task)) {",
+    "                maxPrereqTime = Math.max(maxPrereqTime, completionTime.get(prereq));",
+    "            }",
+    "            completionTime.put(task, maxPrereqTime + duration.get(task));",
+    "            ",
+    "            // Decrement in-degree of dependents",
+    "            for (int dependent : graph.get(task)) {",
+    "                inDegree.put(dependent, inDegree.get(dependent) - 1);",
+    "                if (inDegree.get(dependent) == 0) {",
     "                    queue.offer(dependent);",
     "                }",
     "            }",
@@ -748,482 +413,389 @@
     "            return new int[]{-1};",
     "        }",
     "        ",
-    "        // Calculate total time",
-    "        int totalTime = 0;",
-    "        for (int time : completionTime.values()) {",
-    "            totalTime = Math.max(totalTime, time);",
-    "        }",
-    "        ",
-    "        // Build result array: [totalTime, order...]",
+    "        // Build result: [totalTime, order...]",
+    "        int totalTime = Collections.max(completionTime.values());",
     "        int[] result = new int[order.size() + 1];",
     "        result[0] = totalTime;",
     "        for (int i = 0; i < order.size(); i++) {",
     "            result[i + 1] = order.get(i);",
     "        }",
-    "        ",
     "        return result;",
     "    }",
     "    ",
-    "    /**",
-    "     * Schedule tasks respecting dependencies and calculate minimum time.",
-    "     * ",
-    "     * @param taskList Array of [task_id, duration] pairs",
-    "     * @param dependencyList Array of [prereq_id, dependent_id] pairs",
-    "     * @return int[0] = total time (-1 if cycle), int[1..n] = execution order",
-    "     */",
-    "    public int[] scheduleTasks(int[][] taskList, int[][] dependencyList) {",
-    "        // Handle empty input",
-    "        if (taskList == null || taskList.length == 0) {",
-    "            return new int[]{0};",
-    "        }",
-    "        ",
-    "        // Reset state",
-    "        reset();",
-    "        ",
-    "        // Build graph",
-    "        if (!buildGraph(taskList, dependencyList)) {",
-    "            return new int[]{-1};",
-    "        }",
-    "        ",
-    "        return topologicalSortWithCriticalPath();",
-    "    }",
-    "    ",
-    "    // ==========================================================================",
-    "    // Demo and Tests",
-    "    // ==========================================================================",
-    "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"Task Scheduling with Dependencies - Java Test Suite\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println();",
-    "        ",
     "        TaskScheduler scheduler = new TaskScheduler();",
     "        ",
-    "        // Test 1: Diamond Pattern",
-    "        runTest(scheduler, \"Diamond Pattern\",",
-    "            new int[][]{{1,3}, {2,2}, {3,5}, {4,3}},",
-    "            new int[][]{{1,2}, {1,3}, {2,4}, {3,4}},",
-    "            11);",
+    "        // Diamond pattern",
+    "        int[][] tasks1 = {{1, 3}, {2, 2}, {3, 5}, {4, 3}};",
+    "        int[][] deps1 = {{1, 2}, {1, 3}, {2, 4}, {3, 4}};",
+    "        int[] result1 = scheduler.scheduleTasks(tasks1, deps1);",
+    "        System.out.println(\"Diamond: \" + Arrays.toString(result1));",
+    "        System.out.println(\"Expected: [11, 1, 2, 3, 4] (or similar order)\");",
     "        ",
-    "        // Test 2: Independent Tasks",
-    "        runTest(scheduler, \"Independent Tasks\",",
-    "            new int[][]{{1,5}, {2,3}, {3,4}},",
-    "            new int[][]{},",
-    "            5);",
-    "        ",
-    "        // Test 3: Linear Chain",
-    "        runTest(scheduler, \"Linear Chain\",",
-    "            new int[][]{{1,2}, {2,3}, {3,1}},",
-    "            new int[][]{{1,2}, {2,3}},",
-    "            6);",
-    "        ",
-    "        // Test 4: Cycle Detection",
-    "        runTest(scheduler, \"Cycle Detection\",",
-    "            new int[][]{{1,2}, {2,3}, {3,1}},",
-    "            new int[][]{{1,2}, {2,3}, {3,1}},",
-    "            -1);",
-    "        ",
-    "        // Test 5: Single Task",
-    "        runTest(scheduler, \"Single Task\",",
-    "            new int[][]{{1,5}},",
-    "            new int[][]{},",
-    "            5);",
-    "        ",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"All tests complete!\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "    }",
-    "    ",
-    "    private static void runTest(TaskScheduler scheduler, String name,",
-    "                                int[][] tasks, int[][] deps, int expected) {",
-    "        int[] result = scheduler.scheduleTasks(tasks, deps);",
-    "        boolean passed = result[0] == expected;",
-    "        ",
-    "        String status = passed ? \"\u2713 PASS\" : \"\u2717 FAIL\";",
-    "        System.out.printf(\"%s: %s%n\", status, name);",
-    "        System.out.printf(\"       Time: %d (expected %d)%n\", result[0], expected);",
-    "        System.out.print(\"       Order: [\");",
-    "        for (int i = 1; i < result.length; i++) {",
-    "            System.out.print(result[i] + (i < result.length-1 ? \", \" : \"\"));",
-    "        }",
-    "        System.out.println(\"]\");",
-    "        System.out.println();",
+    "        // Cycle",
+    "        int[][] tasks2 = {{1, 2}, {2, 3}, {3, 1}};",
+    "        int[][] deps2 = {{1, 2}, {2, 3}, {3, 1}};",
+    "        int[] result2 = scheduler.scheduleTasks(tasks2, deps2);",
+    "        System.out.println(\"Cycle: \" + Arrays.toString(result2));",
+    "        System.out.println(\"Expected: [-1]\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-15",
-      "section": "Module Docstring & Imports",
-      "explanation": "We import `defaultdict` for easy graph construction (auto-creates empty lists), `deque` for O(1) BFS queue operations, and typing hints for clarity. The docstring explains the problem and algorithm."
+      "lines": "1-3",
+      "section": "Imports",
+      "explanation": "We use `defaultdict` for auto-initializing lists, `deque` for efficient BFS queue operations. Type hints improve readability."
     },
     {
-      "lines": "18-36",
-      "section": "Class Definition & __init__",
-      "explanation": "The `TaskScheduler` class encapsulates all state. We use four HashMaps: `_graph` for forward edges (task\u2192dependents), `_prereqs` for reverse edges (task\u2192prerequisites), `_duration` for task durations, and `_in_degree` for Kahn's algorithm. Using `defaultdict(list)` means we don't need to check if keys exist before appending."
+      "lines": "5-10",
+      "section": "Function signature and base case",
+      "explanation": "Handle empty input immediately. Return (0, []) - no tasks means zero time."
     },
     {
-      "lines": "38-43",
-      "section": "_reset method",
-      "explanation": "Clears all state between calls. Important because the same scheduler instance might be reused for multiple problems. This ensures no data leakage between test cases."
+      "lines": "12-16",
+      "section": "Initialize data structures",
+      "explanation": "**duration**: task_id \u2192 duration for O(1) lookup. **graph**: forward edges (who depends on me). **reverse_graph**: backward edges (who do I depend on). **in_degree**: how many prereqs remain. Using dict comprehension to initialize in_degree for ALL tasks is crucial."
     },
     {
-      "lines": "45-78",
-      "section": "_build_graph method",
-      "explanation": "Parses input and builds the graph. First, we iterate through `task_list` to populate `duration` and initialize `in_degree` to 0. Then we process `dependency_list`: for each (prereq, dependent) pair, we add forward edge, reverse edge, and increment in_degree. We validate that referenced tasks exist and skip self-loops."
+      "lines": "18-22",
+      "section": "Build graph from dependencies",
+      "explanation": "[a, b] means 'a must complete before b'. So a\u2192b in graph (a has dependent b), b's in_degree increases. reverse_graph stores b\u2192a (b has prerequisite a) for quick prereq lookup during DP."
     },
     {
-      "lines": "80-132",
-      "section": "_topological_sort_with_critical_path method",
-      "explanation": "**The core algorithm.** We initialize the queue with all tasks having `in_degree=0` (no prerequisites). These start at time 0, so `completion_time = duration`. In the main loop, we pop a task, add to order, then process each dependent: decrement its in_degree, and if it becomes 0, calculate its completion time (max of prerequisite completion times + its duration) and add to queue. After the loop, if `len(order) != len(tasks)`, there's a cycle. Otherwise, return max completion time."
+      "lines": "24-27",
+      "section": "Initialize BFS queue",
+      "explanation": "**Kahn's Algorithm starts here**. Any task with in_degree=0 has no prerequisites and can start immediately. These are our 'roots' for BFS."
     },
     {
-      "lines": "134-185",
-      "section": "schedule_tasks - Main Entry Point",
-      "explanation": "The public API. Handles edge case (empty task list), resets state, builds graph, and delegates to the core algorithm. The docstring includes usage examples with expected outputs."
+      "lines": "29-42",
+      "section": "Main BFS loop - the heart of the algorithm",
+      "explanation": "For each task we dequeue:\n1. **Calculate completion_time**: Find max completion time among all prerequisites (they're guaranteed to be processed already due to topological order), add this task's duration.\n2. **Update dependents**: Decrement their in_degree. When in_degree hits 0, that task is ready.\n\nThis is elegant because we compute topological order AND completion times in ONE pass."
     },
     {
-      "lines": "190-230",
-      "section": "Standalone Function",
-      "explanation": "A convenience wrapper that creates a TaskScheduler instance and calls its method. Useful for LeetCode-style function signatures where you don't instantiate a class."
+      "lines": "44-46",
+      "section": "Cycle detection",
+      "explanation": "If any task remains unprocessed, its in_degree never reached 0 \u2192 it's part of a cycle. All tasks in the cycle (and depending on the cycle) are stuck."
     },
     {
-      "lines": "235-300",
-      "section": "Test Harness",
-      "explanation": "The `run_test_case` function validates both the total time AND that the returned order respects all dependencies (by checking position of prereq < position of dependent for all edges). The main block runs comprehensive test cases covering diamond patterns, independent tasks, linear chains, cycles, and edge cases."
+      "lines": "48-50",
+      "section": "Compute and return result",
+      "explanation": "**Critical path = max completion time**. The longest path through the graph determines total time. We return both the time and a valid execution order."
+    },
+    {
+      "lines": "53-88",
+      "section": "Demo / test cases",
+      "explanation": "Four cases demonstrating: (1) Diamond pattern with critical path, (2) Independent tasks (max duration), (3) Linear chain (sum of durations), (4) Cycle detection."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. First verify graph construction: print `graph`, `prereqs`, `in_degree` after `_build_graph`. 2. Print queue contents and `completion_time` at each iteration. 3. Verify final `len(order)` vs expected. 4. Test cycle case separately to ensure it returns -1.",
+    "how_to_test_incrementally": "1. First verify graph is built correctly (print graph, reverse_graph, in_degree). 2. Verify BFS processes nodes in correct order. 3. Check completion times are calculated correctly. 4. Test cycle detection separately.",
     "what_to_print_or_assert": [
-      "print(f'Graph: {dict(self._graph)}')",
-      "print(f'In-degrees: {dict(self._in_degree)}')",
-      "print(f'Processing task {current_task}, completion_time so far: {completion_time}')",
-      "assert len(order) == len(self._duration), f'Cycle detected! Processed {len(order)}/{len(self._duration)}'"
+      "print(f'Graph: {dict(graph)}')",
+      "print(f'in_degree: {in_degree}')",
+      "print(f'Processing task {task}, completion={completion_time[task]}')",
+      "assert len(order) == len(duration) or 'cycle'"
     ],
     "common_failure_modes": [
-      "Using array index instead of HashMap key for non-consecutive IDs",
-      "Forgetting to initialize in_degree for all tasks (not just those in dependencies)",
-      "Computing start_time BEFORE decrementing in_degree (wrong timing)",
-      "Not handling empty task list",
-      "Computing sum of durations instead of max (sequential vs parallel)"
+      "**Forgot to initialize in_degree for all tasks** - tasks with no deps not in map",
+      "**Used array index instead of task_id** - fails for non-consecutive IDs",
+      "**Summed durations instead of max** - wrong understanding of parallel execution",
+      "**Didn't handle empty input** - division by zero or empty max()"
     ],
-    "how_to_fix_fast": "If wrong answer: 1) Trace through smallest failing case by hand. 2) Check if in_degree correctly reaches 0. 3) Verify completion_time calculation uses MAX not SUM. 4) Check cycle detection (count processed nodes). If off-by-one: check initialization of queue with in_degree=0 tasks."
+    "how_to_fix_fast": "If order is incomplete, print remaining in_degrees - non-zero ones are in/blocked by cycle. If times are wrong, trace through one task manually: what's max prereq time? Add duration."
   },
   "complexity_analysis": {
     "time": {
       "build_graph": {
         "complexity": "O(V + E)",
-        "explanation": "Single pass through tasks (V) and dependencies (E)"
+        "explanation": "V tasks to initialize, E dependencies to process"
       },
       "topological_sort": {
         "complexity": "O(V + E)",
-        "explanation": "Each task added/removed from queue once (V ops). Each edge processed once when decrementing in_degree (E ops)"
+        "explanation": "Each task dequeued once (V), each edge checked once when dependent's in_degree decremented (E)"
       },
       "critical_path": {
         "complexity": "O(V + E)",
-        "explanation": "For each task, we iterate through prerequisites to find max. Total prereq visits = E"
+        "explanation": "Integrated into BFS - checking prereq completion times uses reverse_graph edges"
       },
-      "overall": "O(V + E) where V = number of tasks, E = number of dependencies"
+      "overall": "**O(V + E)** where V = number of tasks, E = number of dependencies"
     },
     "space": {
-      "complexity": "O(V + E)",
-      "breakdown": "- `graph` and `prereqs`: O(V + E) for adjacency lists\n- `duration`, `in_degree`, `completion_time`: O(V) each\n- `queue`, `order`: O(V) at most\n- Total: O(V + E)",
-      "note": "We store both forward and reverse edges, which doubles edge storage but enables O(1) prerequisite lookup"
+      "complexity": "**O(V + E)**",
+      "breakdown": "- duration map: O(V)\n- graph (forward): O(V + E)\n- reverse_graph: O(V + E)\n- in_degree: O(V)\n- completion_time: O(V)\n- queue: O(V) worst case\n- order: O(V)",
+      "note": "We could avoid reverse_graph by computing completion times differently, but it's cleaner this way"
     },
-    "can_we_do_better": "No - we must read all V tasks and E dependencies at least once, so O(V + E) is optimal. The only potential optimization is space: we could compute prerequisites on-demand by iterating through all edges, trading O(E) space for O(E) time per node."
+    "can_we_do_better": "No - we must examine each task and dependency at least once, so O(V+E) is optimal."
   },
   "dry_run": {
-    "example": "taskList = [[1,3], [2,2], [3,5], [4,3]], dependencyList = [[1,2], [1,3], [2,4], [3,4]]",
-    "trace_table": "| Step | Action | Queue | In-degrees | Completion Times | Order |\n|------|--------|-------|------------|------------------|-------|\n| Init | Build graph | - | {1:0, 2:1, 3:1, 4:2} | {} | [] |\n| 1 | Add in_degree=0 tasks | [1] | {1:0, 2:1, 3:1, 4:2} | {1:3} | [] |\n| 2 | Pop 1, process deps | [2,3] | {1:0, 2:0, 3:0, 4:2} | {1:3, 2:5, 3:8} | [1] |\n| 3 | Pop 2, process 4 | [3] | {1:0, 2:0, 3:0, 4:1} | {1:3, 2:5, 3:8} | [1,2] |\n| 4 | Pop 3, process 4 | [4] | {1:0, 2:0, 3:0, 4:0} | {1:3, 2:5, 3:8, 4:11} | [1,2,3] |\n| 5 | Pop 4, no deps | [] | unchanged | unchanged | [1,2,3,4] |\n| Final | max(3,5,8,11)=11 | - | - | - | [1,2,3,4] |",
+    "example": "tasks=[[1,3],[2,2],[3,5],[4,3]], deps=[[1,2],[1,3],[2,4],[3,4]]",
+    "trace_table": "| Step | Action | Queue | Order | in_degree | completion_time |\n|------|--------|-------|-------|-----------|----------------|\n| Init | Build structures | - | - | {1:0,2:1,3:1,4:2} | {} |\n| Init | Find roots (in_degree=0) | [1] | [] | - | {} |\n| 1 | Process task 1 | [] | [1] | {2:0,3:0,4:2} | {1:3} |\n| 1 | Add ready tasks 2,3 | [2,3] | [1] | - | - |\n| 2 | Process task 2 (prereq 1\u21923) | [3] | [1,2] | {4:1} | {1:3,2:5} |\n| 3 | Process task 3 (prereq 1\u21923) | [] | [1,2,3] | {4:0} | {1:3,2:5,3:8} |\n| 3 | Add ready task 4 | [4] | - | - | - |\n| 4 | Process task 4 (prereqs 2\u21925,3\u21928) | [] | [1,2,3,4] | {} | {1:3,2:5,3:8,4:11} |\n| Done | len(order)=4=len(tasks) \u2713 | - | - | - | max=11 |",
     "final_answer": "(11, [1, 2, 3, 4])"
   },
   "test_cases": [
     {
-      "name": "Diamond Pattern",
-      "category": "Happy Path",
+      "name": "Diamond Pattern - Critical Path",
+      "category": "Core Logic",
       "input": "tasks=[[1,3],[2,2],[3,5],[4,3]], deps=[[1,2],[1,3],[2,4],[3,4]]",
       "expected": "(11, [1,2,3,4] or [1,3,2,4])",
-      "explanation": "Critical path: 1\u21923\u21924 = 3+5+3 = 11. Path 1\u21922\u21924 = 3+2+3 = 8 is shorter."
+      "explanation": "Two paths: 1\u21922\u21924 (8) vs 1\u21923\u21924 (11). Critical path is longer one."
     },
     {
-      "name": "Independent Tasks (all parallel)",
+      "name": "All Independent Tasks",
       "category": "Edge Case",
       "input": "tasks=[[1,5],[2,3],[3,4]], deps=[]",
       "expected": "(5, any permutation)",
-      "explanation": "No dependencies means all parallel. Total = max(5,3,4) = 5."
+      "explanation": "No dependencies = all parallel. Time = max(5,3,4) = 5."
     },
     {
-      "name": "Linear Chain",
+      "name": "Linear Chain - No Parallelism",
       "category": "Edge Case",
       "input": "tasks=[[1,2],[2,3],[3,1]], deps=[[1,2],[2,3]]",
       "expected": "(6, [1,2,3])",
-      "explanation": "Sequential execution: 2+3+1 = 6. Only one valid order."
+      "explanation": "Strict sequence. Time = sum(2+3+1) = 6."
     },
     {
       "name": "Cycle Detection",
-      "category": "Edge Case",
+      "category": "Error Handling",
       "input": "tasks=[[1,2],[2,3],[3,1]], deps=[[1,2],[2,3],[3,1]]",
       "expected": "(-1, [])",
-      "explanation": "1\u21922\u21923\u21921 forms a cycle. No valid topological order exists."
+      "explanation": "Cycle 1\u21922\u21923\u21921. No valid schedule exists."
     },
     {
       "name": "Single Task",
-      "category": "Boundary",
-      "input": "tasks=[[1,5]], deps=[]",
-      "expected": "(5, [1])",
-      "explanation": "Simplest case: one task, duration is the answer."
+      "category": "Base Case",
+      "input": "tasks=[[42,7]], deps=[]",
+      "expected": "(7, [42])",
+      "explanation": "One task, no deps. Time = duration."
     },
     {
       "name": "Non-consecutive IDs",
       "category": "Gotcha",
-      "input": "tasks=[[1,2],[5,3],[100,4]], deps=[[1,5],[5,100]]",
-      "expected": "(9, [1,5,100])",
-      "explanation": "IDs 1, 5, 100 are sparse. Must use HashMap, not array."
+      "input": "tasks=[[1,2],[100,3],[500,4]], deps=[[1,100],[100,500]]",
+      "expected": "(9, [1,100,500])",
+      "explanation": "Verifies HashMap usage, not array indexing."
     },
     {
-      "name": "Self-loop (cycle)",
-      "category": "Edge Case",
-      "input": "tasks=[[1,2]], deps=[[1,1]]",
-      "expected": "(-1, []) or (2, [1]) depending on implementation",
-      "explanation": "Self-dependency is a cycle. Our implementation skips self-loops."
-    },
-    {
-      "name": "Complex DAG",
-      "category": "Hard",
-      "input": "tasks=[[1,1],[2,2],[3,3],[4,3],[5,5],[6,4]], deps=[[1,2],[1,3],[2,4],[3,4],[3,5],[4,6],[5,6]]",
-      "expected": "(13, valid topo order)",
-      "explanation": "Critical path: 1\u21923\u21925\u21926 = 1+3+5+4 = 13"
+      "name": "Self-Dependency",
+      "category": "Error Handling",
+      "input": "tasks=[[1,5]], deps=[[1,1]]",
+      "expected": "(-1, [])",
+      "explanation": "Task depends on itself = cycle of length 1."
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Summing all durations instead of finding critical path",
-      "why_wrong": "Assumes sequential execution. With unlimited workers, tasks run in parallel.",
-      "correct_approach": "Track completion_time[task] = max(prereq completion times) + duration",
-      "code_wrong": "total = sum(duration.values())  # WRONG",
-      "code_correct": "total = max(completion_time.values())  # Correct: critical path"
+      "mistake": "Using array indexing instead of HashMap for task IDs",
+      "why_wrong": "Task IDs can be non-consecutive (1, 5, 100). Array index would fail or waste space.",
+      "correct_approach": "Always use HashMap<task_id, value> for all data structures",
+      "code_wrong": "duration = [0] * (max_task_id + 1)  # May be huge or miss IDs",
+      "code_correct": "duration = {task_id: dur for task_id, dur in task_list}"
     },
     {
-      "mistake": "Using array indexing with non-consecutive task IDs",
-      "why_wrong": "Task IDs like 1, 5, 100 would require array size 101 and waste space",
-      "correct_approach": "Use HashMap/Dict for all task-indexed structures",
-      "code_wrong": "duration = [0] * (max_id + 1)\nduration[task_id] = dur",
-      "code_correct": "duration = {}\nduration[task_id] = dur"
+      "mistake": "Summing all durations for total time",
+      "why_wrong": "Parallel execution means independent tasks run simultaneously. Total time is critical path, not sum.",
+      "correct_approach": "Track completion time per task, return max(all completion times)",
+      "code_wrong": "total = sum(duration.values())  # Wrong!",
+      "code_correct": "total = max(completion_time.values())  # Critical path"
     },
     {
-      "mistake": "Calculating completion time when processing the task instead of when adding to queue",
-      "why_wrong": "When processing, we might not have all prereqs done. When in_degree=0, ALL prereqs are done.",
-      "correct_approach": "Calculate completion time when in_degree becomes 0, then add to queue",
-      "code_wrong": "while queue:\n    task = queue.pop()\n    start = max(completion[p] for p in prereqs[task])  # prereqs might not be done!",
-      "code_correct": "if in_degree[dep] == 0:\n    start = max(completion[p] for p in prereqs[dep])  # ALL prereqs guaranteed done"
+      "mistake": "Forgetting to initialize in_degree for tasks with no prerequisites",
+      "why_wrong": "If not initialized, `in_degree[task]` might not exist, or worse, might be garbage.",
+      "correct_approach": "Initialize in_degree to 0 for ALL tasks before processing dependencies",
+      "code_wrong": "for a, b in deps: in_degree[b] += 1  # Only tasks with deps get entries",
+      "code_correct": "in_degree = {t: 0 for t in duration}  # All tasks start at 0\nfor a, b in deps: in_degree[b] += 1"
     },
     {
       "mistake": "Not detecting cycles properly",
-      "why_wrong": "Can cause infinite loops or incorrect results",
-      "correct_approach": "After Kahn's algorithm, check if len(processed) == len(tasks)",
-      "code_wrong": "# No cycle check, just return result",
-      "code_correct": "if len(order) != len(self._duration):\n    return (-1, [])  # Cycle detected"
-    },
-    {
-      "mistake": "Forgetting to initialize in_degree for tasks with no dependencies",
-      "why_wrong": "Tasks might not be found in initial queue, causing them to be skipped",
-      "correct_approach": "Initialize in_degree[task] = 0 for ALL tasks, then increment for dependencies",
-      "code_wrong": "for prereq, dep in deps:\n    in_degree[dep] += 1  # Tasks with no deps are never initialized!",
-      "code_correct": "for task_id, dur in tasks:\n    in_degree[task_id] = 0  # Initialize all\nfor prereq, dep in deps:\n    in_degree[dep] += 1"
+      "why_wrong": "Just checking if queue is empty isn't enough. Must verify ALL tasks processed.",
+      "correct_approach": "After BFS, check `len(order) == len(tasks)`",
+      "code_wrong": "if not queue: return order  # Queue empty doesn't mean success",
+      "code_correct": "if len(order) != len(duration): return (-1, [])"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. This looks like a task scheduling problem with dependencies. Before I dive in, let me clarify a few things and share my initial thoughts...",
+    "opening": "Thank you for this problem. I see this is a task scheduling problem with dependencies. Before I start, let me clarify a few things and share my initial approach.",
     "clarifying_questions_to_ask": [
-      "Are task IDs guaranteed to be consecutive integers, or can they be sparse like 1, 5, 100? (Affects data structure choice)",
-      "When it says 'unlimited parallel workers', does that mean any number of tasks can run simultaneously? (Confirms critical path approach)",
-      "Should I return the lexicographically smallest valid order, or is any valid order acceptable? (Simplifies problem)",
-      "Can there be duplicate dependencies in the input? (Error handling)",
-      "What should I return for an empty task list? (Edge case)"
+      "Are task IDs guaranteed to be unique? (Yes - confirms HashMap approach)",
+      "Can task IDs be non-consecutive like 1, 5, 100? (Yes - must use HashMap, not array)",
+      "What does 'unlimited parallel workers' mean exactly? (Tasks without dep can run simultaneously)",
+      "Should I return any valid topological order, or a specific one? (Any valid order is fine)",
+      "What if there are duplicate dependencies? (Handle gracefully, or assume no duplicates)"
     ],
     "what_to_mention_proactively": [
-      "This is a classic topological sort problem combined with critical path analysis",
-      "I'll use Kahn's algorithm (BFS-based) because it naturally handles cycle detection",
-      "The key insight is that with unlimited workers, total time = critical path, not sum of durations",
-      "I need to track both forward edges (for processing) and reverse edges (for completion time calculation)"
+      "I recognize this as a topological sort problem combined with critical path analysis",
+      "I'll use Kahn's Algorithm (BFS-based) for topological sort because it naturally integrates with completion time calculation",
+      "Cycle detection is automatic: if not all tasks are processed, a cycle exists",
+      "The minimum time is the critical path - longest chain of dependent tasks"
     ],
     "communication_during_coding": [
-      "I'm building both forward and reverse adjacency lists here...",
-      "Using defaultdict so I don't need to check if keys exist...",
-      "The magic happens when in_degree becomes 0 - that's when I calculate completion time...",
-      "This cycle detection works because any node in a cycle will never reach in_degree 0..."
+      "I'm building two graphs - forward for BFS, reverse for quick prereq lookup",
+      "I'm initializing in_degree for ALL tasks, not just those with dependencies",
+      "Here's the key insight: in topological order, all prereqs are processed first, so I can use their completion times",
+      "Cycle detection is just checking if we processed all tasks"
     ],
     "if_stuck": [
-      "Let me step back. What's the key constraint? Unlimited workers means parallel execution.",
-      "Draw the graph: When can a task start? When ALL prerequisites are done.",
-      "What's the formula? start_time = max(end_time of prerequisites)",
-      "How do I know when all prerequisites are done? Kahn's algorithm - in_degree becomes 0"
+      "Step back: What's the core pattern? Topological sort + DP",
+      "Ask yourself: When can a task start? When ALL its prerequisites are done",
+      "Draw the dependency graph and trace through manually",
+      "If unsure about completion time formula: it's max(prereq times) + duration, NOT sum"
     ],
-    "time_management": "0-5min: Clarify & understand | 5-10min: Explain approach, get buy-in | 10-25min: Code | 25-35min: Test & trace | 35-45min: Follow-ups"
+    "time_management": "0-5min: Understand & clarify | 5-12min: Explain approach & data structures | 12-30min: Implement | 30-40min: Test & trace | 40-45min: Complexity analysis & follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Topological Sort + Dynamic Programming on DAG",
+    "pattern_name": "Topological Sort + Dynamic Programming (Critical Path)",
     "indicators": [
-      "Tasks/courses with prerequisites/dependencies",
-      "Find valid order of execution",
-      "Calculate minimum/maximum time with parallel execution",
-      "Detect if completion is possible (cycle detection)"
+      "Tasks/courses with prerequisites",
+      "Find valid ordering",
+      "Dependency graph",
+      "Minimum/maximum time with parallelism",
+      "Detect if ordering is possible (cycle detection)"
     ],
     "similar_problems": [
-      "LC 207 - Course Schedule: Just cycle detection, no time calculation",
-      "LC 210 - Course Schedule II: Return topological order, no time",
-      "LC 1136 - Parallel Courses: Same as this problem",
-      "LC 269 - Alien Dictionary: Build graph from constraints, then topo sort",
-      "LC 329 - Longest Increasing Path: DFS with memoization on implicit DAG"
+      "LC 207 - Course Schedule: Just cycle detection (can finish?)",
+      "LC 210 - Course Schedule II: Return the order (our sub-problem)",
+      "LC 1136 - Parallel Courses: Minimum semesters = critical path depth",
+      "LC 269 - Alien Dictionary: Build graph from constraints, topo sort",
+      "LC 329 - Longest Increasing Path: DFS + memoization (alternative to Kahn's)"
     ],
-    "template": "```\n1. Build adjacency list + in_degree map\n2. Initialize queue with in_degree=0 nodes\n3. While queue not empty:\n   a. Pop node, add to result\n   b. For each neighbor: decrement in_degree\n   c. If in_degree becomes 0, add to queue\n4. Check if all nodes processed (cycle detection)\n```"
+    "template": "1. Build adjacency list\n2. Track in-degrees\n3. BFS from in-degree=0 nodes\n4. Decrement in-degrees, enqueue when 0\n5. Check processed count for cycles\n6. (If needed) Track DP values in topo order"
   },
   "follow_up_preparation": {
-    "part_2_hint": "**Limited Workers**: With k workers, you can't run more than k tasks in parallel. Use a **min-heap** ordered by end time to track running tasks. When a task finishes, check if any waiting tasks can start.",
-    "part_3_hint": "**Find Critical Path**: Track which prerequisite gave the max completion time for each task. Then backtrack from the task with max completion time to find the critical path.",
-    "data_structure_evolution": "Part 1: HashMap + Queue \u2192 Part 2: Add PriorityQueue for worker scheduling \u2192 Part 3: Add 'critical_predecessor' tracking for path reconstruction"
+    "part_2_hint": "**Limited Workers**: With K workers, you can't run all ready tasks in parallel. Use a **PriorityQueue** sorted by completion time. When a worker finishes, pick the next ready task. This becomes a simulation problem.",
+    "part_3_hint": "**Find Critical Path**: Track which prerequisite gave the max completion time for each task (`critical_pred[t]`). After finding the task with max completion time, backtrack through critical_pred to reconstruct the path.",
+    "data_structure_evolution": "Part 1: HashMap + Deque \u2192 Part 2: Add PriorityQueue<(end_time, task)> \u2192 Part 3: Add critical_pred HashMap for path reconstruction"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. I see we have tasks with durations and dependencies, and we need to find both a valid execution order and the minimum completion time. Before I start, I'd like to clarify a few things...",
-    "after_clarification": "Great, so to summarize: task IDs may not be consecutive, we have unlimited parallel workers so the answer is the critical path length, and any valid topological order works. My approach will be to use Kahn's algorithm for topological sort while simultaneously tracking completion times. Does that sound reasonable before I start coding?",
+    "opening_verbatim": "Thank you for this problem. I can see this is about scheduling tasks with dependencies, which is a classic topological sort problem. The twist here is calculating minimum time with parallel execution, which requires critical path analysis. Let me ask a few clarifying questions before I proceed.",
+    "after_clarification": "Great, so to summarize: task IDs may be non-consecutive, unlimited workers means all independent tasks run in parallel, and I need to detect cycles. My approach will be Kahn's Algorithm for topological sort, combined with tracking completion times to find the critical path. Does that sound like the right direction?",
     "while_coding": [
-      "I'm creating separate maps for forward edges, reverse edges, durations, and in-degrees...",
-      "Notice I'm initializing in_degree to 0 for ALL tasks first, then incrementing for dependencies...",
-      "This is the key part - when in_degree becomes 0, I calculate completion time as max of prerequisites plus duration...",
-      "The cycle detection is implicit - if the queue empties before all nodes are processed, there's a cycle..."
+      "I'm creating the forward graph for BFS traversal and reverse graph for quick prerequisite lookup...",
+      "This line initializes in-degree for ALL tasks - important because tasks with no deps need to start at 0...",
+      "Here's where the DP happens: completion time is max of prereq times plus this task's duration..."
     ],
-    "after_coding": "Let me trace through the diamond example to verify. Task 1 has in_degree 0, so it starts first with completion time 3. Then tasks 2 and 3 can start at time 3, completing at 5 and 8 respectively. Task 4 waits for both, starts at max(5,8)=8, and completes at 11. That matches our expected output.",
-    "when_stuck_verbatim": "I'm thinking about how to handle the completion time calculation... Let me draw out a small example to visualize when each task can start...",
-    "after_mistake": "Actually, I see an issue - I was calculating the start time at the wrong point. I need to calculate it when in_degree becomes 0, not when I pop from the queue. Let me fix that.",
-    "before_moving_on": "This solution handles Part 1 with O(V+E) time and space complexity. The topological order is correct because we respect all dependencies, and the total time is the critical path length. Ready for the follow-up about limited workers?"
+    "after_coding": "Let me trace through the diamond example to verify this works. Task 1 has no prereqs, completes at t=3. Tasks 2 and 3 both start at t=3, complete at t=5 and t=8 respectively. Task 4 must wait for both, so it starts at t=8 and ends at t=11. That matches our expected output.",
+    "when_stuck_verbatim": "Let me step back and think about this. The key insight for parallel execution is that a task's start time is determined by its SLOWEST prerequisite, not the sum of all prereqs...",
+    "after_mistake": "Ah, I see the issue - I was incrementing in_degree before initializing it. Let me fix that by initializing all in-degrees to 0 first.",
+    "before_moving_on": "This solution runs in O(V+E) time and space. It handles cycles by checking if all tasks were processed. Ready to discuss follow-ups or optimizations?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can candidate recognize this as a graph problem (topological sort)?",
-      "Do they understand the difference between sequential and parallel execution?",
-      "Can they explain the critical path concept clearly?",
-      "Is the code clean and well-organized?",
-      "Do they handle edge cases (empty input, cycles, non-consecutive IDs)?"
+      "**Graph modeling**: Can you translate dependencies into a directed graph?",
+      "**Algorithm knowledge**: Do you know topological sort and when to use it?",
+      "**Critical thinking**: Do you understand parallel execution and critical path?",
+      "**Edge case awareness**: Cycles, empty input, non-consecutive IDs",
+      "**Communication**: Can you explain your approach clearly?"
     ],
     "bonus_points": [
-      "Drawing the graph before coding",
-      "Mentioning Kahn's vs DFS and explaining the choice",
-      "Proactively handling non-consecutive IDs without being told",
-      "Explaining why in_degree=0 means all prerequisites are done",
-      "Connecting this to real-world build systems like make or npm"
+      "Immediately recognizing the topological sort + critical path pattern",
+      "Explaining WHY Kahn's is better than DFS here (integrates with DP)",
+      "Proactively mentioning cycle detection",
+      "Using appropriate data structures (HashMap for sparse IDs)",
+      "Clean variable names: 'reverse_graph' not 'g2'"
     ],
     "red_flags": [
-      "Summing durations instead of finding max (misunderstanding parallel execution)",
-      "Using array index for task IDs (won't work for sparse IDs)",
-      "Not detecting cycles (will cause infinite loop or wrong answer)",
-      "Unable to explain why the algorithm is correct",
-      "Not tracing through an example after coding"
+      "Trying to solve with brute force DFS from each node",
+      "Confusing total time with sum of all durations",
+      "Using arrays when task IDs can be non-consecutive",
+      "Not knowing what topological sort is",
+      "Silent coding without explaining"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the topological sort pattern, explain the critical path insight clearly, choose the right data structures (HashMap not array), write clean code with good variable names, and verify correctness by tracing through examples. They treat the problem as a conversation, explaining their reasoning throughout."
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as a well-known pattern, explain the connection to critical path in project management, use clear variable names, and handle edge cases naturally. They treat this as a conversation, not an exam."
   },
   "time_milestones": {
-    "by_5_min": "Understand the problem, ask clarifying questions, recognize it's topological sort + critical path",
-    "by_10_min": "Explain Kahn's algorithm approach, discuss data structures (HashMap for non-consecutive IDs), get interviewer buy-in",
-    "by_20_min": "Complete graph building and topological sort implementation",
-    "by_25_min": "Complete critical path calculation and cycle detection",
-    "by_30_min": "Code complete, start tracing through example",
-    "by_35_min": "Part 1 done, discuss complexity, ready for Part 2",
-    "warning_signs": "If still clarifying at 10 min, speed up. If still coding at 30 min, finish quickly or describe remaining logic verbally."
+    "by_5_min": "Understand problem, recognize topological sort + critical path, ask clarifying questions",
+    "by_10_min": "Explain approach, get buy-in, describe data structures (graph, reverse_graph, in_degree, completion_time)",
+    "by_20_min": "Core implementation complete (graph building, BFS loop)",
+    "by_30_min": "Full solution including cycle detection, basic testing",
+    "by_40_min": "Dry run complete, complexity analysis discussed",
+    "warning_signs": "If you're still confused about parallel execution at 10min, or still building the graph at 25min, you're behind."
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Stay calm. Say: 'I see an issue here - the completion time calculation should happen when in_degree becomes 0, not when I pop from the queue. Let me fix that.' Interviewers expect bugs; they evaluate how gracefully you handle them.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for Python deque, but I need a queue with O(1) pop from front. Let me write collections.deque and popleft().' This is acceptable.",
-    "when_approach_is_wrong": "If you realize summing durations is wrong: 'Actually, I realize with parallel workers, the total time is the critical path, not the sum. Let me adjust my approach to track completion times.' Pivoting cleanly shows adaptability.",
-    "when_completely_stuck": "Ask: 'I'm stuck on how to calculate when a task can start. Could you give me a hint about the timing?' Asking targeted questions shows self-awareness.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me describe the critical path calculation verbally: for each task, start time = max of prerequisite completion times. I'd implement this by tracking completion_time as I process nodes.' Showing understanding is better than incomplete code."
+    "when_you_make_a_bug": "Stay calm. Say 'I see an issue here - I'm incrementing before initializing. Let me fix that.' Bugs are expected; recovery shows maturity.",
+    "when_you_dont_know_syntax": "Say 'I don't remember exact syntax for deque in Python, but I need a queue with O(1) popleft. Let me write it and we can check.' This is fine.",
+    "when_approach_is_wrong": "If you realize summing durations is wrong: 'Actually, I realize with parallel execution, independent tasks run simultaneously. Let me reconsider - the total time should be the critical path.'",
+    "when_completely_stuck": "Ask: 'I'm stuck on how to efficiently find the minimum time. Could you give me a hint about what determines total time with parallel workers?' Asking shows self-awareness.",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on the core BFS logic and explain how I'd add cycle detection and completion time tracking.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "AI tools can help with boilerplate and syntax, but YOU must drive the algorithm design.",
+    "when_using_cursor_or_copilot": "AI tools can help with boilerplate and syntax, but the algorithm design must be YOURS.",
     "what_to_do": [
-      "Let AI autocomplete defaultdict imports and type hints",
-      "Use AI for generating test cases",
-      "Accept suggestions for standard patterns (BFS loop structure)",
-      "Use AI to check syntax for unfamiliar libraries"
+      "Use AI for class/function scaffolding",
+      "Use for remembering defaultdict syntax",
+      "Let it autocomplete obvious parts (like dict comprehensions)",
+      "Use for generating test cases"
     ],
     "what_not_to_do": [
-      "Don't paste the problem and expect a complete solution",
-      "Don't accept completion time calculation without verifying it's correct",
-      "Don't let AI choose between Kahn's and DFS - make that decision yourself",
-      "Don't skip understanding what the generated code does"
+      "Don't paste the problem and ask for solution",
+      "Don't accept 'topological sort' suggestion without explaining WHY",
+      "Don't let AI write the completion time logic without understanding it"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests a line, explain it: 'This calculates the start time as the maximum of all prerequisite completion times because a task can only start when ALL its prerequisites are done.'",
-    "expectation_adjustment": "With AI assistance, interviewers expect faster completion and more thorough testing. Use the time saved for better explanation and edge case handling."
+    "how_to_demonstrate_understanding": "If AI suggests Kahn's algorithm, explain: 'Yes, Kahn's because it processes in topological order, which means when I process a task, all its prerequisites already have computed completion times - perfect for DP.'",
+    "expectation_adjustment": "Using AI means you should finish faster and handle more edge cases. If AI slows you down, don't use it."
   },
   "signal_points": {
     "wow_factors": [
-      "Drawing the dependency graph before coding",
-      "Immediately recognizing the critical path insight (max not sum)",
-      "Explaining why Kahn's algorithm naturally detects cycles",
-      "Mentioning real-world applications (build systems, CI/CD)",
-      "Writing clean code with single-responsibility methods on first pass",
-      "Proactively discussing space optimization (store one direction, compute other)"
+      "Immediately drawing the dependency graph and timeline",
+      "Mentioning 'this is like project management critical path analysis'",
+      "Explaining why BFS is better than DFS here",
+      "Noting that reverse_graph enables O(1) prereq lookup",
+      "Proactively testing with non-consecutive IDs"
     ],
     "subtle_signals_of_experience": [
-      "Using defaultdict instead of checking key existence",
-      "Handling non-consecutive IDs without being reminded",
-      "Naming variables clearly (completion_time not ct)",
-      "Adding docstrings and type hints naturally",
-      "Testing incrementally (verify graph construction before running algorithm)"
+      "Using defaultdict without thinking about it",
+      "Initializing in_degree for all tasks without being told",
+      "Checking len(order) vs len(tasks) for cycle detection",
+      "Clean naming: 'dependent' vs 'next' or 'child'"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Staying silent while coding for more than 60 seconds",
-      "Getting defensive when interviewer suggests the approach might be wrong",
-      "Rushing to code without understanding the problem fully",
-      "Not making eye contact or engaging with the interviewer"
+      "Jumping to code without explaining approach",
+      "Going silent for over 30 seconds",
+      "Getting defensive when pointed to issues",
+      "Not testing after coding"
     ],
     "technical": [
-      "Using array[task_id] when IDs can be sparse",
-      "Computing sum of durations instead of critical path",
-      "Not handling cycles (will cause infinite loop or wrong answer)",
-      "Hardcoding values instead of using variables",
-      "Writing one giant function instead of modular code"
+      "Using O(V*E) algorithm when O(V+E) is needed",
+      "Confusing critical path with sum of durations",
+      "Array indexing with non-consecutive IDs",
+      "Missing cycle detection"
     ],
     "communication": [
-      "Using jargon like 'DAG' without explaining what it means",
-      "Going into irrelevant tangents about graph theory",
-      "Not summarizing the approach before coding",
-      "Skipping the trace-through after coding"
+      "Using jargon without explanation ('I'll use Kahn's' without saying what it does)",
+      "Not summarizing approach before coding",
+      "Going too deep into irrelevant optimizations"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Did I return both the total time AND the execution order?",
-      "Did I handle cycles correctly (return -1, [])?",
-      "Did I use HashMap for task IDs (not array indexing)?",
+      "Did I handle cycle detection (return [-1, []])?",
+      "Did I use HashMap for non-consecutive task IDs?",
+      "Did I calculate critical path (max completion time), not sum?",
       "Did I trace through at least one example?",
-      "Did I discuss time (O(V+E)) and space (O(V+E)) complexity?",
-      "Are my variable names clear and meaningful?"
+      "Did I mention O(V+E) time and space complexity?",
+      "Are my variable names clear (graph, reverse_graph, completion_time)?"
     ],
     "quick_code_review": [
-      "All maps initialized before use",
-      "in_degree initialized for ALL tasks (not just those in dependencies)",
-      "completion_time calculated when in_degree becomes 0",
-      "Cycle check: len(order) == len(tasks)",
-      "Final result: max(completion_time.values())"
+      "No array indexing for task IDs",
+      "in_degree initialized for ALL tasks",
+      "completion_time uses max of prereqs, not sum",
+      "Cycle check: len(order) != len(tasks)"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "Input validation with descriptive error messages (invalid task references, negative durations)",
-      "Logging for debugging (graph structure, processing order)",
-      "Metrics for monitoring (number of tasks, number of edges, execution time)",
-      "Thread-safety if the scheduler is shared across threads",
-      "Persistence layer for storing task definitions",
-      "API for querying task status and estimated completion time"
+      "Input validation: task IDs exist, no duplicate tasks",
+      "Logging: which task is being processed, current completion times",
+      "Return more info: which tasks are in the cycle, what the critical path is",
+      "Handle disconnected components explicitly",
+      "Thread-safety if graph is modified during execution"
     ],
-    "why_not_in_interview": "Interview code should focus on the algorithm. Mention these verbally: 'In production, I'd add input validation, logging, and possibly persistence.'",
-    "how_to_mention": "Say: 'This covers the core algorithm. In a production system, I'd also add input validation for edge cases like negative durations or self-references, and logging to help debug scheduling issues.'"
+    "why_not_in_interview": "Keep interview code focused on core algorithm. Mention these to show senior thinking, but don't over-engineer.",
+    "how_to_mention": "Say: 'In production, I'd add input validation, logging, and probably return the actual critical path for debugging. But for now, let me focus on the core algorithm.'"
   },
-  "generated_at": "2026-01-18T18:55:44.220035",
+  "generated_at": "2026-01-19T04:08:37.591386",
   "_meta": {
     "problem_id": "task_scheduling_dependencies",
     "part_number": null,

@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-01-18T15:47:52.777Z",
-  "total_with_solutions": 13,
+  "generated_at": "2026-01-19T05:16:01.887737",
+  "total_with_solutions": 18,
   "solutions": {
-    "cache_system_with_transactions": {
-      "main": true,
-      "parts": [
-        2,
-        3
-      ]
-    },
-    "delivery_cost_tracking": {
+    "median_two_sorted_arrays": {
       "main": true,
       "parts": [
         2,
         3,
         4
+      ]
+    },
+    "cache_system_with_transactions": {
+      "main": true,
+      "parts": [
+        2,
+        3
       ]
     },
     "employee_access_management": {
@@ -25,29 +25,7 @@
         4
       ]
     },
-    "employee_hierarchy_org_tree": {
-      "main": true,
-      "parts": [
-        2,
-        3
-      ]
-    },
-    "expense_rules_engine": {
-      "main": true,
-      "parts": [
-        2,
-        3
-      ]
-    },
-    "lca_nary_tree": {
-      "main": true,
-      "parts": [
-        2,
-        3,
-        4
-      ]
-    },
-    "median_two_sorted_arrays": {
+    "task_scheduling_dependencies": {
       "main": true,
       "parts": [
         2,
@@ -56,6 +34,52 @@
       ]
     },
     "news_feed_aggregator": {
+      "main": true,
+      "parts": [
+        2,
+        3
+      ]
+    },
+    "instagram_photo_sharing_design": {
+      "main": true,
+      "parts": [
+        2,
+        3,
+        4
+      ]
+    },
+    "travel_expense_calculation": {
+      "main": true,
+      "parts": [
+        2,
+        3
+      ]
+    },
+    "stackoverflow_api": {
+      "main": true,
+      "parts": [
+        2,
+        3,
+        4
+      ]
+    },
+    "delivery_cost_tracking": {
+      "main": true,
+      "parts": [
+        2,
+        3,
+        4
+      ]
+    },
+    "javascript_polyfills_and_memoization": {
+      "main": true,
+      "parts": [
+        2,
+        3,
+        4
+      ]
+    },
+    "booking_reservation_system": {
       "main": true,
       "parts": [
         2,
@@ -76,7 +100,14 @@
         3
       ]
     },
-    "stackoverflow_api": {
+    "employee_hierarchy_org_tree": {
+      "main": true,
+      "parts": [
+        2,
+        3
+      ]
+    },
+    "production_ready_ticket_booking_api": {
       "main": true,
       "parts": [
         2,
@@ -84,7 +115,7 @@
         4
       ]
     },
-    "task_scheduling_dependencies": {
+    "lca_nary_tree": {
       "main": true,
       "parts": [
         2,
@@ -92,7 +123,15 @@
         4
       ]
     },
-    "travel_expense_calculation": {
+    "canvas_2d_drawing_app": {
+      "main": true,
+      "parts": [
+        2,
+        3,
+        4
+      ]
+    },
+    "expense_rules_engine": {
       "main": true,
       "parts": [
         2,

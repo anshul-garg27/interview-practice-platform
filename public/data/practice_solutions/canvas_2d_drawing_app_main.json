@@ -4,69 +4,58 @@
   "category": "Frontend/LLD",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a **classic OOP design problem** that tests polymorphism, geometric reasoning, and data structure selection. At its core, we're building a simplified graphics engine - the foundation of tools like MS Paint, Figma, or any CAD software. The problem elegantly combines interface design with spatial computation.",
-    "pattern_recognition": "**OOP Polymorphism** + **Hit Testing** + **Z-Order Stack** + **Factory Pattern**. The key patterns are:\n- **Abstract Base Class**: Shape with polymorphic `contains()` method\n- **Strategy Pattern**: Each shape type implements its own containment logic\n- **Stack-like Z-ordering**: Last-in is on top, so reverse iteration for queries",
+    "first_impressions": "This is a classic **OOP Design + Geometry** problem. We need to model shapes with polymorphic behavior (each shape type has its own containment logic) and maintain z-ordering for hit testing. The pattern is common in graphics editors like Figma, MS Paint, and CAD tools.",
+    "pattern_recognition": "**OOP Polymorphism** (abstract Shape with `contains()`) + **List for Z-Order** (creation order = layer order) + **Geometry Hit Testing** (point-in-rectangle, point-in-circle)",
     "key_constraints": [
-      "O(1) shape creation - Cannot do preprocessing, just store and increment counter",
-      "O(n) getShapeAt - Must check each shape, no spatial indexing required (yet)",
-      "Boundaries are INCLUSIVE - Points exactly on edges are considered inside",
-      "Integer coordinates - No floating point precision issues for positions",
-      "\u22641000 shapes, \u226410\u2074 operations - Brute force is acceptable, no need for R-trees"
+      "O(1) for shape creation - just append to list, no complex processing",
+      "O(n) for getShapeAt - must check each shape, but iterate newest-to-oldest for topmost",
+      "Boundary points are INSIDE shapes - use <= not <",
+      "Avoid sqrt for circle check - use squared distance for precision"
     ],
     "clarifying_questions": [
-      "**Q: Are boundaries inclusive or exclusive?** - CRITICAL: The problem states inclusive. This affects edge case handling significantly.",
-      "**Q: What ID format should I use?** - Use 'rect_1', 'circle_1' with separate counters per type. Clarify if interviewer has preference.",
-      "**Q: Can shapes have zero or negative dimensions?** - Constraints say dimensions \u2265 1, so no, but good to verify.",
-      "**Q: Should I handle shapes partially outside canvas bounds?** - Not mentioned, so assume valid inputs within 0-10\u2074.",
-      "**Q: Is thread-safety needed?** - Not for Part 1 interview, but mention you'd add it in production.",
-      "**Q: Do shapes need to be deleted or modified later?** - Not in Part 1, but this hints at follow-ups."
+      "Are shape IDs auto-generated or provided by caller? \u2192 Auto-generated (rect_1, circle_1)",
+      "Do boundary points count as inside? \u2192 Yes, use inclusive bounds (<=)",
+      "What coordinate system? Standard or inverted Y? \u2192 Standard (Y increases downward)",
+      "Can shapes have zero or negative dimensions? \u2192 No, constraints say dimensions \u2265 1",
+      "Do we need to support shape deletion in Part 1? \u2192 No, that's Part 3",
+      "Should circle check use floating point or integer math? \u2192 Use integer squared comparison"
     ],
     "edge_cases_to_consider": [
-      "Point exactly on rectangle boundary (all 4 edges)",
-      "Point exactly on circle circumference (distance\u00b2 = radius\u00b2)",
-      "Querying an empty canvas (should return null)",
-      "Single shape that covers entire query area",
-      "Completely overlapping identical shapes (return topmost)",
-      "Point at origin (0,0) with shape there",
-      "Large coordinates near 10\u2074 boundary"
+      "Empty canvas - getShapeAt returns null",
+      "Point exactly on shape boundary - should return shape",
+      "Multiple overlapping shapes - return topmost (most recently created)",
+      "Point inside circle but not in any rectangle",
+      "Large coordinates near 10^4 limit"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "createRectangle returns unique shapeId",
-        "how_met": "Use counter `rect_{++rectCount}` for unique IDs",
+        "requirement": "createRectangle returns unique ID",
+        "how_met": "Counter-based ID generation (rect_1, rect_2, ...)",
         "gotchas": [
-          "Don't forget to increment counter",
-          "Use separate counters for rect/circle"
+          "Don't reset counter on deletion in future parts"
         ]
       },
       {
-        "requirement": "createCircle returns unique shapeId",
-        "how_met": "Use counter `circle_{++circleCount}` for unique IDs",
+        "requirement": "createCircle returns unique ID",
+        "how_met": "Separate counter for circles (circle_1, circle_2, ...)",
         "gotchas": [
-          "Don't share counter with rectangles"
+          "Keep separate counters for rect and circle"
         ]
       },
       {
-        "requirement": "getShapeAt returns TOPMOST shape",
-        "how_met": "Iterate shapes in REVERSE order, return first match",
+        "requirement": "getShapeAt returns topmost shape",
+        "how_met": "Iterate shapes in reverse order (newest first)",
         "gotchas": [
-          "Iterating forward returns bottom shape - WRONG"
+          "Don't iterate forward and track - iterate backward and return early"
         ]
       },
       {
-        "requirement": "Boundaries are inclusive",
-        "how_met": "Use `<=` not `<` in all containment checks",
+        "requirement": "Boundary points are inside",
+        "how_met": "Use <= for all boundary comparisons",
         "gotchas": [
-          "Using `<` excludes boundary points"
-        ]
-      },
-      {
-        "requirement": "Return null if no shape at point",
-        "how_met": "Return null/None after exhausting all shapes",
-        "gotchas": [
-          "Don't return empty string or -1"
+          "Easy to use < instead of <="
         ]
       }
     ],
@@ -75,1118 +64,710 @@
         "operation": "createRectangle",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "List append and counter increment are constant time"
+        "why": "List append is O(1) amortized"
       },
       {
         "operation": "createCircle",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Same as rectangle - list append is O(1) amortized"
+        "why": "List append is O(1) amortized"
       },
       {
         "operation": "getShapeAt",
         "target": "O(n)",
         "achieved": "O(n)",
-        "why": "Must check each shape's containment, no spatial indexing"
+        "why": "Must check each shape, early exit on match"
       }
     ],
     "non_goals": [
-      "Spatial indexing (R-trees, Quadtrees) - Not needed for n\u22641000",
-      "Shape deletion or modification - That's Part 3",
-      "Z-order manipulation (bring to front/back) - Part 3",
-      "Undo/Redo - Part 4",
-      "Rendering/Drawing - This is data model only"
+      "Move/delete shapes (Part 2-3)",
+      "Spatial indexing for sub-linear queries (advanced optimization)",
+      "Undo/redo (Part 4)",
+      "Shape styling/colors"
     ]
   },
   "assumptions": [
-    "Coordinates are always valid integers within [0, 10\u2074]",
-    "Dimensions (width, height, radius) are always positive (\u22651)",
-    "No concurrent access - single-threaded execution",
-    "Shape IDs should be human-readable strings like 'rect_1', 'circle_2'",
-    "Canvas size is not bounded - we just track shapes, not actual pixels"
+    "All coordinates and dimensions are non-negative integers",
+    "Shape IDs should follow pattern rect_N and circle_N",
+    "Counters are 1-indexed (first rect is rect_1, not rect_0)",
+    "Canvas is conceptually infinite (no bounds checking needed)",
+    "Single-threaded execution (no concurrent modifications)"
   ],
   "tradeoffs": [
     {
-      "decision": "List vs Map for shapes storage",
-      "chosen": "List<Shape> for ordered storage + Map<String, Shape> for ID lookup",
-      "why": "Z-order requires ordered iteration; Map provides O(1) lookup for future operations",
-      "alternative": "Just List without Map",
-      "when_to_switch": "If we never need to lookup by ID (but Part 2-3 will need it)"
+      "decision": "List vs HashMap for shape storage",
+      "chosen": "List (ArrayList)",
+      "why": "Natural z-ordering by insertion index, easy reverse iteration",
+      "alternative": "LinkedHashMap for ordered storage + O(1) ID lookup",
+      "when_to_switch": "If Part 2+ requires frequent ID-based lookups"
     },
     {
-      "decision": "Iterate forward vs reverse for getShapeAt",
-      "chosen": "Reverse iteration (newest first)",
-      "why": "Topmost shape was created last - reverse gives us first match = topmost",
-      "alternative": "Forward iteration tracking last match",
-      "when_to_switch": "Never - reverse is cleaner and early-exits"
+      "decision": "Class hierarchy vs composition",
+      "chosen": "Inheritance (Shape \u2192 Rectangle/Circle)",
+      "why": "Natural polymorphism for contains() method, clean design",
+      "alternative": "Composition with ShapeType enum and contains function",
+      "when_to_switch": "If many shape types with complex combinations"
     },
     {
-      "decision": "Distance check: sqrt vs squared comparison",
-      "chosen": "Squared comparison (dx\u00b2 + dy\u00b2 \u2264 r\u00b2)",
-      "why": "Avoids sqrt computation, faster and no floating point precision issues",
-      "alternative": "sqrt(dx\u00b2 + dy\u00b2) \u2264 r",
-      "when_to_switch": "Never for this use case"
+      "decision": "Integer vs floating-point geometry",
+      "chosen": "Integer math with squared distance",
+      "why": "Avoids precision issues, faster, given integer inputs",
+      "alternative": "Double with epsilon comparison",
+      "when_to_switch": "If fractional coordinates are needed"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "**Single Responsibility**: Each shape handles only its own containment logic",
-      "**Open/Closed Principle**: Add new shapes (Triangle, Polygon) without modifying Canvas",
-      "**Encapsulation**: Shape internals are private; Canvas only calls `contains()`",
-      "**Polymorphism**: Canvas treats all shapes uniformly through base class interface"
+      "**Polymorphism**: Each shape owns its contains() logic - easy to add new shapes",
+      "**Encapsulation**: Shape internals hidden, Canvas manages z-ordering",
+      "**Single Responsibility**: Canvas manages collection, Shapes manage geometry"
     ],
-    "why_this_design_scales": "The abstract `Shape` class with polymorphic `contains()` means adding new shape types (Triangle, Polygon, Bezier) requires zero changes to Canvas. The shapes list maintains z-order naturally. The shapeMap enables O(1) lookup for Part 2-3 operations like move/delete. Separating shape creation from ID generation allows flexible naming schemes.",
+    "why_this_design_scales": "Adding new shape types (Triangle, Polygon) only requires implementing `contains()`. Z-order changes (Part 3) only modify Canvas iteration. Move operations (Part 2) only need position updates in shapes.",
     "expected_followup_hooks": [
-      "**Part 2 (Move)**: Add `moveShape(id, dx, dy)` - shapes need x,y mutation, shapeMap enables O(1) lookup",
-      "**Part 3 (Delete + Z-Order)**: Add `deleteShape(id)` and `bringToFront(id)` - need to remove from list and reorder",
-      "**Part 4 (Undo/Redo)**: Wrap operations in Command pattern, maintain history stack"
+      "Part 2 (Move): Add `moveShape(shapeId, dx, dy)` - shapes need position setters",
+      "Part 3 (Delete/Z-Order): Add `deleteShape(shapeId)` - need ID\u2192Shape map",
+      "Part 4 (Undo/Redo): Command pattern wrapping all operations"
     ],
     "invariants": [
-      "Shapes list maintains creation order (z-order from bottom to top)",
-      "Shape IDs are unique and immutable once assigned",
-      "A point is inside at most one shape for getShapeAt purposes (returns topmost only)",
-      "shapeMap.keys() equals all IDs in shapes list"
+      "Shapes list order equals z-order (index 0 = bottom, last = top)",
+      "Shape IDs are globally unique and never reused",
+      "contains() is pure function based on current position"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    CANVAS (10000 x 10000)            \u2502\n\u2502                                                      \u2502\n\u2502    (10,10)                                           \u2502\n\u2502       \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                             \u2502\n\u2502       \u2502    rect_1      \u2502                             \u2502\n\u2502       \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                     \u2502\n\u2502       \u2502  \u2502  OVERLAP    \u2502       \u2502                     \u2502\n\u2502       \u2502  \u2502   (35,30)\u2022  \u2502       \u2502  \u2190 Query returns    \u2502\n\u2502       \u2514\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518       \u2502    rect_2 (on top)  \u2502\n\u2502          \u2502      rect_2         \u2502                     \u2502\n\u2502          \u2502   (25,25,50x40)     \u2502                     \u2502\n\u2502          \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                     \u2502\n\u2502                                                      \u2502\n\u2502                    \u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e                     \u2502\n\u2502                   \u2571             \u2572                    \u2502\n\u2502                  \u2502   circle_1   \u2502                    \u2502\n\u2502                  \u2502  (200,200)   \u2502                    \u2502\n\u2502                   \u2572    r=50    \u2571                     \u2502\n\u2502                    \u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f                     \u2502\n\u2502                                                      \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n    Z-ORDER STACK (bottom to top):\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  circle_1   \u2502 \u2190 TOP (created last)\n    \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n    \u2502   rect_2    \u2502\n    \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n    \u2502   rect_1    \u2502 \u2190 BOTTOM (created first)\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\nAfter: createRectangle(10, 10, 40, 30) \u2192 rect_1\n       createRectangle(25, 25, 50, 40) \u2192 rect_2  \n       createCircle(200, 200, 50) \u2192 circle_1\n\nshapes List (maintains z-order):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Index \u2502 Shape          \u2502 Contains Method              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   0   \u2502 Rectangle      \u2502 10\u2264x\u226450 AND 10\u2264y\u226440         \u2502\n\u2502       \u2502 id=\"rect_1\"    \u2502                              \u2502\n\u2502       \u2502 (10,10,40,30)  \u2502                              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   1   \u2502 Rectangle      \u2502 25\u2264x\u226475 AND 25\u2264y\u226465         \u2502\n\u2502       \u2502 id=\"rect_2\"    \u2502                              \u2502\n\u2502       \u2502 (25,25,50,40)  \u2502                              \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   2   \u2502 Circle         \u2502 (x-200)\u00b2+(y-200)\u00b2 \u2264 2500    \u2502\n\u2502       \u2502 id=\"circle_1\"  \u2502                              \u2502\n\u2502       \u2502 (200,200,50)   \u2502                              \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nshapeMap (for O(1) lookup):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 \"rect_1\"    \u2502 \u2192 shapes[0]         \u2502\n\u2502 \"rect_2\"    \u2502 \u2192 shapes[1]         \u2502\n\u2502 \"circle_1\"  \u2502 \u2192 shapes[2]         \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                     CANVAS                            \u2502\n\u2502  (0,0)\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba X+       \u2502\n\u2502    \u2502                                                  \u2502\n\u2502    \u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                               \u2502\n\u2502    \u2502   \u2502   rect_1    \u2502      \u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e             \u2502\n\u2502    \u2502   \u2502  (10,10)    \u2502      \u2502 circle_1 \u2502             \u2502\n\u2502    \u2502   \u2502   40x30     \u2502      \u2502 (60,30)  \u2502             \u2502\n\u2502    \u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502  r=20    \u2502             \u2502\n\u2502    \u2502                        \u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f             \u2502\n\u2502    \u2502        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                   \u2502\n\u2502    \u2502        \u2502      rect_2        \u2502 \u2190 Created later   \u2502\n\u2502    \u2502        \u2502     (30,25)        \u2502   (ON TOP)        \u2502\n\u2502    \u2502        \u2502      50x40         \u2502                   \u2502\n\u2502    \u2502        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                   \u2502\n\u2502    \u2502                                                  \u2502\n\u2502    \u25bc Y+                                               \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nZ-ORDER STACK (bottom to top):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  rect_2   \u2502 \u2190 Index 2 (TOP - checked first)\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 circle_1  \u2502 \u2190 Index 1\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502  rect_1   \u2502 \u2190 Index 0 (BOTTOM - checked last)\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\nAfter: createRectangle(10,10,40,30), createCircle(60,30,20), createRectangle(30,25,50,40)\n\nshapes: List<Shape>\n\u250c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 [0] \u2502 Rectangle(id=\"rect_1\", x=10, y=10, w=40, h=30) \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 [1] \u2502 Circle(id=\"circle_1\", cx=60, cy=30, r=20)    \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 [2] \u2502 Rectangle(id=\"rect_2\", x=30, y=25, w=50, h=40) \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nCounters: rect_count=2, circle_count=1\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "getShapeAt(35, 30) - Start reverse iteration",
-        "visualization": "```\nChecking from index 2 down to 0:\n\n[2] circle_1: (35-200)\u00b2 + (30-200)\u00b2 = 27225 + 28900 = 56125\n              56125 > 2500 (radius\u00b2)? YES \u2192 NOT INSIDE\n```",
-        "key_point": "Start from newest shape (highest index)"
+        "description": "createRectangle(10, 10, 40, 30)",
+        "visualization": "```\nrect_count: 0 \u2192 1\nid = \"rect_1\"\nshapes: [] \u2192 [Rectangle(rect_1, 10, 10, 40, 30)]\n```",
+        "key_point": "Increment counter BEFORE creating ID"
       },
       {
         "step": 2,
-        "description": "Check rect_2 at index 1",
-        "visualization": "```\n[1] rect_2: 25 \u2264 35 \u2264 75? YES\n            25 \u2264 30 \u2264 65? YES\n            \u2192 INSIDE! Return \"rect_2\"\n```",
-        "key_point": "Found a match - return immediately (early exit)"
-      },
-      {
-        "step": 3,
-        "description": "Note: We never check rect_1",
-        "visualization": "```\n[0] rect_1: SKIPPED - already found topmost shape\n\nResult: \"rect_2\"\n```",
-        "key_point": "Early exit optimization - don't check shapes below topmost match"
+        "description": "getShapeAt(35, 30) with overlapping shapes",
+        "visualization": "```\nIterate REVERSE: [2] \u2192 [1] \u2192 [0]\n\n[2] rect_2: (30,25,50,40)\n    30 \u2264 35 \u2264 80? YES\n    25 \u2264 30 \u2264 65? YES\n    \u2192 CONTAINS! Return \"rect_2\" immediately\n\n[1] circle_1: Never checked\n[0] rect_1: Never checked\n```",
+        "key_point": "Reverse iteration + early return = topmost shape"
       }
     ],
-    "dry_run_table": "| Step | Operation | Shapes List | shapeMap | Result |\n|------|-----------|-------------|----------|--------|\n| 1 | Canvas() | [] | {} | - |\n| 2 | createRectangle(10,10,40,30) | [rect_1] | {rect_1: Shape} | \"rect_1\" |\n| 3 | createRectangle(25,25,50,40) | [rect_1, rect_2] | {rect_1, rect_2} | \"rect_2\" |\n| 4 | createCircle(200,200,50) | [rect_1, rect_2, circle_1] | {+circle_1} | \"circle_1\" |\n| 5 | getShapeAt(35,30) | (no change) | (no change) | \"rect_2\" |\n| 6 | getShapeAt(15,15) | (no change) | (no change) | \"rect_1\" |\n| 7 | getShapeAt(200,200) | (no change) | (no change) | \"circle_1\" |\n| 8 | getShapeAt(0,0) | (no change) | (no change) | null |"
+    "dry_run_table": "| Step | Operation | Action | shapes List | rect_count | circle_count | Result |\n|------|-----------|--------|-------------|------------|--------------|--------|\n| 1 | Canvas() | Initialize | [] | 0 | 0 | null |\n| 2 | createRectangle(0,0,50,50) | Add rect | [R1] | 1 | 0 | \"rect_1\" |\n| 3 | createRectangle(25,25,50,50) | Add rect | [R1,R2] | 2 | 0 | \"rect_2\" |\n| 4 | getShapeAt(30,30) | Check R2\u2192R1 | - | - | - | \"rect_2\" |\n| 5 | getShapeAt(10,10) | Check R2(no)\u2192R1(yes) | - | - | - | \"rect_1\" |"
   },
   "thinking_process": {
     "step_by_step": [
-      "When I see **'different shape types with shared behavior'**, I think of **abstract base class with polymorphism** - each shape implements its own `contains()` but Canvas treats them uniformly.",
-      "When I see **'topmost shape wins'**, I think of **z-ordering as creation order** - later shapes are on top, so I should iterate in reverse to find the first match.",
-      "When I see **'O(1) creation'**, I know I cannot do any preprocessing - just store the shape and return an ID.",
-      "When I see **'boundary is inclusive'**, I must use **`<=`** not **`<`** in all comparisons - this is a common trap!",
-      "When I see **'circle containment'**, I think of **avoiding sqrt** - use `dx\u00b2 + dy\u00b2 \u2264 r\u00b2` for precision and speed.",
-      "The key insight: **separate creation (O(1)) from querying (O(n))** - no spatial indexing needed for n\u22641000."
+      "**When I see 'shapes on canvas'**, I think of OOP with polymorphism - each shape type should know how to check if it contains a point",
+      "**When I see 'topmost shape'**, I think of z-ordering - need to maintain creation order and iterate newest-first",
+      "**The key insight**: Store shapes in a list (natural z-order), iterate in reverse for getShapeAt to find topmost first",
+      "**For hit testing**: Rectangle is simple bounds check with <=. Circle uses squared distance to avoid sqrt precision issues",
+      "**I should use polymorphism** because adding new shape types (triangles, polygons) should only require implementing `contains()`"
     ],
-    "key_insight": "The crucial realization is that **z-order is simply creation order**. By iterating shapes in reverse (newest to oldest) and returning the first match, we naturally get the topmost shape at any point. No explicit z-index tracking needed - the list index IS the z-order!",
-    "why_this_works": "1. **Polymorphism**: Each shape knows how to check if a point is inside itself\n2. **List ordering**: Appending to list gives us implicit z-ordering for free\n3. **Reverse iteration**: Newest shape is last in list, so reversing gives us top-to-bottom order\n4. **Early exit**: Return as soon as we find a match - no need to check shapes below"
+    "key_insight": "**Reverse iteration gives us O(1) for common case** - when user clicks, they usually click on a visible (top) shape. By checking newest-first, we return early most of the time.",
+    "why_this_works": "The list maintains insertion order = z-order. Shapes at higher indices were created later, so they're 'on top'. Reverse iteration from the end finds the topmost shape first."
   },
   "approaches": [
     {
-      "name": "Naive: Check All Shapes Forward, Track Last Match",
-      "description": "Iterate through all shapes from first to last, keeping track of the last one that contains the point. After checking all shapes, return the last match.",
-      "pseudocode": "def get_shape_at(x, y):\n    result = None\n    for shape in shapes:  # Forward iteration\n        if shape.contains(x, y):\n            result = shape.id  # Keep updating\n    return result  # Last match = topmost",
-      "time_complexity": "O(n) always - must check ALL shapes even after finding matches",
-      "space_complexity": "O(n) for shape storage",
+      "name": "Brute Force - Forward Iteration with Tracking",
+      "description": "Iterate through all shapes, track the last one that contains the point",
+      "pseudocode": "def get_shape_at(x, y):\n    result = None\n    for shape in shapes:  # Forward\n        if shape.contains(x, y):\n            result = shape  # Keep updating\n    return result",
+      "time_complexity": "O(n) - always checks ALL shapes",
+      "space_complexity": "O(1)",
       "pros": [
-        "Simple to understand",
-        "Straightforward implementation"
+        "Simple logic",
+        "Easy to understand"
       ],
       "cons": [
-        "Cannot early-exit",
-        "Less intuitive (why track 'last'?)"
+        "Always O(n) even if topmost shape is last",
+        "Unnecessary checks"
       ],
-      "when_to_use": "Never preferred over reverse iteration"
+      "when_to_use": "Never - reverse iteration is strictly better"
     },
     {
-      "name": "Optimal: Reverse Iteration with Early Exit",
-      "description": "Iterate shapes in reverse order (newest to oldest). Return the first shape that contains the point. This is the topmost shape, and we can exit immediately.",
-      "pseudocode": "def get_shape_at(x, y):\n    for shape in reversed(shapes):  # Newest first\n        if shape.contains(x, y):\n            return shape.id  # First match = topmost!\n    return None  # No shape found",
-      "time_complexity": "O(n) worst case, but often O(k) where k = shapes above query point",
-      "space_complexity": "O(n) for shape storage",
+      "name": "Optimal: Reverse Iteration with Early Return",
+      "description": "Iterate from newest to oldest, return immediately on first match",
+      "pseudocode": "def get_shape_at(x, y):\n    for shape in reversed(shapes):  # Newest first\n        if shape.contains(x, y):\n            return shape.id  # Early exit!\n    return None",
+      "time_complexity": "O(n) worst case, O(1) best case",
+      "space_complexity": "O(1)",
       "pros": [
-        "Early exit when match found",
-        "Intuitive (return FIRST = TOP)",
-        "More efficient in practice"
+        "Early exit for common case",
+        "Clean logic",
+        "Matches user expectation"
       ],
       "cons": [
-        "None for this problem"
+        "Still O(n) if point is in bottom shape only"
       ],
-      "key_insight": "First match in reverse order IS the topmost shape"
+      "key_insight": "Users typically click on visible (top) shapes, so checking top-first is practically faster"
     }
   ],
   "optimal_solution": {
     "name": "Polymorphic Shapes with Reverse Z-Order Iteration",
-    "explanation_md": "## Approach\n\nWe use **OOP polymorphism** to handle different shape types uniformly. Each shape class implements a `contains(x, y)` method specific to its geometry.\n\n### Core Design\n\n1. **Abstract Shape Class**: Defines the interface with `id` and abstract `contains()` method\n2. **Rectangle**: Implements containment using axis-aligned bounding box check\n3. **Circle**: Implements containment using squared distance comparison (avoids sqrt)\n4. **Canvas**: Maintains ordered list of shapes and provides creation/query methods\n\n### Why Reverse Iteration Works\n\n```\nShapes created: [A, B, C]  (A first, C last)\nZ-order: A (bottom) \u2192 B \u2192 C (top)\n\nQuery point P contained in A, B, C:\n- Reverse iteration: C \u2192 B \u2192 A\n- C.contains(P)? YES \u2192 Return C \u2713\n- (Never checks B or A)\n```\n\n### Containment Formulas\n\n**Rectangle** at (x, y) with dimensions (w, h):\n```\ncontains(px, py) = (x \u2264 px \u2264 x+w) AND (y \u2264 py \u2264 y+h)\n```\n\n**Circle** at (cx, cy) with radius r:\n```\ncontains(px, py) = (px-cx)\u00b2 + (py-cy)\u00b2 \u2264 r\u00b2\n```\n\n*Note: Using \u2264 (not <) because boundaries are inclusive!*",
+    "explanation_md": "## Approach\n\nWe use **OOP polymorphism** with an abstract `Shape` class that each shape type extends. Each shape implements its own `contains(x, y)` method.\n\n### Key Design Decisions\n\n1. **List for Z-Ordering**: Shapes stored in creation order. Index 0 = bottom, last = top.\n\n2. **Reverse Iteration**: For `getShapeAt()`, we iterate from end to start, returning the first match. This gives us the topmost shape.\n\n3. **Integer Math for Circles**: Instead of `sqrt(dx\u00b2 + dy\u00b2) <= r`, we use `dx\u00b2 + dy\u00b2 <= r\u00b2`. Avoids floating-point precision issues.\n\n### Why This Works\n\n- **Polymorphism**: Adding a new shape (e.g., Triangle) only requires implementing `contains()`\n- **Encapsulation**: Canvas manages collection, shapes manage their own geometry\n- **Efficient hit testing**: Early return on first match",
     "data_structures": [
       {
         "structure": "List<Shape> shapes",
-        "purpose": "Ordered storage maintaining z-order (creation order)"
-      },
-      {
-        "structure": "Map<String, Shape> shapeMap",
-        "purpose": "O(1) lookup by ID for future operations (Part 2-3)"
+        "purpose": "Maintains z-order by insertion order"
       },
       {
         "structure": "int rectCount, circleCount",
-        "purpose": "Generate unique IDs like 'rect_1', 'circle_2'"
+        "purpose": "Generate unique IDs (rect_1, rect_2, circle_1, ...)"
+      },
+      {
+        "structure": "Abstract Shape class",
+        "purpose": "Polymorphic contains() for hit testing"
       }
     ],
     "algorithm_steps": [
-      "1. **Initialize Canvas** with empty shapes list and shapeMap, counters at 0",
-      "2. **createRectangle**: Increment rectCount, create Rectangle object, add to list and map, return ID",
-      "3. **createCircle**: Increment circleCount, create Circle object, add to list and map, return ID",
-      "4. **getShapeAt**: Iterate shapes in REVERSE, call contains() on each, return first match's ID or null"
+      "1. **createRectangle**: Increment rect counter, create Rectangle, append to list, return ID",
+      "2. **createCircle**: Increment circle counter, create Circle, append to list, return ID",
+      "3. **getShapeAt**: Iterate shapes in REVERSE, return first shape where contains(x,y) is true",
+      "4. **Rectangle.contains**: Check x \u2264 px \u2264 x+width AND y \u2264 py \u2264 y+height",
+      "5. **Circle.contains**: Check (px-cx)\u00b2 + (py-cy)\u00b2 \u2264 r\u00b2"
     ],
-    "why_decimal": "Not applicable - we use integers for coordinates. For circle containment, we compare squared distances to avoid any floating point issues."
+    "why_decimal": "Not needed here - all inputs are integers and we use squared comparison for circles"
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "2D Canvas Drawing Application - Part 1",
-    "=====================================",
-    "A simplified Paint-like application supporting shape creation and hit testing.",
-    "",
-    "Author: Interview Preparation Guide",
-    "Time Complexity: O(1) create, O(n) query",
-    "Space Complexity: O(n) where n = number of shapes",
-    "\"\"\"",
-    "",
     "from abc import ABC, abstractmethod",
-    "from typing import Optional, List, Dict",
+    "from typing import Optional, List",
     "",
     "",
     "class Shape(ABC):",
     "    \"\"\"Abstract base class for all shapes on the canvas.\"\"\"",
-    "    ",
     "    def __init__(self, shape_id: str):",
-    "        \"\"\"",
-    "        Initialize a shape with a unique identifier.",
-    "        ",
-    "        Args:",
-    "            shape_id: Unique string identifier (e.g., 'rect_1', 'circle_2')",
-    "        \"\"\"",
     "        self.id = shape_id",
     "    ",
     "    @abstractmethod",
     "    def contains(self, x: int, y: int) -> bool:",
-    "        \"\"\"",
-    "        Check if a point is inside this shape (boundary inclusive).",
-    "        ",
-    "        Args:",
-    "            x: X coordinate of the point",
-    "            y: Y coordinate of the point",
-    "            ",
-    "        Returns:",
-    "            True if point (x, y) is inside or on boundary of shape",
-    "        \"\"\"",
+    "        \"\"\"Check if point (x, y) is inside this shape (boundary inclusive).\"\"\"",
     "        pass",
     "",
     "",
     "class Rectangle(Shape):",
-    "    \"\"\"",
-    "    A rectangle defined by top-left corner and dimensions.",
-    "    ",
-    "    Attributes:",
-    "        x: X coordinate of top-left corner",
-    "        y: Y coordinate of top-left corner  ",
-    "        width: Width of rectangle (extends rightward)",
-    "        height: Height of rectangle (extends downward)",
-    "    \"\"\"",
-    "    ",
+    "    \"\"\"Rectangle defined by top-left corner and dimensions.\"\"\"",
     "    def __init__(self, shape_id: str, x: int, y: int, width: int, height: int):",
     "        super().__init__(shape_id)",
-    "        self.x = x",
-    "        self.y = y",
-    "        self.width = width",
-    "        self.height = height",
+    "        self.x, self.y = x, y",
+    "        self.width, self.height = width, height",
     "    ",
     "    def contains(self, px: int, py: int) -> bool:",
-    "        \"\"\"",
-    "        Check if point is inside rectangle using AABB test.",
-    "        ",
-    "        Formula: x <= px <= x+width AND y <= py <= y+height",
-    "        Note: Uses <= (inclusive) for boundary points.",
-    "        ",
-    "        Example:",
-    "            >>> rect = Rectangle('r1', 10, 10, 40, 30)",
-    "            >>> rect.contains(10, 10)  # Top-left corner",
-    "            True",
-    "            >>> rect.contains(50, 40)  # Bottom-right corner",
-    "            True",
-    "            >>> rect.contains(9, 10)   # Just outside left edge",
-    "            False",
-    "        \"\"\"",
+    "        # Boundary inclusive: use <=",
     "        return (self.x <= px <= self.x + self.width and",
     "                self.y <= py <= self.y + self.height)",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        return f\"Rectangle(id={self.id}, x={self.x}, y={self.y}, w={self.width}, h={self.height})\"",
     "",
     "",
     "class Circle(Shape):",
-    "    \"\"\"",
-    "    A circle defined by center point and radius.",
-    "    ",
-    "    Attributes:",
-    "        center_x: X coordinate of center",
-    "        center_y: Y coordinate of center",
-    "        radius: Radius of circle",
-    "    \"\"\"",
-    "    ",
+    "    \"\"\"Circle defined by center and radius.\"\"\"",
     "    def __init__(self, shape_id: str, center_x: int, center_y: int, radius: int):",
     "        super().__init__(shape_id)",
-    "        self.center_x = center_x",
-    "        self.center_y = center_y",
+    "        self.cx, self.cy = center_x, center_y",
     "        self.radius = radius",
     "    ",
     "    def contains(self, px: int, py: int) -> bool:",
-    "        \"\"\"",
-    "        Check if point is inside circle using squared distance.",
-    "        ",
-    "        Formula: (px - cx)\u00b2 + (py - cy)\u00b2 <= r\u00b2",
-    "        Note: Uses squared comparison to avoid sqrt() for precision.",
-    "        ",
-    "        Example:",
-    "            >>> circle = Circle('c1', 50, 50, 30)",
-    "            >>> circle.contains(50, 50)  # Center",
-    "            True",
-    "            >>> circle.contains(80, 50)  # On circumference (distance = 30)",
-    "            True",
-    "            >>> circle.contains(81, 50)  # Just outside (distance = 31)",
-    "            False",
-    "        \"\"\"",
-    "        dx = px - self.center_x",
-    "        dy = py - self.center_y",
-    "        distance_squared = dx * dx + dy * dy",
-    "        radius_squared = self.radius * self.radius",
-    "        return distance_squared <= radius_squared",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        return f\"Circle(id={self.id}, cx={self.center_x}, cy={self.center_y}, r={self.radius})\"",
+    "        # Use squared distance to avoid sqrt precision issues",
+    "        dx, dy = px - self.cx, py - self.cy",
+    "        return dx * dx + dy * dy <= self.radius * self.radius",
     "",
     "",
     "class Canvas:",
-    "    \"\"\"",
-    "    2D drawing canvas that manages shapes with z-ordering.",
-    "    ",
-    "    Shapes are layered by creation order - later shapes appear on top.",
-    "    When querying a point, the topmost (most recently created) shape",
-    "    containing that point is returned.",
-    "    ",
-    "    Example:",
-    "        >>> canvas = Canvas()",
-    "        >>> canvas.create_rectangle(0, 0, 100, 100)",
-    "        'rect_1'",
-    "        >>> canvas.create_circle(50, 50, 30)",
-    "        'circle_1'",
-    "        >>> canvas.get_shape_at(50, 50)  # Both contain it, circle on top",
-    "        'circle_1'",
-    "    \"\"\"",
+    "    \"\"\"2D drawing canvas supporting shape creation and hit testing.\"\"\"",
     "    ",
     "    def __init__(self):",
-    "        \"\"\"Initialize an empty canvas.\"\"\"",
-    "        self._shapes: List[Shape] = []  # Ordered by z-index (creation order)",
-    "        self._shape_map: Dict[str, Shape] = {}  # For O(1) lookup by ID",
-    "        self._rect_count: int = 0",
-    "        self._circle_count: int = 0",
+    "        self.shapes: List[Shape] = []  # Maintains z-order",
+    "        self.rect_count = 0",
+    "        self.circle_count = 0",
     "    ",
     "    def create_rectangle(self, x: int, y: int, width: int, height: int) -> str:",
-    "        \"\"\"",
-    "        Create a rectangle on the canvas.",
-    "        ",
-    "        Args:",
-    "            x: X coordinate of top-left corner",
-    "            y: Y coordinate of top-left corner",
-    "            width: Width of rectangle",
-    "            height: Height of rectangle",
-    "            ",
-    "        Returns:",
-    "            Unique shape identifier (e.g., 'rect_1')",
-    "            ",
-    "        Time Complexity: O(1)",
-    "        \"\"\"",
-    "        self._rect_count += 1",
-    "        shape_id = f\"rect_{self._rect_count}\"",
-    "        ",
-    "        rectangle = Rectangle(shape_id, x, y, width, height)",
-    "        self._shapes.append(rectangle)",
-    "        self._shape_map[shape_id] = rectangle",
-    "        ",
+    "        \"\"\"Create rectangle at (x,y) with given dimensions. O(1).\"\"\"",
+    "        self.rect_count += 1",
+    "        shape_id = f\"rect_{self.rect_count}\"",
+    "        self.shapes.append(Rectangle(shape_id, x, y, width, height))",
     "        return shape_id",
     "    ",
     "    def create_circle(self, center_x: int, center_y: int, radius: int) -> str:",
-    "        \"\"\"",
-    "        Create a circle on the canvas.",
-    "        ",
-    "        Args:",
-    "            center_x: X coordinate of center",
-    "            center_y: Y coordinate of center",
-    "            radius: Radius of circle",
-    "            ",
-    "        Returns:",
-    "            Unique shape identifier (e.g., 'circle_1')",
-    "            ",
-    "        Time Complexity: O(1)",
-    "        \"\"\"",
-    "        self._circle_count += 1",
-    "        shape_id = f\"circle_{self._circle_count}\"",
-    "        ",
-    "        circle = Circle(shape_id, center_x, center_y, radius)",
-    "        self._shapes.append(circle)",
-    "        self._shape_map[shape_id] = circle",
-    "        ",
+    "        \"\"\"Create circle at center with given radius. O(1).\"\"\"",
+    "        self.circle_count += 1",
+    "        shape_id = f\"circle_{self.circle_count}\"",
+    "        self.shapes.append(Circle(shape_id, center_x, center_y, radius))",
     "        return shape_id",
     "    ",
     "    def get_shape_at(self, x: int, y: int) -> Optional[str]:",
-    "        \"\"\"",
-    "        Find the topmost shape at the given point.",
-    "        ",
-    "        Iterates shapes in reverse order (newest to oldest) and returns",
-    "        the first shape that contains the point. This gives us the",
-    "        topmost shape due to z-ordering.",
-    "        ",
-    "        Args:",
-    "            x: X coordinate to query",
-    "            y: Y coordinate to query",
-    "            ",
-    "        Returns:",
-    "            Shape ID of topmost shape at point, or None if no shape",
-    "            ",
-    "        Time Complexity: O(n) where n = number of shapes",
-    "        \"\"\"",
-    "        # CRITICAL: Iterate in REVERSE for z-order (topmost first)",
-    "        for shape in reversed(self._shapes):",
+    "        \"\"\"Return topmost shape at point, or None. O(n).\"\"\"",
+    "        # Iterate in reverse for z-order (newest = topmost)",
+    "        for shape in reversed(self.shapes):",
     "            if shape.contains(x, y):",
     "                return shape.id",
-    "        ",
     "        return None",
-    "    ",
-    "    def get_shape_count(self) -> int:",
-    "        \"\"\"Return total number of shapes on canvas.\"\"\"",
-    "        return len(self._shapes)",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        return f\"Canvas(shapes={len(self._shapes)}, rects={self._rect_count}, circles={self._circle_count})\"",
     "",
     "",
-    "def run_example(operations: List[str], arguments: List[list]) -> List:",
-    "    \"\"\"",
-    "    Execute a sequence of operations for testing.",
-    "    ",
-    "    Args:",
-    "        operations: List of method names",
-    "        arguments: List of argument lists for each operation",
-    "        ",
-    "    Returns:",
-    "        List of results from each operation",
-    "    \"\"\"",
-    "    results = []",
-    "    canvas = None",
-    "    ",
-    "    for op, args in zip(operations, arguments):",
-    "        if op == \"Canvas\":",
-    "            canvas = Canvas()",
-    "            results.append(None)",
-    "        elif op == \"createRectangle\":",
-    "            result = canvas.create_rectangle(*args)",
-    "            results.append(result)",
-    "        elif op == \"createCircle\":",
-    "            result = canvas.create_circle(*args)",
-    "            results.append(result)",
-    "        elif op == \"getShapeAt\":",
-    "            result = canvas.get_shape_at(*args)",
-    "            results.append(result)",
-    "    ",
-    "    return results",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"2D Canvas Drawing Application - Demo\")",
+    "if __name__ == '__main__':",
     "    print(\"=\" * 60)",
-    "    ",
-    "    # Example 1: Basic Shape Creation and Query",
-    "    print(\"\\n--- Example 1: Basic Operations ---\")",
+    "    print(\"TEST 1: Basic Shape Creation and Query\")",
+    "    print(\"=\" * 60)",
     "    canvas = Canvas()",
-    "    ",
-    "    rect1 = canvas.create_rectangle(10, 10, 40, 30)",
-    "    print(f\"Created: {rect1} at (10,10) size 40x30\")",
-    "    ",
-    "    circle1 = canvas.create_circle(60, 30, 20)",
-    "    print(f\"Created: {circle1} at center (60,30) radius 20\")",
-    "    ",
-    "    result1 = canvas.get_shape_at(25, 25)",
-    "    print(f\"Query (25,25): {result1} (inside rectangle)\")",
-    "    ",
-    "    result2 = canvas.get_shape_at(60, 30)",
-    "    print(f\"Query (60,30): {result2} (center of circle)\")",
-    "    ",
-    "    # Example 2: Overlapping Shapes",
-    "    print(\"\\n--- Example 2: Overlapping Shapes (Z-Order) ---\")",
-    "    canvas2 = Canvas()",
-    "    ",
-    "    r1 = canvas2.create_rectangle(0, 0, 50, 50)",
-    "    r2 = canvas2.create_rectangle(25, 25, 50, 50)",
-    "    print(f\"Created {r1} at (0,0) and {r2} at (25,25) - overlapping!\")",
-    "    ",
-    "    overlap_query = canvas2.get_shape_at(30, 30)",
-    "    print(f\"Query (30,30) in overlap zone: {overlap_query} (rect_2 on top!)\")",
-    "    ",
-    "    unique_query = canvas2.get_shape_at(10, 10)",
-    "    print(f\"Query (10,10) only in rect_1: {unique_query}\")",
-    "    ",
-    "    # Example 3: Boundary Testing",
-    "    print(\"\\n--- Example 3: Boundary Points (Inclusive) ---\")",
-    "    canvas3 = Canvas()",
-    "    rect = canvas3.create_rectangle(100, 100, 20, 20)",
-    "    ",
-    "    print(f\"Rectangle from (100,100) to (120,120)\")",
-    "    print(f\"  Point (100,100) - top-left corner: {canvas3.get_shape_at(100, 100)}\")",
-    "    print(f\"  Point (120,120) - bottom-right corner: {canvas3.get_shape_at(120, 120)}\")",
-    "    print(f\"  Point (99,100) - just outside left: {canvas3.get_shape_at(99, 100)}\")",
-    "    ",
-    "    # Example 4: Circle Boundary",
-    "    print(\"\\n--- Example 4: Circle Boundary Precision ---\")",
-    "    canvas4 = Canvas()",
-    "    circ = canvas4.create_circle(0, 0, 5)",
-    "    ",
-    "    print(f\"Circle at origin with radius 5\")",
-    "    print(f\"  Point (3,4) - distance=5 (on boundary): {canvas4.get_shape_at(3, 4)}\")",
-    "    print(f\"  Point (4,4) - distance\u22485.66 (outside): {canvas4.get_shape_at(4, 4)}\")",
-    "    ",
-    "    # Run the test case format",
-    "    print(\"\\n--- Example from Problem Statement ---\")",
-    "    ops = [\"Canvas\", \"createRectangle\", \"createCircle\", \"getShapeAt\", \"getShapeAt\"]",
-    "    args = [[], [10, 10, 40, 30], [60, 30, 20], [25, 25], [60, 30]]",
-    "    results = run_example(ops, args)",
-    "    print(f\"Operations: {ops}\")",
-    "    print(f\"Arguments:  {args}\")",
-    "    print(f\"Results:    {results}\")",
-    "    print(f\"Expected:   [None, 'rect_1', 'circle_1', 'rect_1', 'circle_1']\")",
+    "    print(f\"createRectangle(10,10,40,30) -> {canvas.create_rectangle(10, 10, 40, 30)}\")",
+    "    print(f\"createCircle(60,30,20) -> {canvas.create_circle(60, 30, 20)}\")",
+    "    print(f\"getShapeAt(25,25) -> {canvas.get_shape_at(25, 25)}  (inside rect)\")",
+    "    print(f\"getShapeAt(60,30) -> {canvas.get_shape_at(60, 30)}  (circle center)\")",
     "    ",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All examples completed successfully!\")",
-    "    print(\"=\" * 60)"
+    "    print(\"TEST 2: Overlapping Shapes - Topmost Wins\")",
+    "    print(\"=\" * 60)",
+    "    canvas2 = Canvas()",
+    "    canvas2.create_rectangle(0, 0, 50, 50)   # rect_1 (bottom)",
+    "    canvas2.create_rectangle(25, 25, 50, 50) # rect_2 (top)",
+    "    print(f\"getShapeAt(30,30) -> {canvas2.get_shape_at(30, 30)}  (overlap: rect_2 wins)\")",
+    "    print(f\"getShapeAt(10,10) -> {canvas2.get_shape_at(10, 10)}  (only rect_1)\")",
+    "    ",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"TEST 3: Circle Boundary Precision\")",
+    "    print(\"=\" * 60)",
+    "    canvas3 = Canvas()",
+    "    canvas3.create_circle(0, 0, 5)  # Circle at origin, radius 5",
+    "    print(f\"getShapeAt(3,4) -> {canvas3.get_shape_at(3, 4)}  (distance=5, ON boundary)\")",
+    "    print(f\"getShapeAt(4,4) -> {canvas3.get_shape_at(4, 4)}  (distance=5.66, outside)\")",
+    "    ",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"TEST 4: Empty Point\")",
+    "    print(\"=\" * 60)",
+    "    print(f\"getShapeAt(1000,1000) -> {canvas.get_shape_at(1000, 1000)}  (no shape)\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * 2D Canvas Drawing Application - Part 1",
-    " * =======================================",
-    " * A simplified Paint-like application supporting shape creation and hit testing.",
-    " * ",
-    " * Time Complexity: O(1) create, O(n) query",
-    " * Space Complexity: O(n) where n = number of shapes",
-    " */",
-    "",
-    "/**",
-    " * Abstract base class for all shapes on the canvas.",
-    " */",
     "abstract class Shape {",
-    "    protected final String id;",
+    "    protected String id;",
     "    ",
-    "    public Shape(String id) {",
-    "        this.id = id;",
-    "    }",
-    "    ",
-    "    public String getId() {",
-    "        return id;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Check if a point is inside this shape (boundary inclusive).",
-    "     * @param x X coordinate of the point",
-    "     * @param y Y coordinate of the point",
-    "     * @return true if point (x, y) is inside or on boundary of shape",
-    "     */",
+    "    public Shape(String id) { this.id = id; }",
+    "    public String getId() { return id; }",
     "    public abstract boolean contains(int x, int y);",
     "}",
     "",
-    "/**",
-    " * A rectangle defined by top-left corner and dimensions.",
-    " */",
     "class Rectangle extends Shape {",
-    "    private final int x, y, width, height;",
+    "    private int x, y, width, height;",
     "    ",
     "    public Rectangle(String id, int x, int y, int width, int height) {",
     "        super(id);",
-    "        this.x = x;",
-    "        this.y = y;",
-    "        this.width = width;",
-    "        this.height = height;",
+    "        this.x = x; this.y = y;",
+    "        this.width = width; this.height = height;",
     "    }",
     "    ",
-    "    /**",
-    "     * Check if point is inside rectangle using AABB test.",
-    "     * Formula: x <= px <= x+width AND y <= py <= y+height",
-    "     * Note: Uses <= (inclusive) for boundary points.",
-    "     */",
     "    @Override",
     "    public boolean contains(int px, int py) {",
-    "        return x <= px && px <= x + width &&",
-    "               y <= py && py <= y + height;",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return String.format(\"Rectangle(id=%s, x=%d, y=%d, w=%d, h=%d)\",",
-    "                           id, x, y, width, height);",
+    "        return x <= px && px <= x + width && y <= py && py <= y + height;",
     "    }",
     "}",
     "",
-    "/**",
-    " * A circle defined by center point and radius.",
-    " */",
     "class Circle extends Shape {",
-    "    private final int centerX, centerY, radius;",
+    "    private int cx, cy, radius;",
     "    ",
-    "    public Circle(String id, int centerX, int centerY, int radius) {",
+    "    public Circle(String id, int cx, int cy, int radius) {",
     "        super(id);",
-    "        this.centerX = centerX;",
-    "        this.centerY = centerY;",
-    "        this.radius = radius;",
+    "        this.cx = cx; this.cy = cy; this.radius = radius;",
     "    }",
     "    ",
-    "    /**",
-    "     * Check if point is inside circle using squared distance.",
-    "     * Formula: (px - cx)\u00b2 + (py - cy)\u00b2 <= r\u00b2",
-    "     * Note: Uses squared comparison to avoid sqrt() for precision.",
-    "     */",
     "    @Override",
     "    public boolean contains(int px, int py) {",
-    "        long dx = px - centerX;",
-    "        long dy = py - centerY;",
-    "        long distanceSquared = dx * dx + dy * dy;",
-    "        long radiusSquared = (long) radius * radius;",
-    "        return distanceSquared <= radiusSquared;",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return String.format(\"Circle(id=%s, cx=%d, cy=%d, r=%d)\",",
-    "                           id, centerX, centerY, radius);",
+    "        long dx = px - cx, dy = py - cy;  // Use long to avoid overflow",
+    "        return dx * dx + dy * dy <= (long) radius * radius;",
     "    }",
     "}",
     "",
-    "/**",
-    " * 2D drawing canvas that manages shapes with z-ordering.",
-    " * ",
-    " * Shapes are layered by creation order - later shapes appear on top.",
-    " * When querying a point, the topmost (most recently created) shape",
-    " * containing that point is returned.",
-    " */",
     "public class Canvas {",
-    "    private final List<Shape> shapes;      // Ordered by z-index",
-    "    private final Map<String, Shape> shapeMap;  // O(1) lookup by ID",
-    "    private int rectCount;",
-    "    private int circleCount;",
+    "    private List<Shape> shapes = new ArrayList<>();",
+    "    private int rectCount = 0, circleCount = 0;",
     "    ",
-    "    public Canvas() {",
-    "        this.shapes = new ArrayList<>();",
-    "        this.shapeMap = new HashMap<>();",
-    "        this.rectCount = 0;",
-    "        this.circleCount = 0;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Create a rectangle on the canvas.",
-    "     * @param x X coordinate of top-left corner",
-    "     * @param y Y coordinate of top-left corner",
-    "     * @param width Width of rectangle",
-    "     * @param height Height of rectangle",
-    "     * @return Unique shape identifier (e.g., \"rect_1\")",
-    "     * Time Complexity: O(1)",
-    "     */",
     "    public String createRectangle(int x, int y, int width, int height) {",
-    "        rectCount++;",
-    "        String shapeId = \"rect_\" + rectCount;",
-    "        ",
-    "        Rectangle rectangle = new Rectangle(shapeId, x, y, width, height);",
-    "        shapes.add(rectangle);",
-    "        shapeMap.put(shapeId, rectangle);",
-    "        ",
-    "        return shapeId;",
+    "        String id = \"rect_\" + (++rectCount);",
+    "        shapes.add(new Rectangle(id, x, y, width, height));",
+    "        return id;",
     "    }",
     "    ",
-    "    /**",
-    "     * Create a circle on the canvas.",
-    "     * @param centerX X coordinate of center",
-    "     * @param centerY Y coordinate of center",
-    "     * @param radius Radius of circle",
-    "     * @return Unique shape identifier (e.g., \"circle_1\")",
-    "     * Time Complexity: O(1)",
-    "     */",
     "    public String createCircle(int centerX, int centerY, int radius) {",
-    "        circleCount++;",
-    "        String shapeId = \"circle_\" + circleCount;",
-    "        ",
-    "        Circle circle = new Circle(shapeId, centerX, centerY, radius);",
-    "        shapes.add(circle);",
-    "        shapeMap.put(shapeId, circle);",
-    "        ",
-    "        return shapeId;",
+    "        String id = \"circle_\" + (++circleCount);",
+    "        shapes.add(new Circle(id, centerX, centerY, radius));",
+    "        return id;",
     "    }",
     "    ",
-    "    /**",
-    "     * Find the topmost shape at the given point.",
-    "     * ",
-    "     * Iterates shapes in reverse order (newest to oldest) and returns",
-    "     * the first shape that contains the point.",
-    "     * ",
-    "     * @param x X coordinate to query",
-    "     * @param y Y coordinate to query",
-    "     * @return Shape ID of topmost shape at point, or null if no shape",
-    "     * Time Complexity: O(n) where n = number of shapes",
-    "     */",
     "    public String getShapeAt(int x, int y) {",
-    "        // CRITICAL: Iterate in REVERSE for z-order (topmost first)",
+    "        // Iterate reverse for z-order (topmost first)",
     "        for (int i = shapes.size() - 1; i >= 0; i--) {",
-    "            Shape shape = shapes.get(i);",
-    "            if (shape.contains(x, y)) {",
-    "                return shape.getId();",
+    "            if (shapes.get(i).contains(x, y)) {",
+    "                return shapes.get(i).getId();",
     "            }",
     "        }",
     "        return null;",
     "    }",
     "    ",
-    "    public int getShapeCount() {",
-    "        return shapes.size();",
-    "    }",
-    "    ",
-    "    // Main method for demonstration",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"2D Canvas Drawing Application - Demo\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        ",
-    "        // Example 1: Basic Shape Creation and Query",
-    "        System.out.println(\"\\n--- Example 1: Basic Operations ---\");",
+    "        System.out.println(\"TEST 1: Basic Shape Creation and Query\");",
     "        Canvas canvas = new Canvas();",
+    "        System.out.println(\"createRectangle(10,10,40,30) -> \" + canvas.createRectangle(10, 10, 40, 30));",
+    "        System.out.println(\"createCircle(60,30,20) -> \" + canvas.createCircle(60, 30, 20));",
+    "        System.out.println(\"getShapeAt(25,25) -> \" + canvas.getShapeAt(25, 25));",
+    "        System.out.println(\"getShapeAt(60,30) -> \" + canvas.getShapeAt(60, 30));",
     "        ",
-    "        String rect1 = canvas.createRectangle(10, 10, 40, 30);",
-    "        System.out.printf(\"Created: %s at (10,10) size 40x30%n\", rect1);",
-    "        ",
-    "        String circle1 = canvas.createCircle(60, 30, 20);",
-    "        System.out.printf(\"Created: %s at center (60,30) radius 20%n\", circle1);",
-    "        ",
-    "        String result1 = canvas.getShapeAt(25, 25);",
-    "        System.out.printf(\"Query (25,25): %s (inside rectangle)%n\", result1);",
-    "        ",
-    "        String result2 = canvas.getShapeAt(60, 30);",
-    "        System.out.printf(\"Query (60,30): %s (center of circle)%n\", result2);",
-    "        ",
-    "        // Example 2: Overlapping Shapes",
-    "        System.out.println(\"\\n--- Example 2: Overlapping Shapes (Z-Order) ---\");",
+    "        System.out.println(\"\\nTEST 2: Overlapping Shapes\");",
     "        Canvas canvas2 = new Canvas();",
+    "        canvas2.createRectangle(0, 0, 50, 50);",
+    "        canvas2.createRectangle(25, 25, 50, 50);",
+    "        System.out.println(\"getShapeAt(30,30) -> \" + canvas2.getShapeAt(30, 30) + \" (rect_2 on top)\");",
+    "        System.out.println(\"getShapeAt(10,10) -> \" + canvas2.getShapeAt(10, 10) + \" (only rect_1)\");",
     "        ",
-    "        String r1 = canvas2.createRectangle(0, 0, 50, 50);",
-    "        String r2 = canvas2.createRectangle(25, 25, 50, 50);",
-    "        System.out.printf(\"Created %s at (0,0) and %s at (25,25) - overlapping!%n\", r1, r2);",
-    "        ",
-    "        String overlapQuery = canvas2.getShapeAt(30, 30);",
-    "        System.out.printf(\"Query (30,30) in overlap zone: %s (rect_2 on top!)%n\", overlapQuery);",
-    "        ",
-    "        String uniqueQuery = canvas2.getShapeAt(10, 10);",
-    "        System.out.printf(\"Query (10,10) only in rect_1: %s%n\", uniqueQuery);",
-    "        ",
-    "        // Example 3: Boundary Testing",
-    "        System.out.println(\"\\n--- Example 3: Boundary Points (Inclusive) ---\");",
+    "        System.out.println(\"\\nTEST 3: Circle Boundary\");",
     "        Canvas canvas3 = new Canvas();",
-    "        String rect = canvas3.createRectangle(100, 100, 20, 20);",
-    "        ",
-    "        System.out.println(\"Rectangle from (100,100) to (120,120)\");",
-    "        System.out.printf(\"  Point (100,100) - top-left corner: %s%n\", canvas3.getShapeAt(100, 100));",
-    "        System.out.printf(\"  Point (120,120) - bottom-right corner: %s%n\", canvas3.getShapeAt(120, 120));",
-    "        System.out.printf(\"  Point (99,100) - just outside left: %s%n\", canvas3.getShapeAt(99, 100));",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"All examples completed successfully!\");",
-    "        System.out.println(\"=\".repeat(60));",
+    "        canvas3.createCircle(0, 0, 5);",
+    "        System.out.println(\"getShapeAt(3,4) -> \" + canvas3.getShapeAt(3, 4) + \" (on boundary, d=5)\");",
+    "        System.out.println(\"getShapeAt(4,4) -> \" + canvas3.getShapeAt(4, 4) + \" (outside, d=5.66)\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-12",
-      "section": "Module Docstring & Imports",
-      "explanation": "We import `ABC` and `abstractmethod` for defining the abstract base class pattern. `Optional` is used for the return type of `get_shape_at` which can return `None`. `List` and `Dict` provide type hints for our collections."
-    },
-    {
-      "lines": "15-37",
+      "lines": "1-13",
       "section": "Shape Abstract Base Class",
-      "explanation": "The `Shape` class serves as the contract that all shapes must follow. The `@abstractmethod` decorator on `contains()` ensures every subclass MUST implement this method. This is the foundation of our polymorphic design - Canvas can call `contains()` on any shape without knowing its specific type."
+      "explanation": "Defines the contract all shapes must follow. The `contains(x, y)` method is abstract - each shape type implements its own hit testing logic. This is **polymorphism** in action."
     },
     {
-      "lines": "40-72",
-      "section": "Rectangle Class Implementation",
-      "explanation": "Rectangle stores top-left corner (x,y) and dimensions. The `contains()` method uses **axis-aligned bounding box (AABB)** logic. Note the `<=` operators making boundaries **inclusive**. The chained comparison `self.x <= px <= self.x + self.width` is Pythonic and readable."
+      "lines": "16-26",
+      "section": "Rectangle Class",
+      "explanation": "Stores top-left corner (x, y) and dimensions. The `contains()` check uses **inclusive bounds** (<=) because boundary points are inside. Note: `x + width` is the right edge, `y + height` is the bottom edge."
     },
     {
-      "lines": "75-112",
-      "section": "Circle Class Implementation",
-      "explanation": "Circle stores center and radius. The `contains()` method uses **squared distance comparison**: `dx\u00b2 + dy\u00b2 \u2264 r\u00b2`. This **avoids sqrt()** which would be slower and could introduce floating-point errors. Note we compare `distance_squared <= radius_squared` with `<=` for inclusive boundary."
+      "lines": "29-39",
+      "section": "Circle Class",
+      "explanation": "Stores center (cx, cy) and radius. **Key insight**: We use `dx\u00b2 + dy\u00b2 <= r\u00b2` instead of `sqrt(dx\u00b2 + dy\u00b2) <= r` to avoid floating-point precision issues. This is a common interview gotcha!"
     },
     {
-      "lines": "115-140",
-      "section": "Canvas Class & __init__",
-      "explanation": "Canvas maintains three key data structures:\n- `_shapes`: List preserving creation order (z-order)\n- `_shape_map`: Dict for O(1) lookup by ID (useful for Part 2-3)\n- Separate counters for rect/circle IDs\n\nUsing underscore prefix indicates these are private/internal."
+      "lines": "42-52",
+      "section": "Canvas Initialization and Counters",
+      "explanation": "The shapes list maintains **z-order** by insertion order. Separate counters for rectangles and circles generate unique IDs (rect_1, rect_2, circle_1, etc.)."
     },
     {
-      "lines": "142-165",
-      "section": "create_rectangle Method",
-      "explanation": "Increment counter FIRST, then create ID like 'rect_1'. Create Rectangle object, add to BOTH the list (for z-order) and map (for lookup). Return the ID. This is O(1) - just counter increment and list/dict append."
+      "lines": "54-64",
+      "section": "Shape Creation Methods",
+      "explanation": "Both methods follow the same pattern: (1) increment counter, (2) generate ID, (3) create shape, (4) append to list, (5) return ID. All O(1) operations."
     },
     {
-      "lines": "167-190",
-      "section": "create_circle Method",
-      "explanation": "Identical pattern to create_rectangle but with separate counter and 'circle_' prefix. The symmetry in design makes the code predictable and maintainable."
-    },
-    {
-      "lines": "192-215",
-      "section": "get_shape_at Method - THE CRITICAL PART",
-      "explanation": "This is where z-ordering magic happens. We use `reversed(self._shapes)` to iterate from **newest to oldest**. The first shape whose `contains()` returns True is the **topmost** shape at that point. We return immediately (early exit). If no shape contains the point, return `None`. This is O(n) in worst case."
+      "lines": "66-72",
+      "section": "Hit Testing - getShapeAt",
+      "explanation": "The **critical insight**: `reversed(self.shapes)` iterates from newest to oldest. The first shape that contains the point is the topmost one, so we return immediately. This is O(n) worst case but O(1) for the common case."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. Create one rectangle, query its center \u2192 should return its ID\n2. Query outside the rectangle \u2192 should return None\n3. Add second overlapping rectangle, query overlap zone \u2192 should return second (newer)\n4. Test circle with same pattern\n5. Test boundary points specifically",
+    "how_to_test_incrementally": "1. Test Rectangle.contains() in isolation with boundary cases. 2. Test Circle.contains() with exact boundary distance. 3. Test Canvas with single shape. 4. Test overlapping shapes.",
     "what_to_print_or_assert": [
-      "print(f'Shapes list: {self._shapes}') after each creation",
-      "print(f'Checking shape {shape.id}: contains({x},{y}) = {shape.contains(x,y)}') in getShapeAt loop",
-      "assert rect.contains(x, y) == expected, f'Failed for point ({x},{y})'",
-      "assert len(canvas._shapes) == expected_count after creations"
+      "print(f'Checking shape {shape.id}: contains({x},{y}) = {shape.contains(x,y)}')",
+      "assert canvas.get_shape_at(center_x, center_y) == circle_id  # Center must be inside",
+      "assert canvas.get_shape_at(-1000, -1000) is None  # Empty point"
     ],
     "common_failure_modes": [
-      "**Wrong iteration order**: Forward instead of reverse \u2192 returns bottom shape",
-      "**Exclusive boundaries**: Using `<` instead of `<=` \u2192 boundary points fail",
-      "**Using sqrt**: Precision issues with floating point \u2192 edge cases fail",
-      "**Wrong ID counter**: Shared counter or not incrementing \u2192 duplicate IDs",
-      "**Off-by-one in rectangle**: Forgetting to add width/height in bounds check"
+      "Using < instead of <= (boundary not included)",
+      "Iterating forward instead of reversed (wrong z-order)",
+      "Using sqrt for circle check (precision issues)",
+      "Integer overflow in Java for large coordinates (use long)"
     ],
-    "how_to_fix_fast": "1. **Add print statements** in the `for` loop of `get_shape_at` to see which shapes are being checked and in what order\n2. **Verify boundary math** by testing (x, y), (x+width, y+height) explicitly\n3. **Check contains() return value** before the if statement\n4. **Draw it out** on paper if confused about coordinates"
+    "how_to_fix_fast": "If wrong shape returned: add debug print to show which shapes contain the point and their order. If boundary fails: verify <= vs <. If circle fails: print squared distance vs r\u00b2."
   },
   "complexity_analysis": {
     "time": {
-      "createRectangle": {
+      "create_rectangle": {
         "complexity": "O(1)",
-        "explanation": "Counter increment, object creation, list append, map insert - all O(1)"
+        "explanation": "Counter increment + object creation + list append"
       },
-      "createCircle": {
+      "create_circle": {
         "complexity": "O(1)",
-        "explanation": "Same operations as createRectangle"
+        "explanation": "Same as rectangle - all constant time operations"
       },
-      "getShapeAt": {
+      "get_shape_at": {
         "complexity": "O(n)",
-        "explanation": "Must check up to n shapes. Each contains() is O(1). Early exit possible but worst case is O(n)."
+        "explanation": "Worst case checks all n shapes. Best case O(1) if topmost shape contains point."
       },
-      "overall": "Creation is O(1), query is O(n). For n\u22641000 and operations\u226410\u2074, this is well within limits."
+      "overall": "Shape creation O(1), hit testing O(n)"
     },
     "space": {
-      "complexity": "O(n) where n = total shapes created",
-      "breakdown": "- Shapes list: O(n)\n- ShapeMap: O(n)\n- Each shape stores constant data: O(1) per shape\n- Total: O(n)",
-      "note": "The shapeMap is not strictly necessary for Part 1 but prepares for Part 2-3 where we need O(1) lookup by ID for move/delete operations."
+      "complexity": "O(n) where n = number of shapes",
+      "breakdown": "- shapes list: O(n) Shape references\n- Each Shape: O(1) fixed fields\n- Counters: O(1)",
+      "note": "No additional data structures needed for Part 1"
     },
-    "can_we_do_better": "For Part 1 with n\u22641000, O(n) query is fine. For larger n or frequent queries, we could use **spatial indexing** (R-tree, Quadtree) to achieve O(log n) queries, but this adds significant complexity and is overkill for interview constraints."
+    "can_we_do_better": "**Yes, with spatial indexing** (Quadtree, R-tree) we could achieve O(log n) for getShapeAt, but that's over-engineering for this problem. The O(n) solution is expected and meets requirements."
   },
   "dry_run": {
-    "example": "createRectangle(10,10,40,30), createCircle(60,30,20), getShapeAt(25,25), getShapeAt(60,30), getShapeAt(100,100)",
-    "trace_table": "| Step | Operation | shapes List | Counters | Result |\n|------|-----------|-------------|----------|--------|\n| 1 | Canvas() | [] | rect:0, circle:0 | - |\n| 2 | createRectangle(10,10,40,30) | [Rect(10,10,40,30)] | rect:1, circle:0 | 'rect_1' |\n| 3 | createCircle(60,30,20) | [Rect, Circle(60,30,20)] | rect:1, circle:1 | 'circle_1' |\n| 4 | getShapeAt(25,25) | (unchanged) | (unchanged) | Check circle_1: (25-60)\u00b2+(25-30)\u00b2 = 1250 > 400 \u274c, Check rect_1: 10\u226425\u226450 \u2713, 10\u226425\u226440 \u2713 \u2192 **'rect_1'** |\n| 5 | getShapeAt(60,30) | (unchanged) | (unchanged) | Check circle_1: (60-60)\u00b2+(30-30)\u00b2 = 0 \u2264 400 \u2713 \u2192 **'circle_1'** |\n| 6 | getShapeAt(100,100) | (unchanged) | (unchanged) | Check circle_1: \u274c, Check rect_1: 100>50 \u274c \u2192 **null** |",
-    "final_answer": "['rect_1', 'circle_1', 'rect_1', 'circle_1', null]"
+    "example": "createRectangle(0,0,50,50), createCircle(50,50,30), createRectangle(25,25,50,50), getShapeAt(40,40)",
+    "trace_table": "| Step | Operation | shapes List | Counters | Result |\n|------|-----------|-------------|----------|--------|\n| 1 | createRectangle(0,0,50,50) | [R(0,0,50,50)] | rect=1, circ=0 | \"rect_1\" |\n| 2 | createCircle(50,50,30) | [R, C(50,50,30)] | rect=1, circ=1 | \"circle_1\" |\n| 3 | createRectangle(25,25,50,50) | [R, C, R2(25,25,50,50)] | rect=2, circ=1 | \"rect_2\" |\n| 4 | getShapeAt(40,40) | Check R2: 25\u226440\u226475, 25\u226440\u226475 \u2713 | - | \"rect_2\" |\n\n**Detail for step 4:**\n- Iterate from index 2 \u2192 0\n- [2] rect_2: contains(40,40)? 25\u226440\u226475 AND 25\u226440\u226475 \u2192 **YES** \u2192 return \"rect_2\"\n- Never check circle_1 or rect_1 (early exit)",
+    "final_answer": "rect_2"
   },
   "test_cases": [
     {
-      "name": "Single rectangle - center point",
+      "name": "Single rectangle - point inside",
       "category": "Happy Path",
-      "input": "createRectangle(10, 10, 40, 30), getShapeAt(25, 25)",
-      "expected": "'rect_1'",
-      "explanation": "Point (25,25) is clearly inside rectangle spanning (10,10) to (50,40)"
-    },
-    {
-      "name": "Single circle - center point",
-      "category": "Happy Path",
-      "input": "createCircle(50, 50, 20), getShapeAt(50, 50)",
-      "expected": "'circle_1'",
-      "explanation": "Center of circle is always inside the circle (distance = 0)"
+      "input": "createRectangle(10,10,40,30), getShapeAt(25,25)",
+      "expected": "rect_1",
+      "explanation": "10\u226425\u226450, 10\u226425\u226440 \u2192 inside"
     },
     {
       "name": "Rectangle boundary - all corners",
-      "category": "Boundary",
-      "input": "createRectangle(0, 0, 10, 10), getShapeAt(0,0), getShapeAt(10,10), getShapeAt(0,10), getShapeAt(10,0)",
-      "expected": "All return 'rect_1'",
-      "explanation": "Boundaries are inclusive - all four corners should be inside"
+      "category": "Edge Case",
+      "input": "createRectangle(0,0,100,100), getShapeAt(0,0), getShapeAt(100,100)",
+      "expected": "rect_1 for both",
+      "explanation": "Boundary points are inside (inclusive bounds)"
     },
     {
-      "name": "Circle boundary - exact circumference",
-      "category": "Boundary",
-      "input": "createCircle(0, 0, 5), getShapeAt(3, 4)",
-      "expected": "'circle_1'",
-      "explanation": "Distance = \u221a(9+16) = 5 = radius, so point is ON boundary, which is inside"
+      "name": "Circle center",
+      "category": "Happy Path",
+      "input": "createCircle(50,50,20), getShapeAt(50,50)",
+      "expected": "circle_1",
+      "explanation": "Distance 0 \u2264 20"
     },
     {
-      "name": "Circle boundary - just outside",
-      "category": "Boundary",
-      "input": "createCircle(0, 0, 5), getShapeAt(4, 4)",
+      "name": "Circle boundary - Pythagorean triple",
+      "category": "Precision",
+      "input": "createCircle(0,0,5), getShapeAt(3,4)",
+      "expected": "circle_1",
+      "explanation": "3\u00b2 + 4\u00b2 = 25 = 5\u00b2. Exactly on boundary \u2192 inside"
+    },
+    {
+      "name": "Circle just outside",
+      "category": "Edge Case",
+      "input": "createCircle(0,0,5), getShapeAt(4,4)",
       "expected": "null",
-      "explanation": "Distance = \u221a(16+16) \u2248 5.66 > 5, so point is outside"
+      "explanation": "4\u00b2 + 4\u00b2 = 32 > 25. Just outside"
     },
     {
-      "name": "Overlapping rectangles - z-order",
+      "name": "Overlapping - topmost wins",
       "category": "Z-Order",
       "input": "createRectangle(0,0,50,50), createRectangle(25,25,50,50), getShapeAt(30,30)",
-      "expected": "'rect_2'",
-      "explanation": "Point is in both, but rect_2 was created later so it's on top"
+      "expected": "rect_2",
+      "explanation": "Both contain (30,30), but rect_2 created later = on top"
     },
     {
-      "name": "Query empty canvas",
+      "name": "Empty canvas",
       "category": "Edge Case",
-      "input": "Canvas(), getShapeAt(50, 50)",
+      "input": "getShapeAt(50,50) on new Canvas",
       "expected": "null",
-      "explanation": "No shapes exist, so return null"
+      "explanation": "No shapes exist"
     },
     {
-      "name": "Query outside all shapes",
+      "name": "Point outside all shapes",
       "category": "Edge Case",
-      "input": "createRectangle(100, 100, 20, 20), getShapeAt(50, 50)",
+      "input": "createRectangle(0,0,10,10), getShapeAt(1000,1000)",
       "expected": "null",
-      "explanation": "Point is not inside any shape"
-    },
-    {
-      "name": "Three overlapping shapes",
-      "category": "Complex",
-      "input": "createRectangle(0,0,100,100), createCircle(50,50,30), createRectangle(40,40,30,30), getShapeAt(50,50)",
-      "expected": "'rect_2'",
-      "explanation": "All three contain point, but rect_2 (the second rectangle) was created last"
+      "explanation": "No shape contains this distant point"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Iterating shapes forward instead of reverse",
-      "why_wrong": "Forward iteration returns the FIRST (bottom) shape, not the TOPMOST",
-      "correct_approach": "Iterate in REVERSE to get topmost first",
-      "code_wrong": "for shape in self.shapes:\n    if shape.contains(x, y):\n        return shape.id",
-      "code_correct": "for shape in reversed(self._shapes):\n    if shape.contains(x, y):\n        return shape.id"
-    },
-    {
-      "mistake": "Using exclusive boundaries (<) instead of inclusive (<=)",
-      "why_wrong": "Points exactly on edges would be considered outside",
-      "correct_approach": "Use <= for all boundary comparisons",
+      "mistake": "Using < instead of <= for boundaries",
+      "why_wrong": "Problem states boundary points are INSIDE",
+      "correct_approach": "Use inclusive bounds: x <= px <= x + width",
       "code_wrong": "return self.x < px < self.x + self.width",
       "code_correct": "return self.x <= px <= self.x + self.width"
     },
     {
+      "mistake": "Forward iteration for z-order",
+      "why_wrong": "Returns bottom shape instead of topmost",
+      "correct_approach": "Iterate in REVERSE order",
+      "code_wrong": "for shape in self.shapes:  # Returns first, not topmost",
+      "code_correct": "for shape in reversed(self.shapes):  # Returns topmost"
+    },
+    {
       "mistake": "Using sqrt for circle containment",
-      "why_wrong": "Slower and can have floating-point precision issues",
-      "correct_approach": "Compare squared distances: dx\u00b2 + dy\u00b2 \u2264 r\u00b2",
-      "code_wrong": "import math\nreturn math.sqrt(dx*dx + dy*dy) <= self.radius",
-      "code_correct": "return dx*dx + dy*dy <= self.radius * self.radius"
+      "why_wrong": "Floating-point precision issues, also slower",
+      "correct_approach": "Compare squared distances",
+      "code_wrong": "math.sqrt(dx*dx + dy*dy) <= self.radius",
+      "code_correct": "dx*dx + dy*dy <= self.radius * self.radius"
     },
     {
-      "mistake": "Sharing counter between rectangle and circle",
-      "why_wrong": "Would get IDs like rect_1, circle_2, rect_3 instead of rect_1, circle_1, rect_2",
-      "correct_approach": "Use separate counters for each shape type",
-      "code_wrong": "self.shape_count += 1\nshape_id = f'{shape_type}_{self.shape_count}'",
-      "code_correct": "self._rect_count += 1\nshape_id = f'rect_{self._rect_count}'"
+      "mistake": "Integer overflow in Java",
+      "why_wrong": "dx*dx can overflow int for large coordinates",
+      "correct_approach": "Cast to long before multiplication",
+      "code_wrong": "int distSq = dx * dx + dy * dy;",
+      "code_correct": "long distSq = (long)dx * dx + (long)dy * dy;"
     },
     {
-      "mistake": "Not storing shapes in map for future lookup",
-      "why_wrong": "Part 2-3 need O(1) lookup by ID for move/delete operations",
-      "correct_approach": "Store in both list (for z-order) AND map (for lookup)",
-      "code_wrong": "self._shapes.append(shape)\nreturn shape.id",
-      "code_correct": "self._shapes.append(shape)\nself._shape_map[shape.id] = shape\nreturn shape.id"
+      "mistake": "Storing ID counters as strings",
+      "why_wrong": "Harder to increment and maintain",
+      "correct_approach": "Use integer counters, format ID on creation",
+      "code_wrong": "self.rect_id = 'rect_1'  # How to increment?",
+      "code_correct": "self.rect_count = 0  # Increment and format"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. I see we're building a simplified 2D drawing canvas - this is the foundation of tools like Paint or Figma. Before I start coding, let me clarify a few things and share my approach.",
+    "opening": "Thank you for this problem. I see it's about building a canvas for shape management - similar to what you'd find in tools like Figma or MS Paint. Before I start coding, let me ask a few clarifying questions...",
     "clarifying_questions_to_ask": [
-      "Are shape boundaries inclusive or exclusive? (Typically inclusive)",
-      "What format should shape IDs follow? (I'll use 'rect_1', 'circle_1')",
-      "For overlapping shapes, do we return the topmost or all shapes? (Topmost)",
-      "Are coordinates guaranteed to be valid positive integers?",
-      "Do I need to handle deletion or modification of shapes? (Not in Part 1)"
+      "Are boundary points considered inside shapes? (Yes - use <=)",
+      "How should I generate shape IDs? (rect_1, rect_2, circle_1, ...)",
+      "What should getShapeAt return for an empty point? (null/None)",
+      "Should I use floating point or integer math for geometry? (Integer is fine)"
     ],
     "what_to_mention_proactively": [
-      "I'll use polymorphism with an abstract Shape class for clean OOP design",
-      "For circle containment, I'll compare squared distances to avoid sqrt precision issues",
-      "Z-order is maintained by creation order - I'll iterate in reverse for queries",
-      "I'll use both a list (for ordering) and a map (for future lookups)"
+      "I'll use polymorphism with an abstract Shape class for extensibility",
+      "For z-ordering, I'll maintain shapes in a list by creation order",
+      "I'll iterate in reverse for getShapeAt to find the topmost shape first",
+      "For circles, I'll use squared distance comparison to avoid sqrt precision issues"
     ],
     "communication_during_coding": [
-      "I'm defining the abstract Shape class with a contains() method that each shape will implement",
-      "For Rectangle, I'm using axis-aligned bounding box containment with inclusive boundaries",
-      "Notice I'm using <= not < because the problem says boundaries are inclusive",
-      "For getShapeAt, I'm iterating in REVERSE so the first match is the topmost shape"
+      "I'm creating an abstract base class Shape with a contains() method that each shape type will override",
+      "Rectangle containment: checking if x \u2264 px \u2264 x+width AND y \u2264 py \u2264 y+height",
+      "Circle containment: using dx\u00b2 + dy\u00b2 \u2264 r\u00b2 to avoid floating point issues",
+      "In getShapeAt, I'm iterating reversed because shapes at the end were created later and are on top"
     ],
     "if_stuck": [
-      "If stuck on containment: Draw the shape on paper, mark the point, trace the math",
-      "If stuck on z-order: Think about a stack - last added is on top",
-      "If stuck on structure: Start with the simplest case - just Rectangle - then generalize"
+      "Step back: 'Let me think about what data structures maintain insertion order...'",
+      "Simplify: 'Let me solve just rectangles first, then add circles'",
+      "Ask: 'Can I assume the coordinate system has Y increasing downward?'"
     ],
-    "time_management": "0-5min: Clarify + Approach | 5-20min: Core implementation | 20-30min: Test + Edge cases | 30-45min: Follow-ups"
+    "time_management": "0-5min: Understand & clarify | 5-10min: Design classes | 10-25min: Code | 25-35min: Test & fix | 35-45min: Part 2"
   },
   "pattern_recognition": {
-    "pattern_name": "OOP Polymorphism + Spatial Hit Testing + Z-Order Stack",
+    "pattern_name": "OOP Polymorphism + List Z-Ordering",
     "indicators": [
-      "Multiple object types with shared behavior (containment check)",
-      "Need to determine 'which object is at this point'",
-      "Objects have layering/ordering relationship",
-      "O(1) creation requirement suggests simple storage"
+      "Multiple entity types with shared behavior (shapes with contains())",
+      "Layering/ordering requirement (z-order = creation order)",
+      "Hit testing / point containment queries"
     ],
     "similar_problems": [
-      "LC 850 - Rectangle Area II: Coordinate compression + sweep line for overlapping rectangles",
-      "LC 223 - Rectangle Area: Computing overlap between two rectangles",
-      "Collision detection in games: Check if player position intersects obstacles",
-      "UI event handling: Which component receives a mouse click"
+      "LC 850 - Rectangle Area II: Managing overlapping rectangles",
+      "LC 223 - Rectangle Area: Geometric intersection",
+      "Design Autocomplete System: Ranked results with polymorphic behavior",
+      "Design File System: Hierarchical structure with polymorphism"
     ],
-    "template": "1. Define abstract base class with polymorphic method\n2. Implement subclasses with type-specific logic\n3. Store objects in ordered collection\n4. Query by iterating (reverse for topmost)"
+    "template": "Abstract base class with common interface \u2192 Concrete implementations with specific logic \u2192 Container manages collection and queries"
   },
   "follow_up_preparation": {
-    "part_2_hint": "**Part 2: Move Shape** - Add `moveShape(id, dx, dy)` to translate a shape. You'll need:\n- O(1) lookup using shapeMap\n- Shapes need mutable x,y coordinates\n- Consider adding setX/setY methods or a move() method to Shape class",
-    "part_3_hint": "**Part 3: Delete + Z-Order Control** - Add `deleteShape(id)` and `bringToFront(id)`:\n- Delete: Remove from both list and map\n- BringToFront: Remove from current position, append to end\n- Consider using LinkedHashMap or custom doubly-linked list for O(1) operations",
-    "part_4_hint": "**Part 4: Undo/Redo** - Implement Command pattern:\n- Each operation becomes a Command object with execute() and undo()\n- Maintain two stacks: undoStack and redoStack\n- Execute pushes to undoStack; Undo pops and pushes to redoStack",
-    "data_structure_evolution": "Part 1: List + Map \u2192 Part 2: Same + mutable shape coords \u2192 Part 3: LinkedHashMap or separate ordering \u2192 Part 4: + Command stacks"
+    "part_2_hint": "**Move Shape**: Add `moveShape(shapeId, dx, dy)`. Need HashMap<id, Shape> for O(1) lookup. Shapes need setter methods for position.",
+    "part_3_hint": "**Delete Shape**: Need to remove from list. Consider using LinkedHashMap or tracking deletion differently. Z-order control may need swap/reorder.",
+    "data_structure_evolution": "Part 1: List<Shape> \u2192 Part 2: Add Map<id, Shape> \u2192 Part 3: Consider explicit z-index field"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. I see we're building a 2D canvas for creating and querying shapes - this is the foundation of drawing applications. Before I dive into coding, I'd like to understand a few things and outline my approach.",
-    "after_clarification": "Great, so to summarize: I need to support rectangles and circles with O(1) creation, O(n) queries, inclusive boundaries, and return the topmost shape when they overlap. I'll use OOP with an abstract Shape class and maintain shapes in creation order for z-ordering. Does that align with your expectations?",
+    "opening_verbatim": "Thank you for this problem. It's about building a 2D canvas like Figma or MS Paint. Before I dive in, I want to clarify a few things and share my initial approach.",
+    "after_clarification": "Great, so to summarize: I need to support rectangles and circles, boundary points are inside, and later shapes are on top for z-ordering. My approach will use polymorphism with an abstract Shape class and a list to maintain z-order. I'll iterate in reverse for hit testing. Does that sound reasonable?",
     "while_coding": [
-      "I'm starting with the abstract Shape class - this gives us polymorphism so Canvas can treat all shapes uniformly.",
-      "For Rectangle containment, I'm using <= for inclusive boundaries. Let me double-check: x <= px <= x + width...",
-      "For Circle, I'm comparing squared distances to avoid sqrt - more efficient and no precision issues.",
-      "Now the key part: getShapeAt iterates in REVERSE so the first match is the topmost shape."
+      "I'm starting with the Shape abstract class to define the common interface...",
+      "For Rectangle, I'm using inclusive bounds - note the <= not <...",
+      "For Circle, I'm using squared distance to avoid sqrt precision issues...",
+      "In getShapeAt, I'm iterating reversed so topmost shapes are checked first..."
     ],
-    "after_coding": "Let me trace through an example to verify. If I create rect_1 at (0,0,50,50) and rect_2 at (25,25,50,50), then query (30,30)... checking rect_2 first, 25<=30<=75 yes, 25<=30<=65 yes, so we return rect_2. That's correct - it's on top.",
-    "when_stuck_verbatim": "I'm thinking about how to handle the z-ordering... Let me step back. The requirement says 'topmost shape wins' and 'later shapes are on top'. So if I iterate in reverse order, the first shape I find is the topmost. That makes sense.",
-    "after_mistake": "Actually, I see I was using < instead of <=. The problem says boundaries are inclusive, so I need to change this to <= to include points exactly on the edge. Let me fix that.",
-    "before_moving_on": "This handles Part 1 with O(1) creation and O(n) query. I've added the shapeMap for O(1) lookup which will be useful for Part 2's move operation. Ready for the follow-up?"
+    "after_coding": "Let me trace through the overlapping example to verify this works correctly...",
+    "when_stuck_verbatim": "I'm thinking about the best way to handle z-ordering... Let me consider how the list order relates to visual layering...",
+    "after_mistake": "Ah, I see the issue - I used < instead of <=. Let me fix that since boundary points should be inside.",
+    "before_moving_on": "Part 1 is complete. Time and space are O(1) for creation, O(n) for queries. Ready for Part 2 about moving shapes?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Problem decomposition**: Do they identify the key components (Shape types, containment, z-order)?",
-      "**OOP design**: Do they use proper abstraction with base class and polymorphism?",
-      "**Attention to detail**: Do they catch the inclusive boundary requirement?",
-      "**Communication**: Do they explain their thought process clearly?",
-      "**Testing mindset**: Do they proactively test edge cases?"
+      "Can you model the domain with appropriate OOP design?",
+      "Do you understand coordinate geometry and hit testing?",
+      "Can you handle the z-ordering requirement correctly?",
+      "Do you catch precision issues (sqrt vs squared)?",
+      "Can you communicate your approach clearly?"
     ],
     "bonus_points": [
-      "Mentioning avoiding sqrt for circle check before being asked",
-      "Drawing a quick ASCII diagram to visualize overlapping shapes",
-      "Proactively adding the shapeMap anticipating future requirements",
-      "Explaining WHY reverse iteration gives topmost, not just that it does",
-      "Testing boundary points specifically after coding"
+      "Mentioning squared distance for circles before being prompted",
+      "Drawing a quick coordinate diagram",
+      "Identifying boundary conditions (<=) immediately",
+      "Proactively testing edge cases",
+      "Clean code with meaningful method names"
     ],
     "red_flags": [
-      "Jumping to code without clarifying inclusive/exclusive boundaries",
-      "Using sqrt for circle containment without considering precision",
-      "Iterating forward and not catching the z-order bug",
-      "Not testing overlapping shapes case",
-      "Overcomplicating with spatial indexing for n\u22641000"
+      "Not clarifying boundary inclusion",
+      "Iterating forward and tracking last match (inefficient)",
+      "Using sqrt for circle check (precision)",
+      "Forgetting null return for empty canvas",
+      "Hardcoding shape IDs instead of using counters"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the OOP polymorphism pattern, ask about boundary conditions, explain tradeoffs (like sqrt vs squared), and proactively test edge cases. They treat the problem as a design exercise, not just a coding task, and naturally anticipate follow-ups."
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as an OOP design problem, draw a quick diagram, identify the z-order insight (reverse iteration), and mention the sqrt precision issue for circles. They test their code with boundary cases and overlapping shapes."
   },
   "time_milestones": {
-    "by_5_min": "Understood problem, asked clarifying questions (inclusive boundaries, ID format), identified OOP pattern",
-    "by_10_min": "Explained approach (abstract Shape, polymorphic contains, reverse iteration), got interviewer buy-in",
-    "by_20_min": "Core implementation done (Shape, Rectangle, Circle, Canvas with create methods)",
-    "by_25_min": "getShapeAt implemented, basic testing done, complexity discussed",
-    "by_30_min": "Edge cases handled (boundaries, empty queries), ready for Part 2",
-    "warning_signs": "If still designing at 10min or debugging at 30min, you're behind. Focus on core logic first."
+    "by_5_min": "Understand problem, ask clarifying questions (boundaries? IDs? coordinate system?)",
+    "by_10_min": "Explain approach: abstract Shape class, list for z-order, reverse iteration",
+    "by_20_min": "Shape classes implemented, Canvas creation methods done",
+    "by_25_min": "getShapeAt implemented with reverse iteration",
+    "by_30_min": "Testing complete, edge cases verified, ready for Part 2",
+    "warning_signs": "If still discussing approach at 15 min, speed up. If still coding at 35 min, you're behind."
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Don't panic. Say: 'Actually, I see an issue - I used < instead of <=, but boundaries should be inclusive. Let me fix that.' Quick fix, brief explanation, move on. Bugs are expected; handling them gracefully is what counts.",
-    "when_you_dont_know_syntax": "'I don't remember the exact syntax for reversed() in Python, but conceptually I need to iterate from last to first. I'll use a reverse index if needed.' Then write `for i in range(len(shapes)-1, -1, -1)`.",
-    "when_approach_is_wrong": "If you realize you're iterating forward and getting wrong results, say: 'Wait, this gives me the bottom shape, not the top. I need to reverse the iteration order to get the topmost first.' Pivot cleanly.",
-    "when_completely_stuck": "'I'm stuck on how to check if a point is in a circle. Could you remind me of the distance formula?' Asking for specific help shows self-awareness.",
-    "when_running_out_of_time": "'I'm running low on time. Let me focus on Rectangle containment first, verify it works, and then add Circle. I can explain the Circle approach verbally if needed.'"
+    "when_you_make_a_bug": "Say: 'Actually, I see an issue - I used < instead of <=. The problem says boundaries are inside, so let me fix that.' Stay calm, fix it, move on.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for abstract classes in Python, but I need a base class with a method that subclasses must implement. Let me write it approximately.'",
+    "when_approach_is_wrong": "Say: 'Wait, iterating forward won't work because I need the topmost shape, not the first. Let me reverse the iteration.'",
+    "when_completely_stuck": "Say: 'I'm stuck on how to determine which shape is on top. Could you give me a hint about z-ordering?' It's okay to ask.",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on the core hit testing logic and explain what I'd add for edge cases.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "AI tools can help with boilerplate but YOU drive the design decisions.",
+    "when_using_cursor_or_copilot": "AI tools can scaffold the class structure quickly. Use them for boilerplate but understand every line.",
     "what_to_do": [
-      "Use AI to generate class structure and docstrings",
-      "Let it autocomplete obvious code like property getters",
-      "Use it to generate test cases after you write the core logic",
-      "Accept syntax suggestions for things like abstract methods"
+      "Let AI generate the abstract class structure",
+      "Use AI for syntax (e.g., Python ABC import)",
+      "Accept obvious completions (return statements, simple math)"
     ],
     "what_not_to_do": [
-      "Don't paste the entire problem and accept whatever it generates",
-      "Don't accept contains() implementation without verifying the math",
-      "Don't skip explaining your thought process because 'AI wrote it'",
-      "Don't use AI for the core algorithm (reverse iteration) - that's what they're testing"
+      "Don't paste the entire problem and accept the solution",
+      "Don't accept contains() implementation without verifying boundary logic",
+      "Don't let AI choose forward vs reverse iteration - you decide"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests code, verbally explain WHY it works: 'Yes, that's correct because we compare squared distances to avoid sqrt...'",
-    "expectation_adjustment": "With AI, you should complete Part 1 in ~20 minutes and have time for Part 2. If you're slower with AI, don't use it."
+    "how_to_demonstrate_understanding": "If AI suggests code, explain WHY it works: 'The AI generated squared distance comparison, which is correct because it avoids sqrt precision issues.'",
+    "expectation_adjustment": "With AI tools, you should complete Part 1 in 20 minutes, leaving time for Parts 2-3."
   },
   "signal_points": {
     "wow_factors": [
-      "Immediately mentioning 'I'll compare squared distances for circles to avoid sqrt precision issues'",
-      "Drawing a quick overlap diagram before coding",
-      "Adding shapeMap 'for future operations like move/delete'",
-      "Asking 'Should I handle shapes partially outside the canvas bounds?'",
-      "Writing a quick test case before running the code"
+      "Drawing a coordinate diagram unprompted",
+      "Immediately mentioning squared distance for circles",
+      "Asking about boundary inclusion before coding",
+      "Testing with Pythagorean triple (3,4,5) for circle boundary",
+      "Mentioning this is similar to Figma/CAD architecture"
     ],
     "subtle_signals_of_experience": [
-      "Using underscore prefix for private attributes (_shapes vs shapes)",
-      "Adding __repr__ methods for debugging",
-      "Type hints on all parameters and return values",
-      "Separating creation (O(1)) from query (O(n)) in complexity discussion",
-      "Mentioning 'In production, I'd add input validation and logging'"
+      "Using descriptive variable names (px, py for point, cx, cy for center)",
+      "Separating shape logic from canvas logic (single responsibility)",
+      "Thinking about extensibility ('if we add triangles later...')",
+      "Testing incrementally, not just at the end"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Coding silently for more than 30 seconds without explaining",
-      "Getting defensive when interviewer suggests a bug",
-      "Saying 'this problem is ambiguous' instead of asking clarifying questions",
-      "Refusing to test after coding ('it should work')"
+      "Coding silently for more than 2 minutes",
+      "Getting defensive when boundary bug is pointed out",
+      "Not testing with overlapping shapes",
+      "Rushing without explaining approach"
     ],
     "technical": [
-      "Using sqrt for circle containment (precision and performance issues)",
-      "Not handling the z-order correctly (forward vs reverse iteration)",
-      "Using < instead of <= for boundaries",
-      "Hardcoding test values in the class instead of parameters",
-      "Ignoring the shapeMap that would help in follow-ups"
+      "Using sqrt for circle check (precision issues)",
+      "Exclusive bounds (< instead of <=)",
+      "Forward iteration (returns bottom shape, not top)",
+      "Forgetting to handle empty canvas case"
     ],
     "communication": [
-      "Using geometric jargon without explaining (AABB, Euclidean distance)",
-      "Going into tangent about R-trees when simple list is sufficient",
-      "Not summarizing approach before coding",
-      "Not asking if interviewer wants to see specific tests"
+      "Not drawing any diagram",
+      "Using 'it just works' instead of explaining why",
+      "Not asking any clarifying questions",
+      "Ignoring interviewer's hints"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "\u2705 createRectangle returns unique ID like 'rect_1'",
-      "\u2705 createCircle returns unique ID like 'circle_1'",
-      "\u2705 getShapeAt returns topmost shape (reverse iteration)",
-      "\u2705 Boundaries are inclusive (using <=)",
-      "\u2705 Circle uses squared distance (no sqrt)",
-      "\u2705 Returns null/None when no shape at point",
-      "\u2705 Traced through at least one overlapping example",
-      "\u2705 Mentioned time/space complexity"
+      "\u2705 Rectangle containment uses inclusive bounds (<=)",
+      "\u2705 Circle containment uses squared distance (no sqrt)",
+      "\u2705 getShapeAt iterates in REVERSE order",
+      "\u2705 Empty canvas returns null/None",
+      "\u2705 Tested with overlapping shapes",
+      "\u2705 Tested boundary points",
+      "\u2705 Explained time and space complexity"
     ],
     "quick_code_review": [
-      "No magic numbers (dimensions passed as parameters)",
-      "Consistent naming (snake_case for Python, camelCase for Java)",
-      "Proper indentation (4 spaces for Python)",
-      "Type hints present",
-      "Docstrings/comments for non-obvious logic"
+      "No magic numbers (except the obvious +1 for counter)",
+      "Consistent naming (x,y for rectangle corner, cx,cy for circle center)",
+      "Contains method is clean and readable",
+      "ID generation is correct (rect_1, rect_2, circle_1)"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "**Input validation**: Check dimensions > 0, coordinates within bounds",
-      "**Logging**: Log shape creation and queries for debugging",
-      "**Thread-safety**: Synchronize access if concurrent modifications possible",
-      "**Serialization**: JSON/Protobuf for saving/loading canvas state",
-      "**Event system**: Notify listeners when shapes added/removed"
+      "Input validation (negative dimensions, null checks)",
+      "Spatial indexing (Quadtree) for large canvases with many shapes",
+      "Thread-safety for concurrent shape creation",
+      "Event system for shape changes (observer pattern)",
+      "Serialization for save/load functionality"
     ],
-    "why_not_in_interview": "Keep interview code focused on the algorithm. These are 'nice to mention' verbally but would slow down coding.",
-    "how_to_mention": "Say: 'In production, I'd also add input validation to ensure positive dimensions, and probably a logging layer. For the interview, I'll focus on the core logic.'"
+    "why_not_in_interview": "Keep interview code focused on the core algorithm. Mention these verbally to show production awareness.",
+    "how_to_mention": "Say: 'In production, I'd add a Quadtree for O(log n) hit testing with thousands of shapes, but for this interview the O(n) solution is appropriate.'"
   },
-  "generated_at": "2026-01-18T21:27:07.985318",
+  "generated_at": "2026-01-19T03:58:19.916549",
   "_meta": {
     "problem_id": "canvas_2d_drawing_app",
     "part_number": null,

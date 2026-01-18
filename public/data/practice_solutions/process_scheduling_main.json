@@ -4,528 +4,350 @@
   "category": "DSA/Binary Search",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic **Binary Search on the Answer** problem combined with a **Greedy Feasibility Check**. The key signal is that we're asked for a 'minimum time' to complete all tasks, and there's a monotonic property: if we can finish in time T, we can definitely finish in time T+1. This screams binary search!",
-    "pattern_recognition": "Binary Search on Answer + Greedy Assignment + Sorting. Similar to LC 2141 (Maximum Running Time of N Computers) and LC 2071 (Maximum Number of Tasks You Can Assign). The pattern involves: (1) Binary search for the answer, (2) For each candidate answer, check if it's feasible using a greedy algorithm.",
+    "first_impressions": "This is a classic **Binary Search on Answer** problem combined with **Greedy Feasibility Checking**. The key signal is the optimization question ('find minimum time') with a feasibility constraint. When I see 'find minimum X such that constraint Y is satisfied', I immediately think binary search.",
+    "pattern_recognition": "Binary Search on Answer + Greedy Assignment + Sorting. Similar to LC 2141 (Maximum Running Time), LC 1482 (Minimum Days for Bouquets), and Meeting Rooms II style problems.",
     "key_constraints": [
-      "n, m up to 10^5 - O(n\u00b2) won't work; need O(n log n) or O(n log max_time)",
-      "Process sizes and capacities up to 10^9 - doesn't change algorithm, but be careful with overflow",
-      "Capacity constraint (capacity >= processSize) - core matching constraint",
-      "Pause time between processes - critical for the time formula: k processes = 2k-1 seconds"
+      "1 \u2264 n, m \u2264 10\u2075 - Arrays can be large, need O(n log n) or better",
+      "Values up to 10\u2079 - Can't use values as array indices, must use comparison-based algorithms",
+      "Pause time formula: k processes = 2k-1 seconds - Critical for time calculation",
+      "Capacity constraint: process must fit in processor - Creates assignment restrictions"
     ],
     "clarifying_questions": [
-      "Can multiple processors execute the same process? - No, each process is executed once",
-      "Is the pause time only between processes on the SAME processor? - Yes, different processors work independently",
-      "If a process cannot be assigned to ANY processor, what should we return? - Return -1",
-      "Are all processors available from time 0? - Yes, they start simultaneously",
-      "Can we assume inputs are valid (non-empty arrays, positive values)? - Clarify edge case handling",
-      "Is the answer always bounded by 2n-1? - Yes, worst case is all processes on one processor"
+      "Can multiple processes run simultaneously on different processors? (Yes, parallelism allowed)",
+      "Does the pause time apply between different processors? (No, only sequential on same processor)",
+      "If a processor handles 0 processes, does it contribute to the answer? (No, only active processors count)",
+      "Can we assume input arrays are non-empty? (Yes, constraints say n,m \u2265 1)",
+      "Is there a preference between processors if multiple can handle the same process? (No, just need feasibility)"
     ],
     "edge_cases_to_consider": [
-      "Largest process > largest capacity \u2192 return -1",
-      "n = 1 with compatible processor \u2192 return 1",
-      "All processes same size, all capacities same \u2192 simple distribution",
-      "More processes than processors \u2192 must have sequential execution",
-      "Some processors unused due to capacity constraints",
-      "n > m \u00d7 k for any reasonable k \u2192 forces higher time"
+      "Largest process exceeds largest capacity \u2192 return -1",
+      "More processes than processors \u00d7 slots \u2192 need more time",
+      "All processes same size \u2192 distribution problem",
+      "Single process, single processor \u2192 answer is 1",
+      "Many small processes, few large-capacity processors \u2192 bottle on processor count"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "Return minimum time to complete all processes",
-        "how_met": "Binary search finds the minimum T where canComplete(T) is true",
+        "how_met": "Binary search finds minimum T where feasibility check passes",
         "gotchas": [
-          "Don't forget off-by-one in binary search bounds"
+          "Using greedy alone gives suboptimal results"
         ]
       },
       {
-        "requirement": "Return -1 if impossible",
-        "how_met": "Check max(processSize) > max(capacity) upfront",
+        "requirement": "Return -1 if any process cannot be assigned",
+        "how_met": "Early check: if max(processSize) > max(capacity), return -1",
         "gotchas": [
-          "Check before binary search, not during"
+          "Must check before binary search"
         ]
       },
       {
-        "requirement": "Handle capacity constraints",
-        "how_met": "Greedy assigns processes only to processors with sufficient capacity",
+        "requirement": "Handle pause time between processes",
+        "how_met": "Formula: k processes = 2k-1 seconds, so slots = (T+1)//2",
         "gotchas": [
-          "Must sort both arrays in descending order"
+          "Off-by-one in formula derivation"
         ]
       },
       {
-        "requirement": "Account for 1-second pause between processes",
-        "how_met": "Time formula: k processes = 2k-1 seconds; k = (T+1)//2",
+        "requirement": "Capacity constraint enforcement",
+        "how_met": "Greedy assignment only assigns process if cap >= size",
         "gotchas": [
-          "This is the most common mistake - forgetting the pause"
-        ]
-      },
-      {
-        "requirement": "Handle up to 10^5 processes and processors",
-        "how_met": "O(n log n) sorting + O((n+m) log n) binary search",
-        "gotchas": [
-          "O(n\u00b2) will TLE"
+          "Must sort both arrays descending"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "minTime",
+        "operation": "minTime overall",
         "target": "O((n+m) log n)",
         "achieved": "O((n+m) log n)",
-        "why": "O(log n) binary search iterations, O(n+m) per feasibility check"
+        "why": "Binary search O(log n) \u00d7 feasibility O(n+m)"
       },
       {
-        "operation": "canComplete",
+        "operation": "Feasibility check",
         "target": "O(n+m)",
         "achieved": "O(n+m)",
-        "why": "Linear scan through both sorted arrays"
+        "why": "Single pass through both sorted arrays"
       },
       {
-        "operation": "Space",
-        "target": "O(n+m)",
-        "achieved": "O(n+m)",
-        "why": "Sorted copies of both arrays"
+        "operation": "Sorting",
+        "target": "O(n log n + m log m)",
+        "achieved": "O(n log n + m log m)",
+        "why": "Standard sorting for both arrays"
       }
     ],
     "non_goals": [
-      "Returning the actual assignment (only time is needed)",
-      "Handling concurrent processes on same processor",
-      "Optimizing for specific processor loads"
+      "Tracking which process goes to which processor (only need feasibility)",
+      "Optimizing for specific processor utilization"
     ]
   },
   "assumptions": [
-    "All processes must be executed exactly once",
-    "Processors can be left idle (not all need to be used)",
-    "Times are in discrete seconds (integer values)",
-    "No preemption - once a process starts, it runs to completion"
+    "Processes are indistinguishable beyond their size (no process IDs matter for assignment)",
+    "Processors can start immediately at time 0",
+    "Time is measured in discrete seconds",
+    "A process of size S can run on ANY processor with capacity \u2265 S (not exactly S)"
   ],
   "tradeoffs": [
     {
-      "decision": "Binary search on time vs. direct calculation",
-      "chosen": "Binary search",
-      "why": "Direct calculation is complex due to capacity constraints; binary search with feasibility check is cleaner and correct",
-      "alternative": "Mathematical formula",
-      "when_to_switch": "Never - the capacity constraints make direct formula impractical"
+      "decision": "Greedy assignment vs. optimal matching",
+      "chosen": "Greedy with sorted arrays",
+      "why": "Provably optimal for this problem due to sorting invariant",
+      "alternative": "Hungarian algorithm / bipartite matching",
+      "when_to_switch": "If processors had different costs or priorities"
     },
     {
-      "decision": "Sort descending vs. ascending",
-      "chosen": "Descending",
-      "why": "Allows greedy to naturally assign largest processes to largest processors",
-      "alternative": "Ascending with reverse iteration",
-      "when_to_switch": "Stylistic choice only"
-    },
-    {
-      "decision": "Create sorted copies vs. sort in place",
-      "chosen": "Sorted copies",
-      "why": "Preserves original input, cleaner code",
-      "alternative": "Sort in place",
-      "when_to_switch": "If space is critical"
+      "decision": "Binary search range",
+      "chosen": "[1, 2n-1]",
+      "why": "Min is 1 (all parallel), max is 2n-1 (all sequential on one processor)",
+      "alternative": "Tighter bounds based on processor count",
+      "when_to_switch": "If answer typically near bounds, could compute tighter range"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
       "Separate feasibility check from search logic",
-      "Keep time formula isolated for easy modification",
-      "Sort once, use many times"
+      "Sort once, use many times",
+      "Binary search for monotonic properties"
     ],
-    "why_this_design_scales": "The canComplete function is the only part that needs modification for follow-ups. Binary search structure remains unchanged. Adding variable execution times or different pause rules only affects the feasibility check.",
+    "why_this_design_scales": "The can_complete() function is modular and can be modified for variable execution times (Part 2) without changing binary search structure",
     "expected_followup_hooks": [
-      "canComplete() - modify for different process characteristics",
-      "maxProcessesInTime() - modify for different time formulas",
-      "The sorting strategy - might need different comparison for priority"
+      "can_complete() would change for variable execution times",
+      "Different cost functions",
+      "Processor preferences or priorities"
     ],
     "invariants": [
-      "Sorted arrays maintain descending order",
-      "Binary search bounds: lo is always infeasible or first feasible, hi is always feasible",
-      "If T is feasible, T+1 is also feasible (monotonicity)"
+      "Sorted descending order maintained",
+      "Largest processes assigned to largest capable processors",
+      "Feasibility is monotonic in time"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    PROCESS SCHEDULING VISUALIZATION                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                             \u2502\n\u2502  PROCESSES (sorted descending):        PROCESSORS (sorted descending):      \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2510           \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u2502\n\u2502  \u2502 P1 \u2502 \u2502 P2 \u2502 \u2502 P3 \u2502 \u2502 P4 \u2502           \u2502 Processor A \u2502 \u2502 Processor B \u2502     \u2502\n\u2502  \u2502 4  \u2502 \u2502 3  \u2502 \u2502 2  \u2502 \u2502 1  \u2502           \u2502 Capacity: 4 \u2502 \u2502 Capacity: 4 \u2502     \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2518           \u2502 Slots: 2    \u2502 \u2502 Slots: 2    \u2502     \u2502\n\u2502    \u2502      \u2502      \u2502      \u2502              \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2502\n\u2502    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2518                     \u2502               \u2502            \u2502\n\u2502                  \u2502                            \u25bc               \u25bc            \u2502\n\u2502                  \u2502                      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u2502\n\u2502                  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502 [4, 3]  \u2502     \u2502 [2, 1]  \u2502        \u2502\n\u2502                                         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2502\n\u2502                                                                             \u2502\n\u2502  TIME FORMULA:  k processes = 2k - 1 seconds (includes k-1 pauses)         \u2502\n\u2502                                                                             \u2502\n\u2502  TIMELINE (T=3, k=2 processes per processor):                              \u2502\n\u2502                                                                             \u2502\n\u2502  Time:      0         1         2         3                                \u2502\n\u2502             \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502                                \u2502\n\u2502  Proc A:    [\u2588\u2588P1\u2588\u2588\u2588\u2588\u2588\u2588][\u2592pause\u2592][\u2588\u2588P2\u2588\u2588\u2588\u2588\u2588\u2588]  \u2192 2 processes               \u2502\n\u2502  Proc B:    [\u2588\u2588P3\u2588\u2588\u2588\u2588\u2588\u2588][\u2592pause\u2592][\u2588\u2588P4\u2588\u2588\u2588\u2588\u2588\u2588]  \u2192 2 processes               \u2502\n\u2502                                         \u2502                                  \u2502\n\u2502                                         \u25bc                                  \u2502\n\u2502                                    TOTAL: 3 seconds                        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    DATA STRUCTURE STATES                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502  BEFORE SORTING:                                                 \u2502\n\u2502  processSize = [1, 2, 3, 4]    capacity = [4, 4, 1]             \u2502\n\u2502                                                                  \u2502\n\u2502  AFTER SORTING (descending):                                     \u2502\n\u2502  processes = [4, 3, 2, 1]      caps = [4, 4, 1]                 \u2502\n\u2502              \u2191                       \u2191                           \u2502\n\u2502         largest first           largest first                    \u2502\n\u2502                                                                  \u2502\n\u2502  BINARY SEARCH STATE:                                            \u2502\n\u2502  lo = 1  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  hi = 7        \u2502\n\u2502       \u2502         feasibility check              \u2502                 \u2502\n\u2502       \u25bc              mid = 4                   \u25bc                 \u2502\n\u2502  [infeasible] \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 [feasible]                 \u2502\n\u2502                       \u2502                                          \u2502\n\u2502              canComplete(4) = true                               \u2502\n\u2502              \u2192 search lower: hi = 4                              \u2502\n\u2502                                                                  \u2502\n\u2502  CONVERGENCE:                                                    \u2502\n\u2502  lo=1, hi=4 \u2192 mid=2 \u2192 infeasible \u2192 lo=3                         \u2502\n\u2502  lo=3, hi=4 \u2192 mid=3 \u2192 feasible \u2192 hi=3                           \u2502\n\u2502  lo=3, hi=3 \u2192 ANSWER = 3                                        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    PROCESS SCHEDULING SYSTEM                     \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                  \u2502\n\u2502  INPUT:                                                          \u2502\n\u2502  Processes: [4, 3, 2, 1]  (sizes, sorted desc)                  \u2502\n\u2502  Capacities: [4, 4, 1]    (sorted desc)                         \u2502\n\u2502                                                                  \u2502\n\u2502  TIME T=3: Each processor can handle (3+1)/2 = 2 processes      \u2502\n\u2502                                                                  \u2502\n\u2502  ASSIGNMENT (Greedy):                                            \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510           \u2502\n\u2502  \u2502 Cap=4 Proc 1 \u2502  \u2502 Cap=4 Proc 2 \u2502  \u2502 Cap=1 Proc 3 \u2502           \u2502\n\u2502  \u2502   [4] [3]    \u2502  \u2502   [2] [1]    \u2502  \u2502   (empty)    \u2502           \u2502\n\u2502  \u2502 2 processes  \u2502  \u2502 2 processes  \u2502  \u2502 can't fit \u22652 \u2502           \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518           \u2502\n\u2502        \u2193                  \u2193                                      \u2502\n\u2502     3 seconds          3 seconds                                 \u2502\n\u2502                                                                  \u2502\n\u2502  ANSWER: max(3, 3) = 3 seconds                                  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                  STATE DURING ALGORITHM                      \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                              \u2502\n\u2502  After Sorting:                                              \u2502\n\u2502  processes = [4, 3, 2, 1]  (descending)                     \u2502\n\u2502  caps      = [4, 4, 1]     (descending)                     \u2502\n\u2502                                                              \u2502\n\u2502  Binary Search State:                                        \u2502\n\u2502  lo=1  \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501  hi=7         \u2502\n\u2502                    mid=4                                     \u2502\n\u2502                      \u2502                                       \u2502\n\u2502              can_complete(4)? \u2713                             \u2502\n\u2502                      \u2193                                       \u2502\n\u2502  lo=1  \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501  hi=4                                  \u2502\n\u2502           mid=2                                              \u2502\n\u2502             \u2502                                                \u2502\n\u2502     can_complete(2)? \u2717                                      \u2502\n\u2502             \u2193                                                \u2502\n\u2502        lo=3  \u2501\u2501\u2501  hi=4                                      \u2502\n\u2502           mid=3                                              \u2502\n\u2502             \u2502                                                \u2502\n\u2502     can_complete(3)? \u2713                                      \u2502\n\u2502             \u2193                                                \u2502\n\u2502        lo=3  \u2501  hi=3  \u2192  ANSWER: 3                          \u2502\n\u2502                                                              \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "Check impossibility",
-        "visualization": "```\nmax(processSize) = 8\nmax(capacity) = 7\n8 > 7 \u2192 return -1\n```",
-        "key_point": "Early exit if largest process cannot fit anywhere"
+        "description": "Sort both arrays descending",
+        "visualization": "processes: [1,2,3,4] \u2192 [4,3,2,1]\ncaps: [4,4,1] \u2192 [4,4,1]",
+        "key_point": "Sorting enables greedy assignment"
       },
       {
         "step": 2,
-        "description": "Sort both arrays descending",
-        "visualization": "```\n[2,5,3] \u2192 [5,3,2]  (processes)\n[6,2,4] \u2192 [6,4,2]  (capacities)\n```",
-        "key_point": "Sorting enables greedy assignment from largest to smallest"
+        "description": "Check impossibility",
+        "visualization": "max(process)=4 \u2264 max(cap)=4 \u2713",
+        "key_point": "Early exit if largest process can't fit"
       },
       {
         "step": 3,
         "description": "Binary search on time T",
-        "visualization": "```\nSearch space: [1, 2*n-1]\n     1\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25002n-1\n         \u2191 mid\n    Is canComplete(mid) true?\n```",
-        "key_point": "Monotonic property: if T works, T+1 also works"
+        "visualization": "Search range: [1, 7]",
+        "key_point": "Minimum 1s (all parallel), max 2n-1 (all sequential)"
       },
       {
         "step": 4,
-        "description": "Feasibility check with greedy",
-        "visualization": "```\nFor T=3, k=(3+1)//2=2:\nProc 6: [5,3] (2 fit)\nProc 4: [2] (1 fits)\nProc 2: [] (none left)\n\u2192 All 3 assigned!\n```",
-        "key_point": "Greedily assign largest processes to largest capacity processors"
+        "description": "Feasibility check for mid=3",
+        "visualization": "slots=(3+1)/2=2\nProc1: [4,3] \u2192 2 assigned\nProc2: [2,1] \u2192 2 assigned\nAll 4 done! \u2713",
+        "key_point": "Greedy assigns largest processes to largest capable processors"
+      },
+      {
+        "step": 5,
+        "description": "Narrow search to find minimum",
+        "visualization": "mid=2 fails, mid=3 succeeds \u2192 answer=3",
+        "key_point": "Binary search converges to minimum feasible time"
       }
     ],
-    "dry_run_table": "| Step | Action | lo | hi | mid | canComplete(mid) | processes_left |\n|------|--------|----|----|-----|------------------|----------------|\n| 0 | Initialize | 1 | 7 | - | - | 4 |\n| 1 | Check mid=4 | 1 | 7 | 4 | true (k=2) | 0 |\n| 2 | hi=mid | 1 | 4 | - | - | - |\n| 3 | Check mid=2 | 1 | 4 | 2 | false (k=1) | 1 |\n| 4 | lo=mid+1 | 3 | 4 | - | - | - |\n| 5 | Check mid=3 | 3 | 4 | 3 | true (k=2) | 0 |\n| 6 | hi=mid | 3 | 3 | - | - | - |\n| 7 | lo==hi | 3 | 3 | - | **DONE** | **Answer: 3** |"
+    "dry_run_table": "| Step | lo | hi | mid | slots | Can Complete? | Action |\n|------|----|----|-----|-------|---------------|--------|\n| 1 | 1 | 7 | 4 | 2 | Yes | hi = 4 |\n| 2 | 1 | 4 | 2 | 1 | No (only 3 slots for 4 processes) | lo = 3 |\n| 3 | 3 | 4 | 3 | 2 | Yes | hi = 3 |\n| 4 | 3 | 3 | - | - | Done | Return 3 |"
   },
   "thinking_process": {
     "step_by_step": [
-      "When I see 'minimum time to complete all tasks', I immediately think of Binary Search on the Answer. The key insight is that if we can complete in time T, we can definitely complete in T+1 (monotonic property).",
-      "The constraint 'capacity >= processSize' means this isn't a simple bin-packing problem. We need to respect which processes can go on which processors.",
-      "The pause time between processes is crucial: k processes take 2k-1 seconds. This means in T seconds, we can do at most (T+1)//2 processes per processor.",
-      "For the feasibility check, I need to determine if all n processes can be assigned. This is a matching problem, but greedy works because: (1) Large processes MUST go on large-capacity processors, (2) There's no benefit to saving large processors for later.",
-      "Sorting both arrays descending lets me greedily assign the largest remaining process to the current processor if it fits.",
-      "Edge case: if max(processSize) > max(capacity), immediately return -1."
+      "When I see 'find minimum time' with constraints, I immediately think **binary search on answer** - this is a classic pattern",
+      "The key insight is: if we can complete in time T, we can complete in time T+1, T+2, etc. This **monotonicity** enables binary search",
+      "For the feasibility check, I need to determine: given time T, can I assign all processes? This is a **greedy assignment** problem",
+      "The formula k processes = 2k-1 seconds tells me: in T seconds, max processes = (T+1)/2 per processor",
+      "Sorting both arrays descending enables greedy: assign largest processes first to largest-capacity processors",
+      "Why greedy works: if a process is too big for current processor, it's too big for ALL remaining processors (sorted order)",
+      "Edge case: if max(processSize) > max(capacity), immediately return -1"
     ],
-    "key_insight": "**The AHA moment**: Instead of trying to directly compute the optimal assignment, ask 'Can we finish in time T?' This transforms an optimization problem into a decision problem. The feasibility check uses a greedy algorithm that works because large processes have no alternative but large-capacity processors.",
-    "why_this_works": "The greedy assignment works because: (1) Processing largest processes first ensures they get placed on capable processors before slots run out. (2) If a smaller processor could handle a process, a larger one definitely can, so using larger processors first never hurts. (3) The monotonic property of time ensures binary search correctly finds the minimum."
+    "key_insight": "**Binary search converts an optimization problem into a decision problem.** Instead of asking 'what is the minimum time?', we ask 'can we finish in time T?' and binary search on T. The greedy feasibility check works because sorting ensures largest-first assignment without backtracking.",
+    "why_this_works": "The greedy assignment is optimal because: (1) Sorting descending means we try to fit hard-to-place processes first, (2) If a process can't fit anywhere, more time won't help with capacity - it only helps with slots, (3) The feasibility function is monotonic in T, making binary search correct."
   },
   "approaches": [
     {
-      "name": "Brute Force - Try All Assignments",
-      "description": "For each possible time T, try all possible ways to assign processes to processors and check if any assignment works.",
-      "pseudocode": "for T in 1 to 2*n-1:\n    for each permutation of process assignment:\n        if valid and max_time <= T:\n            return T\nreturn -1",
-      "time_complexity": "O(n! \u00d7 n \u00d7 max_time) - completely impractical",
-      "space_complexity": "O(n) for tracking assignments",
-      "pros": [
-        "Guaranteed to find optimal",
-        "Easy to understand conceptually"
-      ],
-      "cons": [
-        "Exponentially slow",
-        "Cannot handle even small inputs"
-      ],
-      "when_to_use": "Never in practice, but useful to understand the problem"
-    },
-    {
-      "name": "Greedy Without Binary Search",
-      "description": "Sort processes and capacities descending, greedily assign processes one by one, track time for each processor.",
-      "pseudocode": "sort processes desc, capacities desc\nfor each process:\n    find first processor with capacity >= process\n    if found: assign, update processor time\n    else: return -1\nreturn max(processor times)",
-      "time_complexity": "O(n log n + n \u00d7 m) in naive form, O(n log n) with optimization",
-      "space_complexity": "O(n + m)",
-      "pros": [
-        "Simpler to implement",
-        "Works for some cases"
-      ],
-      "cons": [
-        "May not find optimal assignment",
-        "Greedy choice at each step doesn't guarantee global optimum"
-      ],
-      "when_to_use": "When approximate answer is acceptable"
-    },
-    {
-      "name": "Optimal: Binary Search on Answer with Greedy Feasibility",
-      "description": "Binary search on the time T. For each T, use greedy to check if all processes can be assigned given (T+1)//2 slots per processor.",
-      "pseudocode": "if max(processes) > max(capacities): return -1\nsort both descending\nbinary search T in [1, 2n-1]:\n    if canComplete(T): hi = mid\n    else: lo = mid + 1\nreturn lo",
-      "time_complexity": "O(n log n + m log m) for sorting, O((n+m) \u00d7 log n) for search",
+      "name": "Brute Force: Try All Times",
+      "description": "Check every time from 1 to 2n-1 sequentially",
+      "pseudocode": "for time = 1 to 2n-1:\n    if can_complete(time):\n        return time\nreturn -1",
+      "time_complexity": "O(n \u00d7 (n + m)) - Linear search \u00d7 feasibility check",
       "space_complexity": "O(n + m) for sorted arrays",
       "pros": [
-        "Guaranteed optimal",
-        "Efficient for large inputs",
+        "Simple to implement",
+        "Easy to verify correctness"
+      ],
+      "cons": [
+        "Too slow for n = 10^5",
+        "Doesn't exploit monotonicity"
+      ],
+      "when_to_use": "Only for very small inputs or debugging"
+    },
+    {
+      "name": "Optimal: Binary Search + Greedy Feasibility",
+      "description": "Binary search on time T, use greedy assignment to check feasibility",
+      "pseudocode": "sort processes descending\nsort capacities descending\n\nif max(processes) > max(capacities):\n    return -1\n\nlo, hi = 1, 2n-1\nwhile lo < hi:\n    mid = (lo + hi) / 2\n    if can_complete(mid):\n        hi = mid\n    else:\n        lo = mid + 1\nreturn lo\n\ncan_complete(time):\n    slots = (time + 1) / 2\n    proc_idx = 0\n    for cap in capacities:\n        assigned = 0\n        while assigned < slots and proc_idx < n:\n            if processes[proc_idx] <= cap:\n                proc_idx++, assigned++\n            else:\n                break  # Too big for this and all remaining processors\n    return proc_idx == n",
+      "time_complexity": "O((n + m) log n) - Binary search \u00d7 feasibility check",
+      "space_complexity": "O(n + m) for sorted arrays (or O(1) if sorting in-place)",
+      "pros": [
+        "Optimal time complexity",
         "Clean separation of concerns"
       ],
       "cons": [
-        "Slightly more complex implementation",
-        "Need to prove greedy feasibility works"
+        "Must prove greedy correctness",
+        "Slightly more complex"
       ],
-      "key_insight": "The monotonic property (if T works, T+1 works) enables binary search. Greedy feasibility works because large processes have no alternative."
+      "key_insight": "Monotonicity of feasibility enables binary search; sorting enables greedy without backtracking"
     }
   ],
   "optimal_solution": {
     "name": "Binary Search on Answer with Greedy Feasibility Check",
-    "explanation_md": "## Approach\n\nThe key insight is that this is a **binary search on the answer** problem. Instead of directly computing the minimum time, we ask: *\"Can we complete all processes in time T?\"*\n\n### Why Binary Search Works\n\nIf we can complete all processes in time T, we can definitely complete them in time T+1 (we just have extra time). This **monotonic property** means there's a threshold time T* where:\n- T < T*: impossible\n- T >= T*: possible\n\nBinary search finds this threshold in O(log n) iterations.\n\n### The Feasibility Check\n\nFor a given time T:\n1. Each processor can handle k = \u230a(T+1)/2\u230b processes\n2. Sort processes descending (largest first)\n3. Sort capacities descending (largest first)\n4. Greedily assign: for each processor, take up to k largest unassigned processes that fit\n\n### Why Greedy Works\n\n**Claim**: If there exists any valid assignment, the greedy algorithm finds one.\n\n**Proof sketch**: Large processes can only go on large-capacity processors. By processing largest processes first and assigning them to the largest available processors, we ensure constraints are satisfied. We never \"waste\" a large processor on small processes when large processes still need it.\n\n### Time Complexity Analysis\n\n- Sorting: O(n log n + m log m)\n- Binary search: O(log n) iterations\n- Each feasibility check: O(n + m) single pass\n- **Total: O((n + m) log n)**",
+    "explanation_md": "## Approach\n\nThe key insight is that this is a **binary search on answer** problem. Instead of directly computing the minimum time, we ask: **'Can we complete all processes in time T?'**\n\n### Why Binary Search Works\n\nIf we can complete in time T, we can certainly complete in time T+1 (more time = more slots per processor). This **monotonicity** means we can binary search.\n\n### Why Greedy Works\n\nBy sorting both arrays in **descending order**:\n1. We try to place the **largest processes first**\n2. These have the **fewest options** (fewer processors can handle them)\n3. If a process can't fit in the current processor, it can't fit in any **remaining** processors (smaller capacity)\n\n### Time Formula\n\n```\nk processes on one processor = k executions + (k-1) pauses = 2k - 1 seconds\n\nSolving for k given T seconds:\nT = 2k - 1\nk = (T + 1) / 2  (integer division)\n```",
     "data_structures": [
       {
-        "structure": "List[int] processes (sorted descending)",
-        "purpose": "Enables greedy assignment of largest processes first"
+        "structure": "Sorted int[] processes",
+        "purpose": "Descending order enables greedy assignment (largest first)"
       },
       {
-        "structure": "List[int] capacities (sorted descending)",
-        "purpose": "Process largest capacity processors first"
+        "structure": "Sorted int[] capacities",
+        "purpose": "Descending order ensures largest-capacity processors tried first"
       },
       {
-        "structure": "int lo, hi (binary search bounds)",
-        "purpose": "Track search space [1, 2n-1]"
+        "structure": "Two pointers: proc_idx, assigned",
+        "purpose": "Track assignment progress without extra space"
       }
     ],
     "algorithm_steps": [
-      "1. **Impossibility check**: If max(processSize) > max(capacity), return -1",
-      "2. **Sort both arrays descending**: Enables greedy matching",
-      "3. **Binary search**: lo=1, hi=2n-1 (worst case: all on one processor)",
-      "4. **For each mid**: Call canComplete(mid) to check feasibility",
-      "5. **canComplete(T)**: k = (T+1)//2; greedily assign k largest fitting processes to each processor",
-      "6. **Converge**: When lo == hi, return that value as the minimum time"
+      "1. **Sort** both arrays in descending order",
+      "2. **Early exit**: If max(process) > max(capacity), return -1",
+      "3. **Binary search** on time T in range [1, 2n-1]",
+      "4. For each mid, run **can_complete(mid)** feasibility check",
+      "5. In can_complete: calculate slots = (T+1)/2 per processor",
+      "6. **Greedy assignment**: iterate processors, assign processes while cap >= size",
+      "7. Return True if all processes assigned, else False",
+      "8. **Narrow search** based on feasibility result"
     ],
-    "why_decimal": "N/A - this problem uses integer arithmetic only"
+    "why_decimal": "N/A - This problem uses integer arithmetic only"
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Process Scheduling on Processors - Optimal Solution",
+    "from typing import List",
     "",
-    "Problem: Find minimum time to execute all processes on given processors.",
-    "Approach: Binary Search on Answer + Greedy Feasibility Check",
-    "",
-    "Time Complexity: O((n + m) * log(n))",
-    "Space Complexity: O(n + m)",
-    "\"\"\"",
-    "",
-    "from typing import List, Optional",
-    "",
-    "",
-    "class ProcessScheduler:",
-    "    \"\"\"",
-    "    A scheduler that determines the minimum time to execute all processes",
-    "    on a set of processors with capacity constraints.",
-    "    ",
-    "    Example:",
-    "        >>> scheduler = ProcessScheduler()",
-    "        >>> scheduler.min_time([2, 5, 3], [6, 2, 4])",
-    "        1",
-    "        >>> scheduler.min_time([2, 5, 8], [6, 7, 4])",
-    "        -1",
-    "    \"\"\"",
-    "    ",
+    "class Solution:",
     "    def min_time(self, process_size: List[int], capacity: List[int]) -> int:",
     "        \"\"\"",
-    "        Find the minimum time to complete all processes.",
+    "        Find minimum time to execute all processes.",
     "        ",
-    "        Args:",
-    "            process_size: List of process sizes (1 <= size <= 10^9)",
-    "            capacity: List of processor capacities (1 <= cap <= 10^9)",
-    "            ",
-    "        Returns:",
-    "            Minimum time in seconds, or -1 if impossible",
-    "            ",
-    "        Time Complexity: O((n + m) * log(n))",
-    "        Space Complexity: O(n + m)",
+    "        Approach: Binary search on time T, greedy feasibility check.",
+    "        Key: k processes = 2k-1 seconds, so slots = (T+1)//2",
     "        \"\"\"",
-    "        # Validate inputs",
-    "        if not process_size or not capacity:",
-    "            return -1 if process_size else 0",
-    "        ",
-    "        # Early impossibility check: largest process must fit somewhere",
-    "        max_process = max(process_size)",
-    "        max_capacity = max(capacity)",
-    "        if max_process > max_capacity:",
-    "            return -1",
-    "        ",
-    "        n = len(process_size)",
-    "        m = len(capacity)",
-    "        ",
-    "        # Sort both arrays in descending order for greedy assignment",
-    "        # Largest processes first, largest capacities first",
+    "        # Sort descending for greedy assignment",
     "        processes = sorted(process_size, reverse=True)",
     "        caps = sorted(capacity, reverse=True)",
     "        ",
-    "        # Binary search for minimum time",
-    "        # Lower bound: 1 (minimum possible time)",
-    "        # Upper bound: 2*n - 1 (all processes on one processor)",
+    "        n, m = len(processes), len(caps)",
+    "        ",
+    "        # Early exit: largest process must fit somewhere",
+    "        if processes[0] > caps[0]:",
+    "            return -1",
+    "        ",
+    "        def can_complete(time: int) -> bool:",
+    "            \"\"\"Check if all processes can complete in given time.\"\"\"",
+    "            slots = (time + 1) // 2  # Max processes per processor",
+    "            proc_idx = 0  # Current process to assign",
+    "            ",
+    "            for cap in caps:",
+    "                assigned = 0",
+    "                while assigned < slots and proc_idx < n:",
+    "                    if processes[proc_idx] <= cap:",
+    "                        proc_idx += 1",
+    "                        assigned += 1",
+    "                    else:",
+    "                        # Process too big for this and all remaining processors",
+    "                        break",
+    "                ",
+    "                if proc_idx == n:",
+    "                    return True",
+    "            ",
+    "            return proc_idx == n",
+    "        ",
+    "        # Binary search on time: [1, 2n-1]",
     "        lo, hi = 1, 2 * n - 1",
     "        ",
     "        while lo < hi:",
     "            mid = (lo + hi) // 2",
-    "            if self._can_complete(processes, caps, mid):",
-    "                # Feasible at mid, try smaller",
-    "                hi = mid",
+    "            if can_complete(mid):",
+    "                hi = mid  # Try smaller time",
     "            else:",
-    "                # Not feasible, need more time",
-    "                lo = mid + 1",
+    "                lo = mid + 1  # Need more time",
     "        ",
     "        return lo",
-    "    ",
-    "    def _can_complete(self, processes: List[int], caps: List[int], time: int) -> bool:",
-    "        \"\"\"",
-    "        Check if all processes can be completed within the given time.",
-    "        ",
-    "        Uses greedy assignment: for each processor (largest capacity first),",
-    "        assign as many of the largest remaining processes as fit.",
-    "        ",
-    "        Args:",
-    "            processes: Sorted list of process sizes (descending)",
-    "            caps: Sorted list of capacities (descending)",
-    "            time: Time limit to check",
-    "            ",
-    "        Returns:",
-    "            True if all processes can be assigned, False otherwise",
-    "            ",
-    "        Key Formula:",
-    "            In T seconds, each processor can complete k = (T + 1) // 2 processes",
-    "            (k executions + k-1 pauses = 2k-1 seconds, solve for k)",
-    "        \"\"\"",
-    "        # Calculate max processes per processor in given time",
-    "        # k processes = 2k - 1 seconds (execution + pauses)",
-    "        # T = 2k - 1 => k = (T + 1) / 2",
-    "        max_per_processor = (time + 1) // 2",
-    "        ",
-    "        n = len(processes)",
-    "        process_idx = 0  # Next process to assign",
-    "        ",
-    "        # Greedy: for each processor, assign up to k largest fitting processes",
-    "        for cap in caps:",
-    "            slots = max_per_processor  # Available slots on this processor",
-    "            ",
-    "            # Assign processes while we have slots and processes",
-    "            while slots > 0 and process_idx < n:",
-    "                if processes[process_idx] <= cap:",
-    "                    # This process fits, assign it",
-    "                    process_idx += 1",
-    "                    slots -= 1",
-    "                else:",
-    "                    # Process too large for this processor",
-    "                    # Move to next processor (smaller processes might fit)",
-    "                    break",
-    "        ",
-    "        # All processes assigned?",
-    "        return process_idx == n",
-    "    ",
-    "    def _max_processes_in_time(self, time: int) -> int:",
-    "        \"\"\"",
-    "        Calculate max processes a single processor can complete in given time.",
-    "        ",
-    "        Formula derivation:",
-    "            - k processes = k seconds execution",
-    "            - k processes need (k-1) pauses = (k-1) seconds",
-    "            - Total = 2k - 1 seconds",
-    "            - Solving: T = 2k - 1 => k = (T + 1) / 2",
-    "        \"\"\"",
-    "        return (time + 1) // 2",
     "",
     "",
-    "def main():",
-    "    \"\"\"Demonstrate the ProcessScheduler with test cases.\"\"\"",
-    "    scheduler = ProcessScheduler()",
+    "if __name__ == '__main__':",
+    "    sol = Solution()",
     "    ",
-    "    print(\"=\" * 60)",
-    "    print(\"PROCESS SCHEDULING ON PROCESSORS - TEST SUITE\")",
-    "    print(\"=\" * 60)",
+    "    # Example 1: Parallel execution",
+    "    print(\"Example 1:\", sol.min_time([2, 5, 3], [6, 2, 4]))",
+    "    # Expected: 1 (all processes run in parallel)",
     "    ",
-    "    test_cases = [",
-    "        {",
-    "            \"name\": \"Example 1: Parallel Execution\",",
-    "            \"process_size\": [2, 5, 3],",
-    "            \"capacity\": [6, 2, 4],",
-    "            \"expected\": 1,",
-    "            \"explanation\": \"Each process fits on a unique processor, all execute in parallel\"",
-    "        },",
-    "        {",
-    "            \"name\": \"Example 2: Impossible Assignment\",",
-    "            \"process_size\": [2, 5, 8],",
-    "            \"capacity\": [6, 7, 4],",
-    "            \"expected\": -1,",
-    "            \"explanation\": \"Process 8 cannot fit on any processor (max capacity = 7)\"",
-    "        },",
-    "        {",
-    "            \"name\": \"Example 3: Sequential Processing Required\",",
-    "            \"process_size\": [1, 2, 3, 4],",
-    "            \"capacity\": [4, 4, 1],",
-    "            \"expected\": 3,",
-    "            \"explanation\": \"4 processes on 2 usable processors: [4,3], [2,1] each take 3s\"",
-    "        },",
-    "        {",
-    "            \"name\": \"Example 4: Many Processes, Few Processors\",",
-    "            \"process_size\": [1, 1, 1, 1, 1, 1, 1],",
-    "            \"capacity\": [5, 5],",
-    "            \"expected\": 7,",
-    "            \"explanation\": \"7 processes on 2 processors: 4+3 distribution, max time = 2*4-1 = 7\"",
-    "        },",
-    "        {",
-    "            \"name\": \"Edge Case: Single Process\",",
-    "            \"process_size\": [5],",
-    "            \"capacity\": [10],",
-    "            \"expected\": 1,",
-    "            \"explanation\": \"One process, one capable processor = 1 second\"",
-    "        },",
-    "        {",
-    "            \"name\": \"Edge Case: Tight Fit\",",
-    "            \"process_size\": [10, 10, 10],",
-    "            \"capacity\": [10],",
-    "            \"expected\": 5,",
-    "            \"explanation\": \"3 processes on 1 processor = 2*3-1 = 5 seconds\"",
-    "        },",
-    "    ]",
+    "    # Example 2: Impossible",
+    "    print(\"Example 2:\", sol.min_time([2, 5, 8], [6, 7, 4]))",
+    "    # Expected: -1 (process 8 > max capacity 7)",
     "    ",
-    "    passed = 0",
-    "    for i, tc in enumerate(test_cases, 1):",
-    "        result = scheduler.min_time(tc[\"process_size\"], tc[\"capacity\"])",
-    "        status = \"PASS\" if result == tc[\"expected\"] else \"FAIL\"",
-    "        if result == tc[\"expected\"]:",
-    "            passed += 1",
-    "        ",
-    "        print(f\"\\nTest {i}: {tc['name']}\")",
-    "        print(f\"  Input: processes={tc['process_size']}, capacity={tc['capacity']}\")",
-    "        print(f\"  Expected: {tc['expected']}, Got: {result}\")",
-    "        print(f\"  Status: [{status}]\")",
-    "        print(f\"  Note: {tc['explanation']}\")",
+    "    # Example 3: Sequential needed",
+    "    print(\"Example 3:\", sol.min_time([1, 2, 3, 4], [4, 4, 1]))",
+    "    # Expected: 3 (each cap-4 processor handles 2 processes)",
     "    ",
-    "    print(f\"\\n{'=' * 60}\")",
-    "    print(f\"RESULTS: {passed}/{len(test_cases)} tests passed\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    # Example 4: Many processes, few processors",
+    "    print(\"Example 4:\", sol.min_time([1,1,1,1,1,1,1], [5, 5]))",
+    "    # Expected: 7 (4+3 distribution = max(7,5) = 7)",
+    "    ",
+    "    # Edge case: Single process",
+    "    print(\"Single:\", sol.min_time([5], [5]))",
+    "    # Expected: 1",
+    "    ",
+    "    print(\"\\n\" + \"=\"*50)",
+    "    print(\"All tests completed!\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Process Scheduling on Processors - Optimal Solution",
-    " * ",
-    " * Problem: Find minimum time to execute all processes on given processors.",
-    " * Approach: Binary Search on Answer + Greedy Feasibility Check",
-    " * ",
-    " * Time Complexity: O((n + m) * log(n))",
-    " * Space Complexity: O(n + m)",
-    " */",
-    "public class ProcessScheduler {",
-    "    ",
+    "public class Solution {",
     "    /**",
-    "     * Find the minimum time to complete all processes.",
-    "     * ",
-    "     * @param processSize Array of process sizes",
-    "     * @param capacity Array of processor capacities",
-    "     * @return Minimum time in seconds, or -1 if impossible",
+    "     * Find minimum time to execute all processes.",
+    "     * Approach: Binary search on time T, greedy feasibility check.",
     "     */",
     "    public int minTime(int[] processSize, int[] capacity) {",
-    "        // Validate inputs",
-    "        if (processSize == null || processSize.length == 0) {",
-    "            return 0;",
-    "        }",
-    "        if (capacity == null || capacity.length == 0) {",
-    "            return -1;",
-    "        }",
-    "        ",
     "        int n = processSize.length;",
     "        int m = capacity.length;",
     "        ",
-    "        // Find max values for impossibility check",
-    "        int maxProcess = Arrays.stream(processSize).max().getAsInt();",
-    "        int maxCapacity = Arrays.stream(capacity).max().getAsInt();",
-    "        ",
-    "        // Early termination: largest process must fit somewhere",
-    "        if (maxProcess > maxCapacity) {",
-    "            return -1;",
-    "        }",
-    "        ",
-    "        // Create sorted copies (descending order)",
+    "        // Sort descending for greedy assignment",
     "        Integer[] processes = Arrays.stream(processSize).boxed().toArray(Integer[]::new);",
     "        Integer[] caps = Arrays.stream(capacity).boxed().toArray(Integer[]::new);",
     "        Arrays.sort(processes, Collections.reverseOrder());",
     "        Arrays.sort(caps, Collections.reverseOrder());",
     "        ",
-    "        // Binary search for minimum time",
-    "        int lo = 1;",
-    "        int hi = 2 * n - 1;  // Worst case: all processes on one processor",
+    "        // Early exit: largest process must fit somewhere",
+    "        if (processes[0] > caps[0]) {",
+    "            return -1;",
+    "        }",
+    "        ",
+    "        // Binary search on time: [1, 2n-1]",
+    "        int lo = 1, hi = 2 * n - 1;",
     "        ",
     "        while (lo < hi) {",
-    "            int mid = lo + (hi - lo) / 2;",
+    "            int mid = (lo + hi) / 2;",
     "            if (canComplete(processes, caps, mid)) {",
-    "                hi = mid;  // Feasible, try smaller",
+    "                hi = mid;",
     "            } else {",
-    "                lo = mid + 1;  // Not feasible, need more time",
+    "                lo = mid + 1;",
     "            }",
     "        }",
     "        ",
@@ -533,443 +355,373 @@
     "    }",
     "    ",
     "    /**",
-    "     * Check if all processes can be completed within the given time.",
-    "     * ",
-    "     * Uses greedy assignment: for each processor (largest capacity first),",
-    "     * assign as many of the largest remaining processes as fit.",
-    "     * ",
-    "     * @param processes Sorted array of process sizes (descending)",
-    "     * @param caps Sorted array of capacities (descending)",
-    "     * @param time Time limit to check",
-    "     * @return true if all processes can be assigned",
+    "     * Check if all processes can complete in given time.",
+    "     * Greedy: assign largest processes to largest capable processors.",
     "     */",
     "    private boolean canComplete(Integer[] processes, Integer[] caps, int time) {",
-    "        // Calculate max processes per processor",
-    "        // k processes = 2k - 1 seconds => k = (T + 1) / 2",
-    "        int maxPerProcessor = (time + 1) / 2;",
-    "        ",
+    "        int slots = (time + 1) / 2;  // Max processes per processor",
+    "        int procIdx = 0;",
     "        int n = processes.length;",
-    "        int processIdx = 0;  // Next process to assign",
     "        ",
-    "        // Greedy: for each processor, assign up to k largest fitting processes",
     "        for (int cap : caps) {",
-    "            int slots = maxPerProcessor;",
-    "            ",
-    "            while (slots > 0 && processIdx < n) {",
-    "                if (processes[processIdx] <= cap) {",
-    "                    // This process fits, assign it",
-    "                    processIdx++;",
-    "                    slots--;",
+    "            int assigned = 0;",
+    "            while (assigned < slots && procIdx < n) {",
+    "                if (processes[procIdx] <= cap) {",
+    "                    procIdx++;",
+    "                    assigned++;",
     "                } else {",
-    "                    // Process too large, try next processor",
-    "                    break;",
+    "                    break;  // Too big for this and remaining processors",
     "                }",
     "            }",
+    "            if (procIdx == n) return true;",
     "        }",
     "        ",
-    "        return processIdx == n;",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Calculate max processes a single processor can complete in given time.",
-    "     */",
-    "    private int maxProcessesInTime(int time) {",
-    "        return (time + 1) / 2;",
+    "        return procIdx == n;",
     "    }",
     "    ",
     "    public static void main(String[] args) {",
-    "        ProcessScheduler scheduler = new ProcessScheduler();",
+    "        Solution sol = new Solution();",
     "        ",
-    "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"PROCESS SCHEDULING ON PROCESSORS - TEST SUITE\");",
-    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"Example 1: \" + sol.minTime(",
+    "            new int[]{2, 5, 3}, new int[]{6, 2, 4}));  // Expected: 1",
     "        ",
-    "        // Test Case 1: Parallel Execution",
-    "        int[] p1 = {2, 5, 3};",
-    "        int[] c1 = {6, 2, 4};",
-    "        runTest(scheduler, \"Example 1: Parallel Execution\", p1, c1, 1);",
+    "        System.out.println(\"Example 2: \" + sol.minTime(",
+    "            new int[]{2, 5, 8}, new int[]{6, 7, 4}));  // Expected: -1",
     "        ",
-    "        // Test Case 2: Impossible Assignment",
-    "        int[] p2 = {2, 5, 8};",
-    "        int[] c2 = {6, 7, 4};",
-    "        runTest(scheduler, \"Example 2: Impossible Assignment\", p2, c2, -1);",
+    "        System.out.println(\"Example 3: \" + sol.minTime(",
+    "            new int[]{1, 2, 3, 4}, new int[]{4, 4, 1}));  // Expected: 3",
     "        ",
-    "        // Test Case 3: Sequential Processing",
-    "        int[] p3 = {1, 2, 3, 4};",
-    "        int[] c3 = {4, 4, 1};",
-    "        runTest(scheduler, \"Example 3: Sequential Processing\", p3, c3, 3);",
+    "        System.out.println(\"Example 4: \" + sol.minTime(",
+    "            new int[]{1,1,1,1,1,1,1}, new int[]{5, 5}));  // Expected: 7",
     "        ",
-    "        // Test Case 4: Many Processes, Few Processors",
-    "        int[] p4 = {1, 1, 1, 1, 1, 1, 1};",
-    "        int[] c4 = {5, 5};",
-    "        runTest(scheduler, \"Example 4: Many Processes, Few Processors\", p4, c4, 7);",
-    "        ",
-    "        System.out.println(\"\\n============================================================\");",
-    "    }",
-    "    ",
-    "    private static void runTest(ProcessScheduler scheduler, String name,",
-    "                                int[] processes, int[] capacity, int expected) {",
-    "        int result = scheduler.minTime(processes, capacity);",
-    "        String status = (result == expected) ? \"PASS\" : \"FAIL\";",
-    "        System.out.println(\"\\nTest: \" + name);",
-    "        System.out.println(\"  Input: processes=\" + Arrays.toString(processes) +",
-    "                          \", capacity=\" + Arrays.toString(capacity));",
-    "        System.out.println(\"  Expected: \" + expected + \", Got: \" + result);",
-    "        System.out.println(\"  Status: [\" + status + \"]\");",
+    "        System.out.println(\"\\nAll tests completed!\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-10",
-      "section": "Module Docstring & Imports",
-      "explanation": "We import `List` from typing for type hints. The docstring explains the problem, approach, and complexity upfront. This shows professionalism and helps anyone reading the code."
+      "lines": "1-9",
+      "section": "Imports and Method Signature",
+      "explanation": "Standard imports. The method takes process sizes and capacities, returns minimum time or -1."
     },
     {
-      "lines": "13-24",
-      "section": "Class Definition & Docstring",
-      "explanation": "The `ProcessScheduler` class encapsulates all scheduling logic. The docstring includes working examples that serve as documentation AND can be run with doctest."
+      "lines": "11-13",
+      "section": "Sorting Setup",
+      "explanation": "**Critical step**: Sort both arrays in descending order. This enables the greedy assignment to work correctly - we must try to place largest processes first."
     },
     {
-      "lines": "26-44",
-      "section": "min_time - Input Validation",
-      "explanation": "We validate inputs first (empty arrays, None). The **critical early check** is `max_process > max_capacity` - if the largest process can't fit anywhere, we immediately return -1. This avoids unnecessary computation."
+      "lines": "17-18",
+      "section": "Early Impossibility Check",
+      "explanation": "If the largest process exceeds the largest capacity, it's impossible. Check this BEFORE binary search to avoid unnecessary work."
     },
     {
-      "lines": "46-54",
-      "section": "Sorting for Greedy",
-      "explanation": "We sort BOTH arrays in **descending order**. This is crucial: it allows our greedy to process largest items first. We create copies to avoid modifying the original input."
+      "lines": "20-35",
+      "section": "can_complete() Feasibility Check",
+      "explanation": "The heart of the algorithm. Given time T, calculate slots = (T+1)//2. For each processor (largest first), greedily assign as many processes as fit. If a process is too big, break (all remaining processors are smaller). Return True if all processes assigned."
     },
     {
-      "lines": "56-68",
-      "section": "Binary Search",
-      "explanation": "The binary search finds the minimum feasible time. Bounds: `lo=1` (minimum possible), `hi=2n-1` (all processes on one processor). The condition `lo < hi` ensures we stop when converged. We use `hi = mid` (not `mid-1`) because `mid` might be the answer."
+      "lines": "38-45",
+      "section": "Binary Search on Answer",
+      "explanation": "Search time T in [1, 2n-1]. If can_complete(mid) succeeds, try smaller (hi=mid). If fails, need more time (lo=mid+1). Loop terminates when lo==hi, which is the minimum feasible time."
     },
     {
-      "lines": "70-100",
-      "section": "_can_complete - Feasibility Check",
-      "explanation": "This is the **heart of the algorithm**. Key formula: `max_per_processor = (time + 1) // 2` derives from `T = 2k - 1`. The greedy assigns largest processes to largest-capacity processors. We break when a process doesn't fit (remaining processes are even larger, won't fit either)."
-    },
-    {
-      "lines": "102-114",
-      "section": "Helper Method & Main",
-      "explanation": "The helper method documents the time formula. The main function runs comprehensive test cases covering all examples and edge cases. This demonstrates testing discipline."
+      "lines": "48-67",
+      "section": "Test Cases",
+      "explanation": "Demonstrates all example cases: parallel execution (T=1), impossible assignment (-1), sequential needed (T=3), and many processes on few processors (T=7)."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. First verify sorting works (print sorted arrays). 2. Test _can_complete with known T values. 3. Add print statements in binary search to see lo/hi progression. 4. Test edge cases individually before running full suite.",
+    "how_to_test_incrementally": "1. Test can_complete() alone with known T values. 2. Print slots calculation. 3. Trace assignment process with small examples. 4. Verify binary search converges correctly.",
     "what_to_print_or_assert": [
-      "print(f'Testing T={mid}, canComplete={result}')",
-      "assert max(processes) <= max(caps) or return -1",
-      "print(f'After processor cap={cap}: assigned {process_idx} processes')"
+      "print(f'T={time}, slots={slots}')",
+      "print(f'Assigning process {proc_idx} (size {processes[proc_idx]}) to cap {cap}')",
+      "assert can_complete(answer) == True",
+      "assert can_complete(answer - 1) == False  # For answer > 1"
     ],
     "common_failure_modes": [
-      "Off-by-one in binary search bounds",
-      "Forgetting to sort descending",
-      "Using wrong formula for k (common: k=T//2 instead of (T+1)//2)",
-      "Not handling edge case of empty inputs"
+      "Off-by-one in slots formula (should be (T+1)//2, not T//2)",
+      "Forgetting to break when process too big",
+      "Binary search bounds wrong (should be 2n-1, not 2n)",
+      "Not sorting both arrays descending"
     ],
-    "how_to_fix_fast": "1. If wrong answer: add print inside canComplete to see which processes get assigned. 2. If infinite loop: check binary search update logic (lo=mid+1, hi=mid). 3. If -1 for feasible case: verify sorting order is descending."
+    "how_to_fix_fast": "1. Check slots formula with manual calculation. 2. Trace Example 3 by hand. 3. Verify sorting order. 4. Print state at each binary search iteration."
   },
   "complexity_analysis": {
     "time": {
       "sorting": {
         "complexity": "O(n log n + m log m)",
-        "explanation": "Sort both arrays once at the start"
+        "explanation": "Standard sorting for both arrays"
       },
       "binary_search": {
         "complexity": "O(log n)",
-        "explanation": "Search space is [1, 2n-1], so O(log n) iterations"
+        "explanation": "Search range is [1, 2n-1] \u2192 O(log n) iterations"
       },
       "feasibility_check": {
         "complexity": "O(n + m)",
-        "explanation": "Single pass through both sorted arrays"
+        "explanation": "Single pass through both sorted arrays with two pointers"
       },
-      "overall": "O(n log n + m log m + (n + m) \u00d7 log n) = O((n + m) log(max(n, m)))"
+      "overall": "O((n + m) log n) - Binary search \u00d7 feasibility check + sorting"
     },
     "space": {
       "complexity": "O(n + m)",
-      "breakdown": "- Sorted copy of processes: O(n)\n- Sorted copy of capacities: O(m)\n- Binary search variables: O(1)\n- Feasibility check variables: O(1)",
-      "note": "Could reduce to O(1) extra space by sorting in place, but that modifies input"
+      "breakdown": "- Sorted copies of input arrays: O(n + m)\n- Recursion: O(1) (iterative approach)\n- No additional data structures needed",
+      "note": "Can be O(1) extra space if sorting in-place and inputs are modifiable"
     },
-    "can_we_do_better": "The O(n log n) sorting is a lower bound for comparison-based sorting. The binary search with O(n+m) per check is optimal for this approach. Theoretically might be possible to do better with different algorithmic approach, but this is the standard optimal solution."
+    "can_we_do_better": "No - we need O(n log n) for sorting, and the binary search approach is optimal for this problem type."
   },
   "dry_run": {
-    "example": "process_size=[1,2,3,4], capacity=[4,4,1]",
-    "trace_table": "| Step | Phase | Details | State |\n|------|-------|---------|-------|\n| 0 | Input | processes=[1,2,3,4], caps=[4,4,1] | - |\n| 1 | Validation | max(proc)=4, max(cap)=4, 4\u22644 \u2713 | Continue |\n| 2 | Sort | processes=[4,3,2,1], caps=[4,4,1] | Sorted desc |\n| 3 | BS Init | lo=1, hi=7 (2\u00d74-1) | Search space |\n| 4 | BS Iter 1 | mid=4, canComplete(4)? | Checking |\n| 4a | canComplete | k=(4+1)//2=2, cap=4: assign [4,3] | idx=2 |\n| 4b | canComplete | cap=4: assign [2,1] | idx=4 |\n| 4c | canComplete | cap=1: none left | idx=4=n \u2713 |\n| 5 | BS Update | feasible, hi=4 | lo=1, hi=4 |\n| 6 | BS Iter 2 | mid=2, canComplete(2)? | Checking |\n| 6a | canComplete | k=(2+1)//2=1, cap=4: assign [4] | idx=1 |\n| 6b | canComplete | cap=4: assign [3] | idx=2 |\n| 6c | canComplete | cap=1: [2]>1, skip | idx=2\u22604 \u2717 |\n| 7 | BS Update | infeasible, lo=3 | lo=3, hi=4 |\n| 8 | BS Iter 3 | mid=3, canComplete(3)? | Checking |\n| 8a | canComplete | k=(3+1)//2=2, cap=4: assign [4,3] | idx=2 |\n| 8b | canComplete | cap=4: assign [2,1] | idx=4 |\n| 8c | canComplete | cap=1: none left | idx=4=n \u2713 |\n| 9 | BS Update | feasible, hi=3 | lo=3, hi=3 |\n| 10 | BS Done | lo==hi | **Answer: 3** |",
+    "example": "processSize=[1,2,3,4], capacity=[4,4,1]",
+    "trace_table": "| Step | lo | hi | mid | slots | Assignment Progress | Result |\n|------|----|----|-----|-------|---------------------|--------|\n| Init | 1 | 7 | - | - | processes=[4,3,2,1], caps=[4,4,1] | - |\n| 1 | 1 | 7 | 4 | 2 | cap4: [4,3], cap4: [2,1], cap1: - | \u2713 all assigned |\n| 2 | 1 | 4 | 2 | 1 | cap4: [4], cap4: [3], cap1: can't fit 2 | \u2717 |\n| 3 | 3 | 4 | 3 | 2 | cap4: [4,3], cap4: [2,1] | \u2713 all assigned |\n| 4 | 3 | 3 | - | - | lo == hi | Return 3 |",
     "final_answer": "3 seconds"
   },
   "test_cases": [
     {
-      "name": "Parallel Execution (all fit in T=1)",
-      "category": "Happy Path",
-      "input": "process_size=[2,5,3], capacity=[6,2,4]",
+      "name": "Parallel Execution (Optimal)",
+      "category": "Basic",
+      "input": "processSize=[2,5,3], capacity=[6,2,4]",
       "expected": "1",
-      "explanation": "3 processes, 3 processors: [5\u21926], [3\u21924], [2\u21922]. All parallel = 1 second."
+      "explanation": "Each process maps to one processor: 5\u21926, 3\u21924, 2\u21922. All run in parallel in 1 second."
     },
     {
       "name": "Impossible - Process Too Large",
       "category": "Edge Case",
-      "input": "process_size=[2,5,8], capacity=[6,7,4]",
+      "input": "processSize=[2,5,8], capacity=[6,7,4]",
       "expected": "-1",
-      "explanation": "Process 8 > max capacity 7. No processor can handle it."
+      "explanation": "Process 8 > max capacity 7. No valid assignment exists."
     },
     {
       "name": "Sequential Processing Required",
-      "category": "Core Logic",
-      "input": "process_size=[1,2,3,4], capacity=[4,4,1]",
+      "category": "Medium",
+      "input": "processSize=[1,2,3,4], capacity=[4,4,1]",
       "expected": "3",
-      "explanation": "4 processes, only 2 usable processors. Distribution: [4,3] and [2,1], each takes 3s."
+      "explanation": "4 processes, but only 2 useful processors (cap=1 can't handle sizes 2-4). Each handles 2: time = 2\u00d72-1 = 3."
     },
     {
       "name": "Many Processes, Few Processors",
-      "category": "Stress Test",
-      "input": "process_size=[1,1,1,1,1,1,1], capacity=[5,5]",
+      "category": "Hard",
+      "input": "processSize=[1,1,1,1,1,1,1], capacity=[5,5]",
       "expected": "7",
-      "explanation": "7 processes, 2 processors. Best: 4+3 split. max(2\u00d74-1, 2\u00d73-1) = max(7,5) = 7."
+      "explanation": "7 processes on 2 processors. Best split: 4+3. Time = max(2\u00d74-1, 2\u00d73-1) = max(7,5) = 7."
     },
     {
       "name": "Single Process",
       "category": "Edge Case",
-      "input": "process_size=[5], capacity=[10]",
+      "input": "processSize=[5], capacity=[10]",
       "expected": "1",
-      "explanation": "One process, one capable processor = 1 second."
+      "explanation": "One process on one capable processor takes exactly 1 second."
     },
     {
-      "name": "All on One Processor",
+      "name": "All Same Size",
       "category": "Edge Case",
-      "input": "process_size=[10,10,10], capacity=[10]",
+      "input": "processSize=[5,5,5,5,5], capacity=[5,5]",
       "expected": "5",
-      "explanation": "3 processes on 1 processor = 2\u00d73-1 = 5 seconds."
-    },
-    {
-      "name": "Unused Processor Due to Capacity",
-      "category": "Gotcha",
-      "input": "process_size=[5,5,5], capacity=[10,1]",
-      "expected": "5",
-      "explanation": "Processor with cap=1 is useless. All 3 processes go to cap=10 processor."
+      "explanation": "5 processes on 2 processors. Best split: 3+2. Time = max(5,3) = 5 seconds."
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Wrong formula: k = T // 2",
-      "why_wrong": "In T=3 seconds: [exec][pause][exec] = 2 processes, not 1. Correct formula: k = (T+1)//2 = 2.",
-      "correct_approach": "Derive from T = 2k - 1, so k = (T + 1) / 2",
-      "code_wrong": "max_per_processor = time // 2  # WRONG",
-      "code_correct": "max_per_processor = (time + 1) // 2  # CORRECT"
+      "mistake": "Wrong slots formula",
+      "why_wrong": "Using T//2 instead of (T+1)//2. Example: T=3 should give slots=2, not 1.",
+      "correct_approach": "slots = (time + 1) // 2",
+      "code_wrong": "slots = time // 2  # Wrong! T=3 \u2192 1 slot",
+      "code_correct": "slots = (time + 1) // 2  # Correct! T=3 \u2192 2 slots"
     },
     {
       "mistake": "Sorting in ascending order",
-      "why_wrong": "Greedy needs to assign LARGEST processes to LARGEST capacities first. Ascending order would try to fit small processes first, potentially wasting large-capacity slots.",
-      "correct_approach": "Sort both arrays descending",
-      "code_wrong": "processes = sorted(process_size)  # WRONG: ascending",
-      "code_correct": "processes = sorted(process_size, reverse=True)  # CORRECT: descending"
+      "why_wrong": "Greedy assignment fails. Large processes might not get placed.",
+      "correct_approach": "Sort BOTH arrays in DESCENDING order",
+      "code_wrong": "processes = sorted(process_size)  # Ascending",
+      "code_correct": "processes = sorted(process_size, reverse=True)  # Descending"
     },
     {
-      "mistake": "Binary search bound: hi = mid - 1",
-      "why_wrong": "When canComplete(mid) is true, mid itself might be the minimum. Using hi = mid - 1 could skip the answer.",
-      "correct_approach": "Use hi = mid when feasible",
-      "code_wrong": "if canComplete(mid): hi = mid - 1  # WRONG",
-      "code_correct": "if canComplete(mid): hi = mid  # CORRECT"
+      "mistake": "Not breaking when process too big",
+      "why_wrong": "Trying smaller processes when current one doesn't fit is incorrect - we sorted descending, so subsequent processes ARE smaller but the current large one is still unassigned.",
+      "correct_approach": "Break immediately - if current process doesn't fit, it means we can't place it",
+      "code_wrong": "if processes[proc_idx] <= cap:\n    # assign\nelse:\n    proc_idx += 1  # Skip to next - WRONG!",
+      "code_correct": "if processes[proc_idx] <= cap:\n    # assign\nelse:\n    break  # This processor can't help anymore"
     },
     {
-      "mistake": "Not checking impossibility first",
-      "why_wrong": "Without early check, binary search might run to completion and return wrong answer.",
-      "correct_approach": "Check max(processSize) > max(capacity) before binary search",
-      "code_wrong": "# Start binary search directly",
-      "code_correct": "if max(process_size) > max(capacity): return -1"
-    },
-    {
-      "mistake": "Greedy: continuing after a process doesn't fit",
-      "why_wrong": "If process[idx] doesn't fit in current processor, smaller processes (process[idx+1]) might. But the algorithm should break and try next processor, not skip.",
-      "correct_approach": "Break the inner loop and move to next processor. The key insight is we're iterating through processes in order, so if one doesn't fit, we should try a smaller-capacity processor for remaining smaller processes.",
-      "code_wrong": "if processes[idx] > cap: continue  # WRONG: skip this process",
-      "code_correct": "if processes[idx] > cap: break  # CORRECT: try next processor"
+      "mistake": "Using greedy alone without binary search",
+      "why_wrong": "Greedy tells us IF assignment works for given T, not WHAT T to use",
+      "correct_approach": "Binary search to find minimum T, greedy to verify feasibility",
+      "code_wrong": "# Directly try to assign without searching for optimal T",
+      "code_correct": "# Binary search on T, use greedy as feasibility oracle"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem! Before I start, I'd like to make sure I understand the constraints correctly and share my initial thoughts on the approach.",
+    "opening": "Thank you for the problem. This looks like a process scheduling optimization problem. Before I code, let me clarify a few things and share my approach...",
     "clarifying_questions_to_ask": [
-      "Just to confirm: the 1-second pause happens AFTER each process completes (except the last one), correct?",
-      "Can a process be split across multiple processors, or must it run entirely on one?",
-      "If multiple valid assignments exist, we just need the minimum time, not the actual assignment?",
-      "Are there any constraints on the relationship between n (processes) and m (processors)?",
-      "For the return value, should I return -1 specifically for impossible cases, or is any negative value acceptable?"
+      "Does pause time apply only within a single processor, not across processors? (Yes)",
+      "Can I modify the input arrays, or should I create copies? (Usually can modify)",
+      "Should I optimize for time or space? (Time is typically priority)",
+      "What's the expected input size? (Up to 10^5 - need efficient algorithm)"
     ],
     "what_to_mention_proactively": [
-      "This is a classic binary search on the answer pattern",
-      "The time formula is crucial: k processes = 2k-1 seconds",
+      "This is a binary search on answer problem - the feasibility function is monotonic",
       "I'll sort both arrays descending to enable greedy assignment",
-      "Let me draw a quick timeline to verify my understanding of the pause time"
+      "Let me derive the time formula: k processes = 2k-1 seconds",
+      "I'll check impossibility upfront before binary search"
     ],
     "communication_during_coding": [
-      "I'm starting with the impossibility check - if the largest process can't fit anywhere, we return -1 immediately",
-      "Now sorting both arrays descending - this is key for the greedy feasibility check",
-      "Binary search bounds: 1 to 2n-1, where 2n-1 is the worst case of all processes on one processor",
-      "In the feasibility check, I'm using (T+1)//2 for the number of processes per processor"
+      "Here's the sorting for greedy assignment...",
+      "This can_complete function is the feasibility oracle...",
+      "Notice I break early when a process is too big...",
+      "Binary search narrows down to the minimum feasible time..."
     ],
     "if_stuck": [
-      "Step back and think: What's the monotonic property? If we can finish in T, can we finish in T+1?",
-      "Draw the timeline for a small example to verify the time formula",
-      "Ask: 'Can I get a hint on whether binary search is the right direction?'"
+      "Step back: What makes this problem hard? The optimization + constraint combination",
+      "Key realization: Binary search converts optimization to decision",
+      "Try a small example by hand to see the greedy pattern"
     ],
-    "time_management": "0-5min: Clarify + draw timeline | 5-10min: Explain approach (binary search + greedy) | 10-25min: Code solution | 25-35min: Test + trace through example | 35-45min: Complexity analysis + follow-ups"
+    "time_management": "0-5min: Clarify & understand | 5-10min: Explain approach | 10-25min: Code | 25-35min: Test & debug | 35-45min: Complexity analysis & follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Binary Search on Answer with Feasibility Check",
+    "pattern_name": "Binary Search on Answer + Greedy Feasibility",
     "indicators": [
-      "'Find minimum/maximum time/value to satisfy constraint'",
-      "Monotonic property: if X works, X+1 (or X-1) also works",
-      "Direct calculation is complex but checking feasibility for a given answer is easier"
+      "Find minimum/maximum X such that constraint Y",
+      "Can we do it in time T?",
+      "Optimization with monotonic feasibility"
     ],
     "similar_problems": [
-      "LC 2141 - Maximum Running Time of N Computers: Same pattern, different context",
-      "LC 1482 - Minimum Number of Days to Make m Bouquets: Binary search + greedy check",
-      "LC 2071 - Maximum Number of Tasks You Can Assign: Very similar processor-task matching",
-      "LC 875 - Koko Eating Bananas: Classic binary search on answer",
-      "LC 1011 - Capacity To Ship Packages: Binary search for minimum capacity"
+      "LC 2141 - Maximum Running Time of N Computers (same pattern, different domain)",
+      "LC 1482 - Minimum Days to Make m Bouquets (binary search + feasibility)",
+      "LC 2071 - Maximum Number of Tasks (assignment with binary search)",
+      "LC 875 - Koko Eating Bananas (classic binary search on answer)"
     ],
-    "template": "```\ndef solve(constraints):\n    if impossible(): return -1\n    lo, hi = min_possible, max_possible\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if is_feasible(mid):\n            hi = mid  # or lo = mid for maximization\n        else:\n            lo = mid + 1  # or hi = mid - 1\n    return lo\n```"
+    "template": "1. Identify the answer space (min to max possible). 2. Write feasibility function can_do(X). 3. Binary search to find boundary. 4. Return first feasible or last infeasible + 1."
   },
   "follow_up_preparation": {
-    "part_2_hint": "Part 2 likely adds **variable execution times** per process. The time formula changes from 2k-1 to sum of execution times + (k-1) pauses. The feasibility check needs modification to track actual time, not just process count.",
-    "part_3_hint": "Part 3 mentions Token Bucket Rate Limiter - this is a different problem about rate limiting, possibly tracking concurrent processes over time windows.",
-    "data_structure_evolution": "Part 1: Sorted arrays + two pointers \u2192 Part 2: Might need priority queue or more sophisticated matching \u2192 Part 3: Sliding window or token bucket implementation"
+    "part_2_hint": "Part 2 may add variable execution times per process. The greedy assignment would need modification - might need more sophisticated matching.",
+    "part_3_hint": "Part 3 might involve rate limiting or resource constraints. Consider how the feasibility check would change.",
+    "data_structure_evolution": "Part 1: Sorted arrays + greedy \u2192 Part 2: Might need priority queue or more complex matching \u2192 Part 3: Add rate limiting state"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. Let me first make sure I understand it correctly. We have n processes and m processors. Each processor can only handle processes within its capacity, and there's a 1-second pause between consecutive processes on the same processor. We need to find the minimum time to complete all processes, or -1 if impossible. Is that correct?",
-    "after_clarification": "Great. So my approach will be to use binary search on the answer. The key insight is that if we can complete all processes in time T, we can definitely complete them in T+1. For each candidate time T, I'll check feasibility using a greedy algorithm. Does this approach sound reasonable before I start coding?",
+    "opening_verbatim": "Thank you for this problem. At first glance, this looks like a binary search on answer problem combined with greedy assignment. Let me think through the key insights...",
+    "after_clarification": "Great, so to summarize: I need to find minimum time where all processes complete, each processor handles at most k processes in time 2k-1, and I need to respect capacity constraints. My approach will be binary search on time with a greedy feasibility check. Sound good?",
     "while_coding": [
-      "I'm first checking the impossibility case - if the largest process exceeds the largest capacity...",
-      "Now I'm sorting both arrays in descending order for the greedy assignment...",
-      "The formula (T+1)//2 gives us the max processes per processor in time T..."
+      "I'm sorting descending so largest processes get assigned first...",
+      "This feasibility check returns true if we can complete in time T...",
+      "Notice the slots formula: (T+1)//2 comes from inverting 2k-1=T..."
     ],
-    "after_coding": "Let me trace through Example 3 to verify: processes [4,3,2,1], capacities [4,4,1]. With T=3, k=2 processes per processor. First processor takes [4,3], second takes [2,1]. All assigned in 3 seconds.",
-    "when_stuck_verbatim": "I'm thinking about how to structure the feasibility check. The challenge is matching processes to processors respecting capacity. Let me think... if I process largest processes first, they have fewer options, so I should handle them first. That suggests descending sort.",
-    "after_mistake": "Actually, I see an issue - I used T//2 instead of (T+1)//2. Let me fix that. The derivation is: k processes take 2k-1 seconds, so k = (T+1)/2.",
-    "before_moving_on": "So the time complexity is O((n+m) log n) and space is O(n+m). This handles Part 1. Ready for the follow-up when you are."
+    "after_coding": "Let me trace through Example 3 to verify: processSize=[1,2,3,4], capacity=[4,4,1]...",
+    "when_stuck_verbatim": "Let me step back. The key constraint is that feasibility is monotonic in time - if we can finish in T, we can finish in T+1. This means binary search applies...",
+    "after_mistake": "Good catch - I see the issue. The slots formula should be (T+1)//2, not T//2. Let me fix that...",
+    "before_moving_on": "This handles Part 1 with O((n+m) log n) time complexity. The space is O(n+m) for sorted copies. Ready for Part 2?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can candidate recognize binary search on answer pattern?",
-      "Does candidate correctly derive the time formula?",
-      "Is the greedy feasibility logic correct?",
-      "Does candidate handle edge cases (impossible case)?",
-      "Code quality and communication clarity"
+      "Pattern recognition (binary search on answer)",
+      "Clean algorithm design",
+      "Ability to prove greedy correctness",
+      "Code quality and testing instinct",
+      "Communication clarity"
     ],
     "bonus_points": [
-      "Drawing the timeline diagram unprompted",
-      "Proving why greedy works (large processes have no alternative)",
-      "Mentioning the monotonic property explicitly",
-      "Testing with multiple examples after coding",
-      "Considering the complexity and proving optimality"
+      "Immediately recognizing binary search on answer pattern",
+      "Deriving the time formula correctly",
+      "Explaining why greedy works without being asked",
+      "Catching the descending sort requirement",
+      "Testing with edge cases proactively"
     ],
     "red_flags": [
-      "Jumping to greedy without binary search (suboptimal)",
-      "Getting the time formula wrong (T//2 vs (T+1)//2)",
-      "Forgetting to sort or sorting in wrong order",
-      "Not checking impossibility case",
-      "Unable to explain why the approach works"
+      "Trying pure greedy without binary search",
+      "Wrong slots formula",
+      "Ascending sort instead of descending",
+      "Not checking impossibility upfront",
+      "Silent coding without explanation"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as binary search on answer, clearly explain the monotonic property, correctly derive the time formula with a quick timeline sketch, implement clean code with good variable names, and proactively test with examples. They treat the interviewer as a collaborator, explaining their thought process throughout."
+    "what_differentiates_strong_candidates": "Strong candidates recognize the pattern immediately, explain WHY the greedy is correct (sorted order + monotonicity), and test their solution methodically. They treat the problem as a conversation, not a test."
   },
   "time_milestones": {
-    "by_5_min": "Problem understood, clarifying questions asked, key formula (2k-1) confirmed, approach identified (binary search on answer)",
-    "by_10_min": "Approach explained to interviewer, data structures chosen (sorted arrays), algorithm steps outlined",
-    "by_20_min": "Core implementation complete - minTime and canComplete methods written",
-    "by_25_min": "Edge cases handled (impossibility check), basic testing started",
-    "by_30_min": "Dry run with example complete, complexity analysis discussed",
-    "warning_signs": "Still clarifying at 10 min \u2192 speed up. Still coding at 30 min \u2192 simplify. Bugs in canComplete \u2192 verify sorting order and formula."
+    "by_5_min": "Understand problem, recognize binary search on answer pattern, clarify pause time formula",
+    "by_10_min": "Explain full approach: sort \u2192 impossibility check \u2192 binary search \u2192 greedy feasibility",
+    "by_20_min": "Core implementation complete, basic structure working",
+    "by_30_min": "Full solution coded, tested with examples, complexity analyzed",
+    "by_40_min": "Edge cases handled, ready for follow-up parts",
+    "warning_signs": "If still confused about approach at 10 min, or debugging basic errors at 25 min, you're behind"
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Don't panic. Say: 'I think I see an issue - let me trace through this.' Fix it methodically. The common bugs are: wrong formula ((T+1)//2 not T//2), wrong sort order, or wrong binary search bounds.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember the exact Python syntax for sorting in reverse, but I need something like sorted(arr, reverse=True).' Write it as clearly as you can - minor syntax errors are fine.",
-    "when_approach_is_wrong": "Say: 'Actually, I realize pure greedy won't guarantee the optimal solution. Let me reconsider.' Pivot to binary search on answer.",
-    "when_completely_stuck": "Say: 'I'm stuck on the feasibility check. Could you give me a hint about how to verify if time T is achievable?' Asking for help is better than spinning.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on the core binary search and feasibility check, and I'll explain what testing I'd add given more time.'"
+    "when_you_make_a_bug": "Stay calm. Say: 'Let me trace through this... ah, I see the issue - the slots formula is off by one. Let me fix it.' Interviewers expect bugs; they evaluate your debugging process.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for reverse sort in Java, but I need to sort descending. Let me write it as a comparator...' This is fine.",
+    "when_approach_is_wrong": "If greedy alone doesn't work: 'Actually, greedy gives a valid assignment but not the minimum time. I need to binary search on time and use greedy as a feasibility check.'",
+    "when_completely_stuck": "Ask: 'Could you give me a hint about what approach works here?' Then build from there.",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me finish the core algorithm and explain what edge cases I'd handle given more time.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them to accelerate, not to think for you.",
+    "when_using_cursor_or_copilot": "AI tools are allowed at Rippling. Use them for boilerplate and syntax, not for the core algorithm insight.",
     "what_to_do": [
-      "Use AI for boilerplate (class structure, imports)",
-      "Use for generating test cases after you write the solution",
-      "Let it autocomplete obvious syntax",
-      "Use it to format/document code"
+      "Let AI autocomplete sort syntax",
+      "Use for generating test cases",
+      "Autocomplete obvious loop structures"
     ],
     "what_not_to_do": [
-      "Don't paste the entire problem and expect the answer",
-      "Don't accept suggestions without understanding them",
-      "Don't let AI pick your algorithm - YOU decide binary search, YOU explain why"
+      "Don't paste the entire problem for a solution",
+      "Don't accept binary search bounds without verifying",
+      "Don't let AI write the feasibility check logic"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests code, explain it: 'The AI completed this, and it's using (T+1)//2 because...' Show you understand every line.",
-    "expectation_adjustment": "With AI, you should complete faster. If you're slower with AI, disable it. Interviewers expect MORE polish, not less understanding."
+    "how_to_demonstrate_understanding": "If AI suggests something, explain it: 'This sorts descending because we need to assign largest processes first to ensure they get capable processors.'",
+    "expectation_adjustment": "With AI, you should complete faster. If you're slower with AI than without, don't use it."
   },
   "signal_points": {
     "wow_factors": [
-      "Drawing the timeline diagram before coding to verify understanding",
-      "Immediately recognizing 'binary search on answer' pattern",
-      "Proving greedy works: 'Large processes have no alternative but large-capacity processors'",
-      "Mentioning monotonic property explicitly",
-      "Writing clean, well-named code on first pass",
-      "Testing with edge cases unprompted"
+      "Immediately saying 'This is binary search on answer' in first minute",
+      "Deriving slots = (T+1)//2 unprompted",
+      "Explaining greedy correctness: 'Sorted descending means if current doesn't fit, all remaining processors are smaller'",
+      "Drawing ASCII timeline diagram before coding"
     ],
     "subtle_signals_of_experience": [
-      "Checking impossibility BEFORE binary search (early exit)",
-      "Using lo < hi instead of lo <= hi (avoids off-by-one)",
-      "Creating sorted copies instead of modifying input",
-      "Explaining tradeoffs: 'We could sort in place to save space, but I prefer preserving input'",
-      "Asking about follow-ups proactively"
+      "Checking impossibility before binary search",
+      "Using lo < hi (not <=) correctly",
+      "Recognizing why the greedy break is correct",
+      "Testing with Example 3 (the non-trivial one)"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Silent for more than 30 seconds without explaining thought process",
-      "Getting defensive when asked about a potential bug",
-      "Rushing to code without confirming approach",
-      "Ignoring interviewer hints"
+      "Jumping to code without explaining approach",
+      "Getting defensive about bugs",
+      "Not asking any clarifying questions",
+      "Silent for >30 seconds"
     ],
     "technical": [
-      "Using greedy alone (without binary search) and claiming optimal",
-      "Getting the time formula wrong (this is fatal)",
-      "Not handling the -1 case",
-      "O(n\u00b2) feasibility check when O(n+m) is possible"
+      "Using wrong slots formula (T//2 vs (T+1)//2)",
+      "Sorting ascending instead of descending",
+      "Using <= in binary search when should be <",
+      "Not handling -1 case"
     ],
     "communication": [
-      "Not explaining WHY binary search works here",
-      "Saying 'I've seen this before' without explaining",
-      "Over-engineering with unnecessary classes or patterns",
-      "Not testing after coding"
+      "Not explaining WHY greedy works",
+      "Over-complicating the solution",
+      "Not summarizing complexity at end"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Did I handle the -1 case (max process > max capacity)?",
-      "Did I sort both arrays in descending order?",
-      "Did I use (T+1)//2, not T//2?",
-      "Did I trace through at least one example?",
+      "Did I handle the -1 case (impossible)?",
+      "Did I sort BOTH arrays descending?",
+      "Is my slots formula correct: (T+1)//2?",
+      "Did I trace through at least one non-trivial example?",
       "Did I state time complexity: O((n+m) log n)?",
-      "Did I state space complexity: O(n+m)?"
+      "Did I verify binary search converges correctly?"
     ],
     "quick_code_review": [
-      "No magic numbers (explain 2*n-1 bound)",
-      "Consistent variable names (processes vs process_size)",
-      "Proper indentation",
-      "Comments on non-obvious lines (formula derivation)",
-      "Input validation present"
+      "No magic numbers (use n, m variables)",
+      "Clear variable names (proc_idx, not i)",
+      "Proper break in feasibility loop",
+      "Correct binary search bounds [1, 2n-1]"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "Input validation with descriptive error messages",
-      "Logging for debugging (which processes assigned where)",
-      "Return the actual assignment, not just the time",
-      "Handle concurrent access if scheduler is shared",
-      "Metrics: track average assignment time, processor utilization"
+      "Input validation (non-empty arrays, positive values)",
+      "Logging for debugging process assignments",
+      "Metrics for optimization tracking",
+      "Configuration for different scheduling strategies"
     ],
-    "why_not_in_interview": "Interview code should focus on the algorithm. Mentioning these shows senior thinking without cluttering the code.",
-    "how_to_mention": "Say: 'In production, I'd add logging to track assignments, input validation with specific error messages, and potentially return the actual assignment mapping, not just the time.'"
+    "why_not_in_interview": "Keep interview code focused on the algorithm. Mention these verbally to show senior thinking.",
+    "how_to_mention": "Say: 'In production, I'd add input validation and logging, but for the interview I'll focus on the core algorithm.'"
   },
-  "generated_at": "2026-01-18T18:47:11.556193",
+  "generated_at": "2026-01-19T04:07:11.152451",
   "_meta": {
     "problem_id": "process_scheduling",
     "part_number": null,

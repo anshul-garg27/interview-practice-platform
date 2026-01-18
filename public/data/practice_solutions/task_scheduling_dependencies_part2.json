@@ -4,50 +4,47 @@
   "builds_on": "Part 1",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "Part 1 assumed unlimited parallelism where any ready task could start immediately. Part 2 introduces resource contention: with exactly k workers, a task might be 'ready' (dependencies complete) but still have to wait for a worker to become available. This transforms the problem from pure critical path analysis to a simulation-based scheduling problem.",
+    "what_changes": "Part 1 assumed unlimited workers (infinite parallelism). Part 2 introduces a resource constraint: exactly k workers are available. Tasks may be 'ready' (dependencies satisfied) but must wait if all workers are busy. This transforms from a pure critical-path problem to a scheduling simulation problem.",
     "new_requirements": [
-      "Track worker availability (k workers, each can handle one task at a time)",
-      "Tasks may wait even when dependencies are satisfied",
-      "Must simulate time progression to account for worker contention",
-      "Return minimum total time with k workers (not unlimited)"
+      "Track worker availability with a min-heap",
+      "Task start time = max(dependencies_done, worker_available)",
+      "Simulate time progression rather than just computing critical path"
     ],
     "new_constraints": [
-      "1 \u2264 k \u2264 n (at least 1 worker, at most n workers)",
-      "Worker assignment affects total completion time",
-      "Cannot start more than k tasks simultaneously"
+      "1 \u2264 k \u2264 n (number of tasks)",
+      "Each worker handles exactly one task at a time",
+      "Cannot start task until worker is free AND dependencies are done"
     ],
-    "key_insight": "Use a min-heap to track when each worker becomes free. When a task is ready, it starts at max(ready_time, earliest_worker_free_time). This elegant approach handles both the dependency constraint and the worker constraint in a single simulation."
+    "key_insight": "Use a min-heap to track when each worker becomes free. Process tasks in topological order, but each task's start time is max(prereqs_done, earliest_worker_free). This elegantly handles both dependency and resource constraints."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Track k workers and their availability",
-        "how_met": "Min-heap of worker completion times, size k, initialized with zeros",
+        "requirement": "Handle limited workers",
+        "how_met": "Min-heap tracks k worker free times",
         "gotchas": [
-          "Don't forget to push worker back after task completion",
-          "Heap size must stay exactly k"
+          "Must heappush after heappop even if same time"
         ]
       },
       {
-        "requirement": "Respect both dependency AND worker constraints",
-        "how_met": "start_time = max(ready_time, worker_free_time) formula",
+        "requirement": "Respect dependencies",
+        "how_met": "Topological sort ensures prereqs processed first",
         "gotchas": [
-          "A task with ready_time=0 might still wait for workers",
-          "Worker might be free before task is ready"
-        ]
-      },
-      {
-        "requirement": "Handle cycles (return -1)",
-        "how_met": "Count completed tasks, compare with total task count",
-        "gotchas": [
-          "Cycle detection still needed even with worker constraint"
+          "Don't forget to track completion_time for prereq lookup"
         ]
       },
       {
         "requirement": "Return minimum total time",
-        "how_met": "Return max of all completion times after simulation",
+        "how_met": "max(completion_time.values()) after simulation",
         "gotchas": [
-          "Don't return worker heap min\u2014that's when workers are free, not when all tasks complete"
+          "With k workers, total time \u2265 Part 1 result"
+        ]
+      },
+      {
+        "requirement": "Detect cycles",
+        "how_met": "Same check: len(order) != len(tasks)",
+        "gotchas": [
+          "Return -1 for cycles, same as Part 1"
         ]
       }
     ],
@@ -55,850 +52,704 @@
       {
         "operation": "scheduleTasksWithWorkers",
         "target": "O((V+E) + V log k)",
-        "achieved": "O((V+E) + V log k + V log V)",
-        "why": "Graph construction O(V+E), each task involves heap operations on workers (log k) and ready queue (log V)"
+        "achieved": "O((V+E) + V log k)",
+        "why": "Topo sort is O(V+E), each task does one heap push/pop at O(log k)"
       }
     ],
     "non_goals": [
-      "Optimal task ordering for minimum makespan (NP-hard in general, our greedy is correct for this problem)",
-      "Worker affinity or task priorities beyond topological order",
-      "Preemption (tasks run to completion once started)"
+      "Optimal task ordering within same priority level",
+      "Preemption (tasks run to completion)",
+      "Worker assignment optimization"
     ]
   },
   "assumptions": [
-    "Workers are homogeneous (any worker can execute any task)",
-    "No overhead for task switching or assignment",
-    "Task durations are exact (no variance)",
-    "k \u2265 1 always (validated by constraints)",
-    "All task_ids in dependency_list exist in task_list"
+    "k \u2265 1 (at least one worker)",
+    "k \u2264 n is typical but algorithm works for k > n too",
+    "All task IDs in dependencies exist in taskList",
+    "No duplicate tasks"
   ],
   "tradeoffs": [
     {
-      "decision": "Min-heap for workers vs Array scan",
+      "decision": "Min-heap vs array for workers",
       "chosen": "Min-heap",
-      "why": "O(log k) per task instead of O(k) per task",
+      "why": "O(log k) per operation vs O(k) scan",
       "alternative": "Array with linear scan",
-      "when_to_switch": "If k is very small (k \u2264 3), array might be simpler with similar performance"
+      "when_to_switch": "If k is very small (k \u2264 3)"
     },
     {
-      "decision": "Priority queue for ready tasks vs Simple queue",
-      "chosen": "Priority queue (by ready_time)",
-      "why": "Ensures we process tasks in a logical order respecting their earliest start times",
-      "alternative": "Simple FIFO queue",
-      "when_to_switch": "FIFO works but may be less intuitive; priority queue makes the algorithm's logic clearer"
-    },
-    {
-      "decision": "Simulation vs Mathematical formula",
-      "chosen": "Simulation",
-      "why": "No closed-form solution exists for limited workers; must simulate to account for contention",
-      "alternative": "None for general case",
-      "when_to_switch": "If k \u2265 max_parallel_tasks_at_any_level, falls back to Part 1's critical path formula"
+      "decision": "Reuse Part 1 graph building",
+      "chosen": "Duplicate code",
+      "why": "Clear separation, no side effects",
+      "alternative": "Extract to helper method",
+      "when_to_switch": "If adding Part 3 with same graph"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Graph representation (adjacency list)",
-      "Topological sort logic for dependency resolution",
-      "Completion time tracking per task"
+      "schedule_tasks method signature",
+      "Graph building approach",
+      "Cycle detection logic"
     ],
     "what_to_change": [
-      "Added worker heap to track k workers",
-      "Changed scheduling logic from 'start immediately when ready' to 'start when ready AND worker available'",
-      "Added ready_time calculation that accounts for all dependency completions"
+      "Added worker_heap for tracking worker availability",
+      "Modified completion_time calculation"
     ],
-    "interfaces_and_boundaries": "The simulation loop is cleanly separated: (1) Get ready task, (2) Get free worker, (3) Schedule, (4) Update dependents. Part 3 could add worker priorities or task priorities by modifying step 1 or 2.",
+    "interfaces_and_boundaries": "New method is independent - could add worker priorities, task priorities, or preemption in future parts",
     "invariants": [
-      "Worker heap always has exactly k elements",
-      "A task enters ready queue exactly once (when in_degree becomes 0)",
-      "completion_time[task] is set exactly once per task",
-      "start_time \u2265 ready_time and start_time \u2265 worker_free_time always"
+      "completion_time[task] \u2265 duration[task] always",
+      "completion_time[task] \u2265 completion_time[prereq] + duration[task] for all prereqs",
+      "Worker heap always has exactly k elements"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nPart 1 (Unlimited Workers):              Part 2 (k=2 Workers):\n                                         \nTask dependencies: 1\u21922, 1\u21923, 2\u21924, 3\u21924   Same dependencies\nDurations: 1(3), 2(2), 3(5), 4(3)       Same durations\n\nt=0   t=3   t=5   t=8   t=11            t=0   t=3   t=5   t=8   t=11\n|-----|-----|-----|-----|               |-----|-----|-----|-----|\n\u2588\u2588\u2588 1                                   \u2588\u2588\u2588 1  (W1)\n     \u2588\u2588 2                                    \u2588\u2588 2  (W2) \n     \u2588\u2588\u2588\u2588\u2588 3                                 \u2588\u2588\u2588\u2588\u2588 3 (W1 after 1)\n          \u2588\u2588\u2588 4                                   \u2588\u2588\u2588 4 (W1 or W2)\n                                        \nUnlimited: Any task starts when ready   Limited: Must wait for worker\nResult: 11 (critical path dominates)    Result: 11 (same in this case)\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  ALGORITHM FLOW: Limited Worker Scheduling                      \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                 \u2502\n\u2502  1. INITIALIZATION                                              \u2502\n\u2502     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502     \u2502 Build Graph  \u2502\u2500\u2500\u2500\u25b6\u2502 Compute In-  \u2502\u2500\u2500\u2500\u25b6\u2502 Init k       \u2502   \u2502\n\u2502     \u2502 (adj list)   \u2502    \u2502 Degrees      \u2502    \u2502 Workers [0]  \u2502   \u2502\n\u2502     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                                 \u2502\n\u2502  2. SEED READY QUEUE                                           \u2502\n\u2502     Tasks with in_degree=0 \u2192 ready queue with ready_time=0     \u2502\n\u2502                                                                 \u2502\n\u2502  3. MAIN SIMULATION LOOP                                       \u2502\n\u2502     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u2502\n\u2502     \u2502  While ready queue not empty:                        \u2502    \u2502\n\u2502     \u2502                                                      \u2502    \u2502\n\u2502     \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                \u2502    \u2502\n\u2502     \u2502  \u2502 Pop task    \u2502     \u2502 Pop worker  \u2502                \u2502    \u2502\n\u2502     \u2502  \u2502 (ready_time)\u2502     \u2502 (free_time) \u2502                \u2502    \u2502\n\u2502     \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518                \u2502    \u2502\n\u2502     \u2502         \u2502                   \u2502                        \u2502    \u2502\n\u2502     \u2502         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                        \u2502    \u2502\n\u2502     \u2502                   \u25bc                                  \u2502    \u2502\n\u2502     \u2502         start = max(ready_time, free_time)          \u2502    \u2502\n\u2502     \u2502         end = start + duration                       \u2502    \u2502\n\u2502     \u2502                   \u2502                                  \u2502    \u2502\n\u2502     \u2502                   \u25bc                                  \u2502    \u2502\n\u2502     \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u2502    \u2502\n\u2502     \u2502  \u2502 Push worker back with end time          \u2502        \u2502    \u2502\n\u2502     \u2502  \u2502 Update dependents' in_degree            \u2502        \u2502    \u2502\n\u2502     \u2502  \u2502 If in_degree=0, add to ready queue      \u2502        \u2502    \u2502\n\u2502     \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2502    \u2502\n\u2502     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2502\n\u2502                                                                 \u2502\n\u2502  4. RESULT                                                     \u2502\n\u2502     Return max(completion_time[all_tasks])                     \u2502\n\u2502     Or -1 if not all tasks completed (cycle)                   \u2502\n\u2502                                                                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "Part 1 (Unlimited):          Part 2 (k=2):\n                               \nt=0  t=5                      t=0  t=5  t=10\n|----|-                       |----|----|----|\n\u2588\u2588\u2588 Task1 (5)                 \u2588\u2588\u2588 Task1\u2502     \u2502\n\u2588\u2588\u2588 Task2 (5)                 \u2588\u2588\u2588 Task2\u2502     \u2502\n\u2588\u2588\u2588 Task3 (5)                      \u2502\u2588\u2588\u2588 Task3\u2502\n                                   \u2502         \u2502\nTotal: 5                      Total: 10\n(all parallel)                (Task3 waits for worker)",
+    "algorithm_flow": "1. Initialize k workers at t=0: heap = [0, 0, ..., 0]\n2. BFS queue with in_degree=0 tasks\n3. For each task in topo order:\n   a. prereq_done = max(completion_time[p] for p in prereqs)\n   b. worker_free = heappop(worker_heap)\n   c. start = max(prereq_done, worker_free)\n   d. completion = start + duration\n   e. heappush(worker_heap, completion)\n4. Return max(completion_time.values())"
   },
   "approaches": [
     {
-      "name": "Naive Extension - Ignore Worker Constraint",
-      "description": "Simply use Part 1's critical path algorithm and ignore k workers entirely",
-      "time_complexity": "O(V + E)",
-      "space_complexity": "O(V + E)",
-      "why_not_optimal": "Completely wrong answer when k < number of parallel tasks needed. Example: 3 tasks no deps, k=2 \u2192 actual time is 2\u00d7duration, not 1\u00d7duration"
+      "name": "Naive Extension",
+      "description": "Try all possible task assignments to workers (brute force scheduling)",
+      "time_complexity": "O(k^n) or worse",
+      "space_complexity": "O(n)",
+      "why_not_optimal": "Exponential - doesn't leverage that topological order gives valid schedule"
     },
     {
-      "name": "Brute Force - Try All Orderings",
-      "description": "Generate all valid topological orderings, simulate each with k workers, take minimum",
-      "time_complexity": "O(n! \u00d7 n) - factorial orderings",
-      "space_complexity": "O(n!)",
-      "why_not_optimal": "Exponentially slow. For n=20 tasks, this is completely infeasible"
-    },
-    {
-      "name": "Optimal - Greedy Simulation with Min-Heaps",
-      "description": "Simulate time progression using min-heap for workers and priority queue for ready tasks. Assign tasks greedily as workers become available.",
-      "time_complexity": "O((V+E) + V log k + V log V)",
+      "name": "Optimal Approach: Topo Sort + Worker Heap",
+      "description": "Process tasks in topological order, using min-heap to track earliest available worker. Each task starts at max(dependencies_done, worker_free).",
+      "time_complexity": "O((V+E) + V log k)",
       "space_complexity": "O(V + E + k)",
-      "key_insight": "The greedy approach works because: (1) we can't start a task before its ready_time anyway, and (2) there's no benefit to leaving workers idle. The formula start = max(ready_time, worker_free) elegantly captures both constraints."
+      "key_insight": "Topological order guarantees prereqs are done when we process a task. The heap gives earliest worker. max() of both gives correct start time."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: Greedy Simulation with Min-Heaps\n\n### The Key Insight\n\nWith limited workers, we need to **simulate time progression** rather than just compute the critical path. The brilliant realization is:\n\n> **A task can start when BOTH conditions are met:**\n> 1. All dependencies are complete (ready_time)\n> 2. A worker is available (worker_free_time)\n\nThis gives us: `start_time = max(ready_time, worker_free_time)`\n\n### Data Structures\n\n1. **Worker Heap** (min-heap, size k): Each element is the time when that worker becomes free. Initially all zeros.\n\n2. **Ready Queue** (min-heap): Pairs of (ready_time, task_id) for tasks whose dependencies are all complete.\n\n3. **Graph** (adjacency list): task \u2192 [dependent_tasks] for updating dependencies.\n\n4. **Reverse Graph** (adjacency list): task \u2192 [prerequisites] for computing ready_time.\n\n### Why Greedy Works\n\nFor this problem, greedy assignment is optimal because:\n- We never benefit from keeping a worker idle\n- We never benefit from delaying a ready task\n- The order among ready tasks doesn't affect the critical path\n\n### The Algorithm\n\n```\n1. Build dependency graph and reverse graph\n2. Initialize worker heap with k zeros\n3. Add zero-dependency tasks to ready queue\n4. While ready queue not empty:\n   - Pop earliest-ready task\n   - Pop earliest-free worker\n   - Schedule: start = max(ready, free), end = start + duration\n   - Push worker back with end time\n   - Update dependents, add newly-ready tasks to queue\n5. Return max completion time (or -1 if cycle)\n```",
+    "explanation_md": "**Core Insight**: With limited workers, we need a **simulation** rather than just critical path calculation.\n\n**Why it works**:\n1. **Topological order** ensures when we process task T, all its prerequisites have known completion times\n2. **Min-heap** efficiently finds the earliest available worker in O(log k)\n3. **max(prereq_done, worker_free)** correctly handles both constraints:\n   - If prereqs finish late, task waits for them\n   - If all prereqs done but workers busy, task waits for worker\n\n**Key Formula**: `start_time[task] = max(max(completion[prereq]), min(worker_free_times))`",
     "data_structures": [
       {
-        "structure": "Min-Heap (Workers)",
-        "purpose": "Track when each of k workers becomes free; O(log k) to get earliest free worker"
-      },
-      {
-        "structure": "Min-Heap (Ready Queue)",
-        "purpose": "Track tasks ready to execute, ordered by their earliest possible start time"
-      },
-      {
-        "structure": "Adjacency List (Graph)",
-        "purpose": "Map task \u2192 dependents for updating in-degrees after completion"
-      },
-      {
-        "structure": "Adjacency List (Reverse Graph)",
-        "purpose": "Map task \u2192 prerequisites for computing ready_time as max of dependency completions"
+        "structure": "Min-Heap (worker_heap)",
+        "purpose": "Track when each of k workers becomes free. Pop gives earliest available."
       },
       {
         "structure": "HashMap (completion_time)",
-        "purpose": "Store when each task finishes to compute dependent ready times and final result"
+        "purpose": "Store completion time of each task for prereq lookups"
+      },
+      {
+        "structure": "Deque (queue)",
+        "purpose": "BFS queue for topological sort"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Parse task_list into duration map {task_id \u2192 duration}",
-      "Step 2: Build forward graph (task \u2192 dependents) and reverse graph (task \u2192 prerequisites)",
-      "Step 3: Compute in-degrees for all tasks",
-      "Step 4: Initialize worker heap with k zeros (all workers free at t=0)",
-      "Step 5: Add all tasks with in_degree=0 to ready queue with ready_time=0",
-      "Step 6: Main loop - while ready queue not empty:",
-      "  6a: Pop task with minimum ready_time from ready queue",
-      "  6b: Pop worker with minimum free_time from worker heap",
-      "  6c: Calculate start_time = max(ready_time, worker_free_time)",
-      "  6d: Calculate end_time = start_time + duration[task]",
-      "  6e: Store completion_time[task] = end_time",
-      "  6f: Push worker back to heap with end_time",
-      "  6g: For each dependent of task: decrement in_degree",
-      "  6h: If dependent's in_degree becomes 0, compute its ready_time and add to ready queue",
-      "Step 7: If completed_count < n, return -1 (cycle detected)",
-      "Step 8: Return max(completion_time.values())"
+      "Step 1: Build graph structures (same as Part 1)",
+      "Step 2: Initialize worker_heap with k zeros (all workers free at t=0)",
+      "Step 3: Start BFS with tasks having in_degree=0",
+      "Step 4: For each task: calculate prereq_done time from reverse_graph",
+      "Step 5: Pop earliest free worker from heap",
+      "Step 6: Task starts at max(prereq_done, worker_free)",
+      "Step 7: Push new worker free time (completion) back to heap",
+      "Step 8: Update dependents' in_degrees, add ready tasks to queue",
+      "Step 9: Return max completion time (or -1 if cycle)"
     ]
   },
   "solution_python_lines": [
-    "from typing import List, Dict, Tuple",
+    "from collections import defaultdict, deque",
+    "from typing import List, Tuple",
     "import heapq",
-    "from collections import defaultdict",
-    "",
     "",
     "class TaskScheduler:",
-    "    \"\"\"",
-    "    Task scheduling system with dependency management and worker constraints.",
+    "    \"\"\"Task scheduling with dependencies and limited workers.\"\"\"",
     "    ",
-    "    Supports:",
-    "    - Part 1: Unlimited workers (critical path analysis)",
-    "    - Part 2: Limited k workers (simulation-based scheduling)",
-    "    \"\"\"",
-    "",
-    "    def schedule_tasks_with_workers(",
-    "        self,",
-    "        task_list: List[List[int]],",
-    "        dependency_list: List[List[int]],",
-    "        k: int",
-    "    ) -> int:",
-    "        \"\"\"",
-    "        Schedule tasks with exactly k workers.",
-    "",
-    "        Args:",
-    "            task_list: Each element is [task_id, duration]",
-    "            dependency_list: Each [a, b] means task a must complete before task b",
-    "            k: Number of available workers (1 <= k <= n)",
-    "",
-    "        Returns:",
-    "            Minimum total time to complete all tasks.",
-    "            Returns -1 if a cycle exists in dependencies.",
-    "",
-    "        Time Complexity: O((V+E) + V*log(k) + V*log(V))",
-    "        Space Complexity: O(V + E)",
-    "        \"\"\"",
-    "        # Edge case: no tasks",
+    "    def schedule_tasks(self, task_list: List[List[int]], dependency_list: List[List[int]]) -> Tuple[int, List[int]]:",
+    "        \"\"\"Part 1: Unlimited workers. Returns (min_time, order) or (-1, []) if cycle.\"\"\"",
     "        if not task_list:",
-    "            return 0",
-    "",
-    "        # Build task duration map: task_id -> duration",
-    "        duration: Dict[int, int] = {task_id: dur for task_id, dur in task_list}",
-    "        tasks = list(duration.keys())",
-    "        n = len(tasks)",
-    "",
-    "        # Build dependency graphs",
-    "        # forward: task -> [tasks that depend on it]",
-    "        # reverse: task -> [tasks it depends on]",
-    "        graph: Dict[int, List[int]] = defaultdict(list)",
-    "        reverse_graph: Dict[int, List[int]] = defaultdict(list)",
-    "        in_degree: Dict[int, int] = {task: 0 for task in tasks}",
-    "",
-    "        for prereq, dependent in dependency_list:",
-    "            graph[prereq].append(dependent)",
-    "            reverse_graph[dependent].append(prereq)",
-    "            in_degree[dependent] += 1",
-    "",
-    "        # Track when each task completes",
-    "        completion_time: Dict[int, int] = {}",
-    "",
-    "        # Priority queue of (ready_time, task_id) for tasks ready to execute",
-    "        # A task is ready when all its prerequisites are complete",
-    "        ready: List[Tuple[int, int]] = []",
-    "        for task in tasks:",
-    "            if in_degree[task] == 0:",
-    "                heapq.heappush(ready, (0, task))  # No deps = ready at time 0",
-    "",
-    "        # Min-heap of worker completion times",
-    "        # All k workers start free at time 0",
-    "        workers: List[int] = [0] * k",
-    "        heapq.heapify(workers)",
-    "",
-    "        completed_count = 0",
-    "",
-    "        # Main simulation loop",
-    "        while ready:",
-    "            # Get the task that's ready earliest",
-    "            ready_time, task = heapq.heappop(ready)",
-    "",
-    "            # Get the worker that's free earliest",
-    "            worker_free = heapq.heappop(workers)",
-    "",
-    "            # Task can only start when BOTH:",
-    "            # 1. Its dependencies are complete (ready_time)",
-    "            # 2. A worker is available (worker_free)",
-    "            start_time = max(ready_time, worker_free)",
-    "            end_time = start_time + duration[task]",
-    "",
-    "            # Record completion",
-    "            completion_time[task] = end_time",
-    "            completed_count += 1",
-    "",
-    "            # Return worker to pool (now free at end_time)",
-    "            heapq.heappush(workers, end_time)",
-    "",
-    "            # Update dependent tasks",
+    "            return (0, [])",
+    "        ",
+    "        duration = {task_id: dur for task_id, dur in task_list}",
+    "        graph = defaultdict(list)",
+    "        reverse_graph = defaultdict(list)",
+    "        in_degree = {task_id: 0 for task_id in duration}",
+    "        ",
+    "        for task_a, task_b in dependency_list:",
+    "            graph[task_a].append(task_b)",
+    "            reverse_graph[task_b].append(task_a)",
+    "            in_degree[task_b] += 1",
+    "        ",
+    "        queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "        order = []",
+    "        completion_time = {}",
+    "        ",
+    "        while queue:",
+    "            task = queue.popleft()",
+    "            order.append(task)",
+    "            max_prereq_time = max((completion_time[p] for p in reverse_graph[task]), default=0)",
+    "            completion_time[task] = max_prereq_time + duration[task]",
     "            for dependent in graph[task]:",
     "                in_degree[dependent] -= 1",
     "                if in_degree[dependent] == 0:",
-    "                    # All prerequisites done - calculate ready time",
-    "                    # Ready time = max completion time of all prerequisites",
-    "                    prereqs = reverse_graph[dependent]",
-    "                    dep_ready_time = max(completion_time[p] for p in prereqs)",
-    "                    heapq.heappush(ready, (dep_ready_time, dependent))",
-    "",
-    "        # Cycle detection: not all tasks were processed",
-    "        if completed_count < n:",
+    "                    queue.append(dependent)",
+    "        ",
+    "        if len(order) != len(duration):",
+    "            return (-1, [])",
+    "        return (max(completion_time.values()), order)",
+    "    ",
+    "    def schedule_tasks_with_workers(self, task_list: List[List[int]], dependency_list: List[List[int]], k: int) -> int:",
+    "        \"\"\"",
+    "        Part 2: Schedule with k limited workers.",
+    "        Uses topo sort + min-heap for worker tracking.",
+    "        Time: O(V+E + V log k), Space: O(V+E)",
+    "        \"\"\"",
+    "        if not task_list:",
+    "            return 0",
+    "        ",
+    "        # Build graph (same as Part 1)",
+    "        duration = {task_id: dur for task_id, dur in task_list}",
+    "        graph = defaultdict(list)",
+    "        reverse_graph = defaultdict(list)",
+    "        in_degree = {task_id: 0 for task_id in duration}",
+    "        ",
+    "        for task_a, task_b in dependency_list:",
+    "            graph[task_a].append(task_b)",
+    "            reverse_graph[task_b].append(task_a)",
+    "            in_degree[task_b] += 1",
+    "        ",
+    "        # Topo sort with worker simulation",
+    "        queue = deque(task_id for task_id in duration if in_degree[task_id] == 0)",
+    "        order = []",
+    "        completion_time = {}",
+    "        ",
+    "        # Min-heap: worker free times (k workers, all free at t=0)",
+    "        worker_heap = [0] * k",
+    "        ",
+    "        while queue:",
+    "            task = queue.popleft()",
+    "            order.append(task)",
+    "            ",
+    "            # When are all prereqs done?",
+    "            prereq_done = max((completion_time[p] for p in reverse_graph[task]), default=0)",
+    "            ",
+    "            # When is earliest worker free?",
+    "            worker_free = heapq.heappop(worker_heap)",
+    "            ",
+    "            # Task starts when BOTH conditions met",
+    "            start_time = max(prereq_done, worker_free)",
+    "            completion_time[task] = start_time + duration[task]",
+    "            ",
+    "            # Worker busy until task completes",
+    "            heapq.heappush(worker_heap, completion_time[task])",
+    "            ",
+    "            for dependent in graph[task]:",
+    "                in_degree[dependent] -= 1",
+    "                if in_degree[dependent] == 0:",
+    "                    queue.append(dependent)",
+    "        ",
+    "        if len(order) != len(duration):",
     "            return -1",
-    "",
-    "        # Return the time when the last task completes",
-    "        return max(completion_time.values()) if completion_time else 0",
+    "        return max(completion_time.values())",
     "",
     "",
-    "def main():",
-    "    \"\"\"Demonstrate the TaskScheduler with test cases.\"\"\"",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"Part 2: Limited Workers Demo\")",
+    "    print(\"=\" * 60)",
+    "    ",
     "    scheduler = TaskScheduler()",
-    "",
-    "    print(\"=\" * 60)",
-    "    print(\"Part 2: Limited Workers - Task Scheduling\")",
-    "    print(\"=\" * 60)",
-    "",
-    "    # Test Case 1: Three independent tasks, 2 workers",
-    "    print(\"\\n--- Test 1: Independent Tasks with Limited Workers ---\")",
+    "    ",
+    "    # Example 1: Independent tasks with k=2",
     "    tasks1 = [[1, 5], [2, 5], [3, 5]]",
     "    deps1 = []",
-    "    k1 = 2",
-    "    result1 = scheduler.schedule_tasks_with_workers(tasks1, deps1, k1)",
-    "    print(f\"Tasks: {tasks1}\")",
-    "    print(f\"Dependencies: {deps1}\")",
-    "    print(f\"Workers: {k1}\")",
-    "    print(f\"Result: {result1} (expected: 10)\")",
-    "    print(\"Explanation: Tasks 1,2 run parallel (t=0-5), Task 3 waits (t=5-10)\")",
-    "",
-    "    # Test Case 2: Chain with dependencies",
-    "    print(\"\\n--- Test 2: Diamond Dependency Pattern ---\")",
+    "    print(\"\\nIndependent Tasks (k=2):\")",
+    "    print(f\"  Tasks: {tasks1}\")",
+    "    print(f\"  Unlimited: {scheduler.schedule_tasks(tasks1, deps1)[0]}\")",
+    "    print(f\"  With k=2:  {scheduler.schedule_tasks_with_workers(tasks1, deps1, 2)}\")",
+    "    print(\"  Expected: 5 unlimited, 10 with k=2\")",
+    "    ",
+    "    # Example 2: Diamond pattern",
     "    tasks2 = [[1, 3], [2, 2], [3, 5], [4, 3]]",
     "    deps2 = [[1, 2], [1, 3], [2, 4], [3, 4]]",
-    "    k2 = 2",
-    "    result2 = scheduler.schedule_tasks_with_workers(tasks2, deps2, k2)",
-    "    print(f\"Tasks: {tasks2}\")",
-    "    print(f\"Dependencies: {deps2}\")",
-    "    print(f\"Workers: {k2}\")",
-    "    print(f\"Result: {result2} (expected: 11)\")",
-    "    print(\"Explanation: Critical path 1->3->4 dominates (3+5+3=11)\")",
-    "",
-    "    # Test Case 3: Single worker (sequential)",
-    "    print(\"\\n--- Test 3: Single Worker (Sequential) ---\")",
-    "    tasks3 = [[1, 2], [2, 3], [3, 1]]",
+    "    print(\"\\nDiamond Pattern (k=2):\")",
+    "    print(f\"  Unlimited: {scheduler.schedule_tasks(tasks2, deps2)[0]}\")",
+    "    print(f\"  With k=2:  {scheduler.schedule_tasks_with_workers(tasks2, deps2, 2)}\")",
+    "    print(\"  Expected: 11 for both (critical path dominates)\")",
+    "    ",
+    "    # Example 3: Many tasks, few workers",
+    "    tasks3 = [[i, 2] for i in range(1, 6)]  # 5 tasks, 2 units each",
     "    deps3 = []",
-    "    k3 = 1",
-    "    result3 = scheduler.schedule_tasks_with_workers(tasks3, deps3, k3)",
-    "    print(f\"Tasks: {tasks3}\")",
-    "    print(f\"Workers: {k3}\")",
-    "    print(f\"Result: {result3} (expected: 6)\")",
-    "    print(\"Explanation: With 1 worker, all tasks run sequentially: 2+3+1=6\")",
-    "",
-    "    # Test Case 4: Cycle detection",
-    "    print(\"\\n--- Test 4: Cycle Detection ---\")",
+    "    print(\"\\n5 Independent Tasks (k=1 vs k=3):\")",
+    "    print(f\"  Unlimited: {scheduler.schedule_tasks(tasks3, deps3)[0]}\")",
+    "    print(f\"  With k=1:  {scheduler.schedule_tasks_with_workers(tasks3, deps3, 1)}\")",
+    "    print(f\"  With k=3:  {scheduler.schedule_tasks_with_workers(tasks3, deps3, 3)}\")",
+    "    print(\"  Expected: 2 unlimited, 10 with k=1, 4 with k=3\")",
+    "    ",
+    "    # Example 4: Cycle detection",
     "    tasks4 = [[1, 2], [2, 3], [3, 1]]",
     "    deps4 = [[1, 2], [2, 3], [3, 1]]",
-    "    k4 = 2",
-    "    result4 = scheduler.schedule_tasks_with_workers(tasks4, deps4, k4)",
-    "    print(f\"Tasks: {tasks4}\")",
-    "    print(f\"Dependencies: {deps4} (forms cycle)\")",
-    "    print(f\"Result: {result4} (expected: -1)\")",
-    "",
-    "    # Test Case 5: More workers than tasks",
-    "    print(\"\\n--- Test 5: Excess Workers ---\")",
-    "    tasks5 = [[1, 10], [2, 5]]",
-    "    deps5 = []",
-    "    k5 = 10",
-    "    result5 = scheduler.schedule_tasks_with_workers(tasks5, deps5, k5)",
-    "    print(f\"Tasks: {tasks5}\")",
-    "    print(f\"Workers: {k5} (more than tasks)\")",
-    "    print(f\"Result: {result5} (expected: 10)\")",
-    "    print(\"Explanation: Both tasks run in parallel, max duration = 10\")",
-    "",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All test cases completed!\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"\\nCycle Detection:\")",
+    "    print(f\"  Result: {scheduler.schedule_tasks_with_workers(tasks4, deps4, 2)}\")",
+    "    print(\"  Expected: -1 (cycle)\")",
+    "    ",
+    "    print(\"\\n\" + \"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Task scheduling system with dependency management and worker constraints.",
-    " * ",
-    " * Supports:",
-    " * - Part 1: Unlimited workers (critical path analysis)",
-    " * - Part 2: Limited k workers (simulation-based scheduling)",
-    " */",
     "public class TaskScheduler {",
-    "",
-    "    /**",
-    "     * Schedule tasks with exactly k workers.",
-    "     *",
-    "     * @param taskList       Each element is [task_id, duration]",
-    "     * @param dependencyList Each [a, b] means task a must complete before task b",
-    "     * @param k              Number of available workers (1 <= k <= n)",
-    "     * @return Minimum total time to complete all tasks, or -1 if cycle exists",
-    "     *",
-    "     * Time Complexity: O((V+E) + V*log(k) + V*log(V))",
-    "     * Space Complexity: O(V + E)",
-    "     */",
-    "    public int scheduleTasksWithWorkers(int[][] taskList, int[][] dependencyList, int k) {",
-    "        // Edge case: no tasks",
-    "        if (taskList == null || taskList.length == 0) {",
-    "            return 0;",
-    "        }",
-    "",
-    "        int n = taskList.length;",
-    "",
-    "        // Build task duration map",
+    "    ",
+    "    /** Part 1: Unlimited workers. Returns [totalTime, order...] or [-1] if cycle. */",
+    "    public int[] scheduleTasks(int[][] taskList, int[][] dependencyList) {",
+    "        if (taskList == null || taskList.length == 0) return new int[]{0};",
+    "        ",
     "        Map<Integer, Integer> duration = new HashMap<>();",
+    "        Map<Integer, List<Integer>> graph = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
+    "        Map<Integer, Integer> inDegree = new HashMap<>();",
+    "        ",
     "        for (int[] task : taskList) {",
     "            duration.put(task[0], task[1]);",
+    "            graph.put(task[0], new ArrayList<>());",
+    "            reverseGraph.put(task[0], new ArrayList<>());",
+    "            inDegree.put(task[0], 0);",
     "        }",
-    "",
-    "        // Build dependency graphs",
-    "        Map<Integer, List<Integer>> graph = new HashMap<>();       // forward",
-    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>(); // reverse",
-    "        Map<Integer, Integer> inDegree = new HashMap<>();",
-    "",
-    "        for (int taskId : duration.keySet()) {",
-    "            graph.put(taskId, new ArrayList<>());",
-    "            reverseGraph.put(taskId, new ArrayList<>());",
-    "            inDegree.put(taskId, 0);",
-    "        }",
-    "",
+    "        ",
     "        for (int[] dep : dependencyList) {",
-    "            int prereq = dep[0];",
-    "            int dependent = dep[1];",
-    "            graph.get(prereq).add(dependent);",
-    "            reverseGraph.get(dependent).add(prereq);",
-    "            inDegree.merge(dependent, 1, Integer::sum);",
+    "            graph.get(dep[0]).add(dep[1]);",
+    "            reverseGraph.get(dep[1]).add(dep[0]);",
+    "            inDegree.merge(dep[1], 1, Integer::sum);",
     "        }",
-    "",
-    "        // Track completion times",
+    "        ",
+    "        Queue<Integer> queue = new LinkedList<>();",
+    "        for (int id : duration.keySet()) if (inDegree.get(id) == 0) queue.offer(id);",
+    "        ",
+    "        List<Integer> order = new ArrayList<>();",
     "        Map<Integer, Integer> completionTime = new HashMap<>();",
-    "",
-    "        // Priority queue: (ready_time, task_id)",
-    "        PriorityQueue<int[]> ready = new PriorityQueue<>(",
-    "            (a, b) -> a[0] != b[0] ? a[0] - b[0] : a[1] - b[1]",
-    "        );",
-    "",
-    "        // Add tasks with no dependencies",
-    "        for (int taskId : duration.keySet()) {",
-    "            if (inDegree.get(taskId) == 0) {",
-    "                ready.offer(new int[]{0, taskId});",
+    "        ",
+    "        while (!queue.isEmpty()) {",
+    "            int task = queue.poll();",
+    "            order.add(task);",
+    "            int maxPrereq = reverseGraph.get(task).stream()",
+    "                .mapToInt(completionTime::get).max().orElse(0);",
+    "            completionTime.put(task, maxPrereq + duration.get(task));",
+    "            for (int dep : graph.get(task)) {",
+    "                inDegree.merge(dep, -1, Integer::sum);",
+    "                if (inDegree.get(dep) == 0) queue.offer(dep);",
     "            }",
     "        }",
-    "",
-    "        // Min-heap for worker completion times",
-    "        PriorityQueue<Integer> workers = new PriorityQueue<>();",
-    "        for (int i = 0; i < k; i++) {",
-    "            workers.offer(0);",
-    "        }",
-    "",
-    "        int completedCount = 0;",
-    "",
-    "        // Main simulation loop",
-    "        while (!ready.isEmpty()) {",
-    "            // Get earliest ready task",
-    "            int[] taskInfo = ready.poll();",
-    "            int readyTime = taskInfo[0];",
-    "            int taskId = taskInfo[1];",
-    "",
-    "            // Get earliest free worker",
-    "            int workerFree = workers.poll();",
-    "",
-    "            // Calculate start and end times",
-    "            int startTime = Math.max(readyTime, workerFree);",
-    "            int endTime = startTime + duration.get(taskId);",
-    "",
-    "            completionTime.put(taskId, endTime);",
-    "            completedCount++;",
-    "",
-    "            // Return worker to pool",
-    "            workers.offer(endTime);",
-    "",
-    "            // Update dependent tasks",
-    "            for (int dependent : graph.get(taskId)) {",
-    "                inDegree.merge(dependent, -1, Integer::sum);",
-    "                if (inDegree.get(dependent) == 0) {",
-    "                    // Calculate ready time from all prerequisites",
-    "                    int depReadyTime = 0;",
-    "                    for (int prereq : reverseGraph.get(dependent)) {",
-    "                        depReadyTime = Math.max(depReadyTime, completionTime.get(prereq));",
-    "                    }",
-    "                    ready.offer(new int[]{depReadyTime, dependent});",
-    "                }",
-    "            }",
-    "        }",
-    "",
-    "        // Cycle detection",
-    "        if (completedCount < n) {",
-    "            return -1;",
-    "        }",
-    "",
-    "        // Return maximum completion time",
-    "        return completionTime.values().stream().max(Integer::compare).orElse(0);",
+    "        ",
+    "        if (order.size() != duration.size()) return new int[]{-1};",
+    "        int total = Collections.max(completionTime.values());",
+    "        int[] result = new int[order.size() + 1];",
+    "        result[0] = total;",
+    "        for (int i = 0; i < order.size(); i++) result[i + 1] = order.get(i);",
+    "        return result;",
     "    }",
-    "",
+    "    ",
+    "    /** Part 2: Schedule with k limited workers. Returns min time or -1 if cycle. */",
+    "    public int scheduleTasksWithWorkers(int[][] taskList, int[][] dependencyList, int k) {",
+    "        if (taskList == null || taskList.length == 0) return 0;",
+    "        ",
+    "        Map<Integer, Integer> duration = new HashMap<>();",
+    "        Map<Integer, List<Integer>> graph = new HashMap<>();",
+    "        Map<Integer, List<Integer>> reverseGraph = new HashMap<>();",
+    "        Map<Integer, Integer> inDegree = new HashMap<>();",
+    "        ",
+    "        for (int[] task : taskList) {",
+    "            duration.put(task[0], task[1]);",
+    "            graph.put(task[0], new ArrayList<>());",
+    "            reverseGraph.put(task[0], new ArrayList<>());",
+    "            inDegree.put(task[0], 0);",
+    "        }",
+    "        ",
+    "        for (int[] dep : dependencyList) {",
+    "            graph.get(dep[0]).add(dep[1]);",
+    "            reverseGraph.get(dep[1]).add(dep[0]);",
+    "            inDegree.merge(dep[1], 1, Integer::sum);",
+    "        }",
+    "        ",
+    "        Queue<Integer> queue = new LinkedList<>();",
+    "        for (int id : duration.keySet()) if (inDegree.get(id) == 0) queue.offer(id);",
+    "        ",
+    "        List<Integer> order = new ArrayList<>();",
+    "        Map<Integer, Integer> completionTime = new HashMap<>();",
+    "        ",
+    "        // Min-heap: worker free times",
+    "        PriorityQueue<Integer> workerHeap = new PriorityQueue<>();",
+    "        for (int i = 0; i < k; i++) workerHeap.offer(0);",
+    "        ",
+    "        while (!queue.isEmpty()) {",
+    "            int task = queue.poll();",
+    "            order.add(task);",
+    "            ",
+    "            // When are prereqs done?",
+    "            int prereqDone = reverseGraph.get(task).stream()",
+    "                .mapToInt(completionTime::get).max().orElse(0);",
+    "            ",
+    "            // When is earliest worker free?",
+    "            int workerFree = workerHeap.poll();",
+    "            ",
+    "            // Task starts when both conditions met",
+    "            int startTime = Math.max(prereqDone, workerFree);",
+    "            completionTime.put(task, startTime + duration.get(task));",
+    "            workerHeap.offer(completionTime.get(task));",
+    "            ",
+    "            for (int dep : graph.get(task)) {",
+    "                inDegree.merge(dep, -1, Integer::sum);",
+    "                if (inDegree.get(dep) == 0) queue.offer(dep);",
+    "            }",
+    "        }",
+    "        ",
+    "        if (order.size() != duration.size()) return -1;",
+    "        return Collections.max(completionTime.values());",
+    "    }",
+    "    ",
     "    public static void main(String[] args) {",
-    "        TaskScheduler scheduler = new TaskScheduler();",
-    "",
-    "        System.out.println(\"=\" .repeat(60));",
-    "        System.out.println(\"Part 2: Limited Workers - Task Scheduling\");",
-    "        System.out.println(\"=\" .repeat(60));",
-    "",
-    "        // Test Case 1",
-    "        System.out.println(\"\\n--- Test 1: Independent Tasks with Limited Workers ---\");",
-    "        int[][] tasks1 = {{1, 5}, {2, 5}, {3, 5}};",
-    "        int[][] deps1 = {};",
-    "        int result1 = scheduler.scheduleTasksWithWorkers(tasks1, deps1, 2);",
-    "        System.out.println(\"Result: \" + result1 + \" (expected: 10)\");",
-    "",
-    "        // Test Case 2",
-    "        System.out.println(\"\\n--- Test 2: Diamond Dependency Pattern ---\");",
-    "        int[][] tasks2 = {{1, 3}, {2, 2}, {3, 5}, {4, 3}};",
-    "        int[][] deps2 = {{1, 2}, {1, 3}, {2, 4}, {3, 4}};",
-    "        int result2 = scheduler.scheduleTasksWithWorkers(tasks2, deps2, 2);",
-    "        System.out.println(\"Result: \" + result2 + \" (expected: 11)\");",
-    "",
-    "        // Test Case 3: Cycle",
-    "        System.out.println(\"\\n--- Test 3: Cycle Detection ---\");",
-    "        int[][] tasks3 = {{1, 2}, {2, 3}, {3, 1}};",
-    "        int[][] deps3 = {{1, 2}, {2, 3}, {3, 1}};",
-    "        int result3 = scheduler.scheduleTasksWithWorkers(tasks3, deps3, 2);",
-    "        System.out.println(\"Result: \" + result3 + \" (expected: -1)\");",
-    "",
-    "        System.out.println(\"\\n\" + \"=\" .repeat(60));",
-    "        System.out.println(\"All test cases completed!\");",
+    "        TaskScheduler s = new TaskScheduler();",
+    "        ",
+    "        // Independent tasks",
+    "        int[][] t1 = {{1,5}, {2,5}, {3,5}};",
+    "        int[][] d1 = {};",
+    "        System.out.println(\"Independent (k=2): \" + s.scheduleTasksWithWorkers(t1, d1, 2));",
+    "        System.out.println(\"Expected: 10\");",
+    "        ",
+    "        // Diamond pattern",
+    "        int[][] t2 = {{1,3}, {2,2}, {3,5}, {4,3}};",
+    "        int[][] d2 = {{1,2}, {1,3}, {2,4}, {3,4}};",
+    "        System.out.println(\"Diamond (k=2): \" + s.scheduleTasksWithWorkers(t2, d2, 2));",
+    "        System.out.println(\"Expected: 11\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-5",
-      "explanation": "Import required modules: typing for type hints, heapq for priority queue operations, defaultdict for graph representation."
+      "lines": "1-4",
+      "explanation": "Imports: collections for graph structures, heapq for worker min-heap"
     },
     {
-      "lines": "7-14",
-      "explanation": "Class definition with docstring explaining the scheduler's capabilities for both Part 1 and Part 2."
+      "lines": "6-35",
+      "explanation": "Part 1 schedule_tasks - unchanged from original, provides baseline comparison"
     },
     {
-      "lines": "16-35",
-      "explanation": "Method signature and comprehensive docstring including complexity analysis. Edge case handling for empty task list."
+      "lines": "37-44",
+      "explanation": "Part 2 docstring and edge case handling for empty input"
     },
     {
-      "lines": "37-40",
-      "explanation": "Build duration map from task_list input. This gives O(1) lookup for any task's duration."
+      "lines": "46-57",
+      "explanation": "Graph building - identical to Part 1, creates forward/reverse edges and in_degree"
     },
     {
-      "lines": "42-52",
-      "explanation": "Build both forward graph (for finding dependents) and reverse graph (for computing ready times). Initialize in-degrees for topological sort."
+      "lines": "59-63",
+      "explanation": "Initialize BFS queue and worker_heap with k zeros (all workers free at t=0)"
     },
     {
-      "lines": "54-60",
-      "explanation": "Initialize ready queue with all tasks that have no dependencies (in_degree = 0). These can start at time 0."
+      "lines": "65-80",
+      "explanation": "Main simulation loop: for each task, calculate prereq_done, get worker, compute start/completion times"
     },
     {
-      "lines": "62-65",
-      "explanation": "Initialize worker heap with k zeros - all workers start free at time 0. This is the KEY NEW DATA STRUCTURE for Part 2."
+      "lines": "72-76",
+      "explanation": "KEY INSIGHT: start_time = max(prereq_done, worker_free) - handles both constraints"
     },
     {
-      "lines": "67-88",
-      "explanation": "MAIN SIMULATION LOOP: Pop ready task and free worker, calculate actual start time as max(ready_time, worker_free), compute end time, update worker heap, and process dependent tasks."
-    },
-    {
-      "lines": "80-88",
-      "explanation": "Dependency update logic: decrement in_degree of dependents, and when in_degree reaches 0, compute the ready_time as max of all prerequisite completion times."
-    },
-    {
-      "lines": "90-95",
-      "explanation": "Cycle detection and return value. If we didn't complete all n tasks, there must be a cycle. Otherwise, return the maximum completion time."
+      "lines": "82-84",
+      "explanation": "Cycle detection and return max completion time"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
         "scheduleTasksWithWorkers": {
-          "complexity": "O((V+E) + V log k + V log V)",
-          "explanation": "Graph construction: O(V+E). Main loop runs V times. Each iteration: pop/push worker heap O(log k), pop/push ready queue O(log V). Total: O(V(log k + log V)). With E edges processed once total."
+          "complexity": "O((V+E) + V log k)",
+          "explanation": "Topo sort is O(V+E). Each of V tasks does one heappop and heappush at O(log k) each."
         }
       },
-      "overall_change": "Part 1 was O(V+E) for critical path. Part 2 adds O(V log k) for worker management. When k is small (constant), this is effectively O(V log V + E)."
+      "overall_change": "Adds O(V log k) to Part 1's O(V+E). For k << V, this is negligible. For k \u2248 V, still O(V log V)."
     },
     "space": {
-      "additional_space": "O(k) for worker heap",
-      "explanation": "Worker heap stores exactly k integers. Ready queue stores at most V tasks. Graph storage is O(V+E). Completion_time map is O(V). Total: O(V + E + k), but k \u2264 V, so O(V + E)."
+      "additional_space": "O(k)",
+      "explanation": "Worker heap stores k elements. All other structures same as Part 1: O(V+E)."
     }
   },
   "dry_run": {
-    "example_input": "tasks = [[1,5], [2,5], [3,5]], deps = [], k = 2",
+    "example_input": "tasks=[[1,5],[2,5],[3,5]], deps=[], k=2",
     "steps": [
       {
         "step": 1,
         "action": "Initialize",
-        "state": "duration = {1:5, 2:5, 3:5}, in_degree = {1:0, 2:0, 3:0}, workers = [0,0], ready = [(0,1), (0,2), (0,3)]",
-        "explanation": "All three tasks have no dependencies, so all are ready at time 0. Two workers available."
+        "state": "worker_heap=[0,0], queue=[1,2,3], completion_time={}",
+        "explanation": "All workers free at t=0, all tasks have in_degree=0"
       },
       {
         "step": 2,
         "action": "Process task 1",
-        "state": "Pop (0,1) from ready, pop 0 from workers. start=max(0,0)=0, end=5. workers=[0,5], completion_time={1:5}",
-        "explanation": "Task 1 starts immediately with first worker, completes at t=5."
+        "state": "prereq_done=0, worker_free=0\u2192heappop",
+        "explanation": "No prereqs, first worker available at t=0"
       },
       {
         "step": 3,
-        "action": "Process task 2",
-        "state": "Pop (0,2) from ready, pop 0 from workers. start=max(0,0)=0, end=5. workers=[5,5], completion_time={1:5, 2:5}",
-        "explanation": "Task 2 also starts at t=0 with second worker (parallel with task 1)."
+        "action": "Complete task 1",
+        "state": "start=0, completion[1]=5, worker_heap=[0,5]",
+        "explanation": "Worker 1 busy until t=5"
       },
       {
         "step": 4,
-        "action": "Process task 3",
-        "state": "Pop (0,3) from ready, pop 5 from workers. start=max(0,5)=5, end=10. workers=[5,10], completion_time={1:5, 2:5, 3:10}",
-        "explanation": "Task 3 is ready at t=0, but must WAIT until t=5 when a worker becomes free. This is where k workers creates delay!"
+        "action": "Process task 2",
+        "state": "prereq_done=0, worker_free=0\u2192heappop",
+        "explanation": "Second worker still free at t=0"
       },
       {
         "step": 5,
-        "action": "Complete",
-        "state": "ready is empty, completed_count=3, max(completion_time)=10",
-        "explanation": "All tasks done. Return 10."
+        "action": "Complete task 2",
+        "state": "start=0, completion[2]=5, worker_heap=[5,5]",
+        "explanation": "Worker 2 busy until t=5"
+      },
+      {
+        "step": 6,
+        "action": "Process task 3",
+        "state": "prereq_done=0, worker_free=5\u2192heappop",
+        "explanation": "Both workers busy until t=5"
+      },
+      {
+        "step": 7,
+        "action": "Complete task 3",
+        "state": "start=5, completion[3]=10, worker_heap=[5,10]",
+        "explanation": "Task 3 waits for worker, starts at t=5"
+      },
+      {
+        "step": 8,
+        "action": "Return",
+        "state": "max(5,5,10)=10",
+        "explanation": "Total time = 10"
       }
     ],
     "final_output": "10"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single task with k=1: should return just its duration",
-      "Two independent tasks with k=2: should return max duration (parallel)",
-      "Two independent tasks with k=1: should return sum of durations (sequential)"
+      "Single task with k=1 should return its duration",
+      "n tasks, k=n, no deps should return max(durations)"
     ],
     "likely_bugs": [
-      "Forgetting to push worker back to heap after assignment",
-      "Using ready_time instead of max(ready_time, worker_free) for start time",
-      "Computing ready_time as just the last dependency instead of max of all",
-      "Not initializing worker heap with k zeros",
-      "Off-by-one in worker count"
+      "Forgetting to heappush after heappop",
+      "Using queue.pop() instead of popleft()",
+      "Not initializing heap with k zeros"
     ],
     "recommended_logs_or_asserts": [
-      "assert len(workers) == k after each iteration",
-      "log: f'Task {task} starts at {start_time} (ready={ready_time}, worker_free={worker_free})'",
-      "assert start_time >= ready_time and start_time >= original_worker_free"
+      "assert len(worker_heap) == k after each iteration",
+      "print task, prereq_done, worker_free, completion for debugging"
     ],
-    "how_to_localize": "1. Print ready queue and worker heap state at each iteration. 2. Verify each task's start_time is max of its constraints. 3. Check that worker heap size stays constant at k. 4. Trace one task through the dependency chain to verify ready_time calculation."
+    "how_to_localize": "1) Verify topo order is valid. 2) Check worker_heap has k elements. 3) Trace one task manually."
   },
   "edge_cases": [
     {
+      "case": "k=1 (single worker)",
+      "handling": "All tasks sequential, total = sum(durations) along longest chain",
+      "gotcha": "Heap still works, just always has one element"
+    },
+    {
+      "case": "k >= n (more workers than tasks)",
+      "handling": "Degenerates to Part 1 (unlimited)",
+      "gotcha": "Algorithm still correct, just heap larger than needed"
+    },
+    {
       "case": "Empty task list",
-      "handling": "Return 0 immediately",
-      "gotcha": "Don't try to compute max of empty completion_time dict"
-    },
-    {
-      "case": "Single task",
-      "handling": "Worker free at 0, task ready at 0, returns duration",
-      "gotcha": "Works correctly with any k \u2265 1"
-    },
-    {
-      "case": "k \u2265 n (more workers than tasks)",
-      "handling": "Every task gets its own worker immediately, equals unlimited parallelism",
-      "gotcha": "Result should match Part 1's critical path answer"
-    },
-    {
-      "case": "k = 1 (single worker)",
-      "handling": "All tasks run sequentially; order determined by topological sort",
-      "gotcha": "Total time is NOT sum of durations if there's waiting time due to dependencies"
+      "handling": "Return 0",
+      "gotcha": "Check before building graph"
     },
     {
       "case": "Cycle in dependencies",
-      "handling": "Some tasks never reach in_degree=0, completed_count < n, return -1",
-      "gotcha": "Cycle detection works same as Part 1"
-    },
-    {
-      "case": "All tasks independent (no deps)",
-      "handling": "All tasks ready at t=0, assigned to workers round-robin style",
-      "gotcha": "With n tasks and k workers: \u2308n/k\u2309 * max_duration approximately"
+      "handling": "Return -1 when len(order) != len(tasks)",
+      "gotcha": "Same as Part 1"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic - worker contention",
+      "name": "Basic - workers limit throughput",
       "input": "tasks=[[1,5],[2,5],[3,5]], deps=[], k=2",
       "expected": "10",
-      "explanation": "3 independent tasks, 2 workers. Two run parallel t=0-5, third waits t=5-10."
+      "explanation": "3 tasks, 2 workers. Tasks 1,2 parallel (0-5), Task 3 waits (5-10)."
     },
     {
-      "name": "Dependencies dominate",
+      "name": "Critical path dominates",
       "input": "tasks=[[1,3],[2,2],[3,5],[4,3]], deps=[[1,2],[1,3],[2,4],[3,4]], k=2",
       "expected": "11",
-      "explanation": "Critical path 1\u21923\u21924 = 3+5+3 = 11. Even with k=2, can't beat critical path."
+      "explanation": "Critical path 1\u21923\u21924 = 11. Having 2 workers doesn't help."
     },
     {
       "name": "Single worker",
-      "input": "tasks=[[1,2],[2,3],[3,1]], deps=[], k=1",
-      "expected": "6",
-      "explanation": "Sequential execution: 2+3+1 = 6."
+      "input": "tasks=[[1,2],[2,3],[3,4]], deps=[], k=1",
+      "expected": "9",
+      "explanation": "All sequential: 2+3+4=9."
     },
     {
       "name": "Cycle detection",
-      "input": "tasks=[[1,2],[2,3],[3,1]], deps=[[1,2],[2,3],[3,1]], k=2",
+      "input": "tasks=[[1,1],[2,1]], deps=[[1,2],[2,1]], k=2",
       "expected": "-1",
-      "explanation": "Circular dependency makes scheduling impossible."
-    },
-    {
-      "name": "Excess workers",
-      "input": "tasks=[[1,10],[2,5]], deps=[], k=10",
-      "expected": "10",
-      "explanation": "More workers than tasks = unlimited parallelism. Max duration = 10."
-    },
-    {
-      "name": "Long chain",
-      "input": "tasks=[[1,1],[2,1],[3,1],[4,1]], deps=[[1,2],[2,3],[3,4]], k=4",
-      "expected": "4",
-      "explanation": "Serial dependency chain. Even with 4 workers, must run sequentially."
+      "explanation": "Cycle 1\u21942, impossible to schedule."
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Ignoring the worker constraint entirely",
-      "why_wrong": "Using Part 1's critical path formula directly gives wrong answer when workers are scarce",
-      "correct_approach": "Simulate with worker heap to account for waiting time",
-      "code_example_wrong": "# Wrong: return critical_path_from_part1()",
-      "code_example_correct": "# Correct: simulate with k workers using min-heap"
+      "mistake": "Not using max() for start time",
+      "why_wrong": "Task must wait for BOTH prereqs AND worker. Using just worker_free ignores prereqs.",
+      "correct_approach": "start = max(prereq_done, worker_free)",
+      "code_example_wrong": "start = worker_free  # Wrong!",
+      "code_example_correct": "start = max(prereq_done, worker_free)"
     },
     {
-      "mistake": "Using start_time = ready_time (ignoring worker availability)",
-      "why_wrong": "A task can't start until BOTH dependencies complete AND a worker is free",
-      "correct_approach": "start_time = max(ready_time, worker_free_time)",
-      "code_example_wrong": "start_time = ready_time  # Wrong!",
-      "code_example_correct": "start_time = max(ready_time, worker_free)  # Correct"
+      "mistake": "Forgetting to push back to heap",
+      "why_wrong": "Heap loses a worker, eventually empty causing crash",
+      "correct_approach": "Always heappush after heappop",
+      "code_example_wrong": "worker_free = heappop(heap)\\n# missing heappush",
+      "code_example_correct": "worker_free = heappop(heap)\\n# ... compute completion\\nheappush(heap, completion)"
     },
     {
-      "mistake": "Forgetting to push worker back to heap",
-      "why_wrong": "Worker count decreases, eventually no workers available, simulation stalls",
-      "correct_approach": "Always push worker back with their new free time",
-      "code_example_wrong": "worker_free = heapq.heappop(workers)\\n# ... missing push back",
-      "code_example_correct": "worker_free = heapq.heappop(workers)\\n# ... process task\\nheapq.heappush(workers, end_time)"
-    },
-    {
-      "mistake": "Computing ready_time from only the last dependency",
-      "why_wrong": "A task with multiple dependencies must wait for ALL of them",
-      "correct_approach": "ready_time = max(completion_time[dep] for all dependencies)",
-      "code_example_wrong": "dep_ready_time = completion_time[task]  # Just the one that triggered",
-      "code_example_correct": "dep_ready_time = max(completion_time[p] for p in reverse_graph[dependent])"
+      "mistake": "Wrong heap initialization",
+      "why_wrong": "Starting with empty heap or wrong size",
+      "correct_approach": "Initialize with k zeros",
+      "code_example_wrong": "heap = []",
+      "code_example_correct": "heap = [0] * k"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by acknowledging what changes from Part 1: 'Now with limited workers, tasks may wait even when ready. I need to simulate time progression using a min-heap for workers.' Then draw the state of workers and ready queue.",
+    "how_to_present": "Start by explaining: 'The key insight is that Part 1's topo sort still works, but now task start time is max(prereqs_done, worker_available). I'll use a min-heap to efficiently track workers.'",
     "what_to_mention": [
-      "The key formula: start = max(ready_time, worker_free)",
-      "Worker heap maintains exactly k elements always",
-      "This reduces to Part 1 when k >= max parallel tasks",
-      "Time complexity adds O(log k) per task for worker heap operations"
+      "O(log k) per task for heap operations",
+      "Algorithm degrades gracefully to Part 1 when k \u2265 n",
+      "Same cycle detection works"
     ],
-    "time_allocation": "Part 2 should take 12-15 minutes: 2 min understanding, 3 min explaining approach, 8 min coding, 2 min testing",
+    "time_allocation": "2 min: explain approach. 8 min: code. 2 min: test/trace.",
     "if_stuck": [
-      "Think about what's different with limited workers - when might a ready task wait?",
-      "What data structure efficiently gives you the earliest-free worker?",
-      "Can you simulate one example by hand before coding?"
+      "Draw the worker heap state over time",
+      "Trace through the 3-task k=2 example manually",
+      "Ask: 'Can I assume k \u2265 1?'"
     ]
   },
-  "connection_to_next_part": "Part 3 might add worker specialization (not all workers can do all tasks), task priorities, or preemption. The simulation framework we built handles these naturally - just modify the worker selection or task selection logic.",
+  "connection_to_next_part": "Part 3 might add: task priorities, worker specialization, preemption, or real-time scheduling constraints. The heap-based simulation framework extends naturally to these.",
   "communication_script": {
-    "transition_from_previous": "Great, so Part 1 handles unlimited workers using critical path analysis. For Part 2 with k workers, the key change is that tasks might have to wait for workers even when their dependencies are complete. I'll need to simulate time progression.",
-    "explaining_changes": "The key insight is that a task can start at max(ready_time, worker_free_time). I'll use a min-heap to track when each of the k workers becomes free. This way I always know the earliest available worker in O(log k) time.",
+    "transition_from_previous": "Part 1 assumed unlimited workers. Now with k workers, a ready task might wait for a worker. I'll extend the solution by adding a min-heap to track worker availability.",
+    "explaining_changes": "The key change is: instead of starting a task immediately when prereqs are done, we now wait for BOTH prereqs AND an available worker. I'm adding a min-heap of worker free times.",
     "while_extending_code": [
-      "I'm adding a worker heap initialized with k zeros...",
-      "The main loop now pops both a ready task AND a free worker...",
-      "The start time formula accounts for both constraints...",
-      "Worker goes back in the heap with the task's end time..."
+      "Adding worker_heap = [0] * k to track k workers starting at time 0",
+      "Popping earliest free worker, computing start time as max of constraints",
+      "Pushing new completion time back to maintain heap"
     ],
-    "after_completing": "This now handles k workers correctly. The time complexity is O(V log k + V log V + E) since we do heap operations for each task. Ready for Part 3?"
+    "after_completing": "This handles k workers in O(V+E + V log k) time. The heap add O(log k) per task. Ready for Part 3?"
   },
   "time_milestones": {
-    "time_budget": "12-15 minutes for this part",
-    "by_2_min": "Understand the worker constraint; identify that we need simulation instead of just critical path",
-    "by_5_min": "Explain the min-heap approach for workers; have the key formula ready",
-    "by_10_min": "Core implementation done - worker heap, simulation loop, ready time calculation",
-    "warning_signs": "If still designing at 6 min, start coding immediately. If stuck on ready_time calculation, ask for a hint."
+    "time_budget": "10-15 minutes for this part",
+    "by_2_min": "Understand the change: limited workers means tasks may wait even when ready",
+    "by_5_min": "Explain heap-based simulation, start coding",
+    "by_10_min": "Implementation done, tracing through example",
+    "warning_signs": "If stuck on how to integrate heap with topo sort at 5 min, ask for hint"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If Part 1's topological sort is buggy, fix it first. Say: 'I see the dependency handling has an issue. Let me fix that before adding worker constraints.'",
-    "if_new_requirement_unclear": "Ask: 'Just to confirm, when we have k workers, they're all identical and can handle any task, right? And tasks can't be preempted once started?'",
-    "if_running_behind": "Focus on the core loop: pop task, pop worker, max formula, push worker back. Skip cycle detection if needed (mention you'd add it). Test with the simplest example first."
+    "if_part_builds_wrong": "The new method is largely independent. If Part 1 has a bug, mention it but proceed with Part 2.",
+    "if_new_requirement_unclear": "Ask: 'Does k workers mean exactly k available, or up to k?'",
+    "if_running_behind": "Skip optimizations, focus on getting the heap simulation working correctly."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing this is simulation, not closed-form",
-      "Knowing the formula start = max(ready, worker_free) without derivation",
-      "Explaining why greedy is optimal for this variant",
-      "Mentioning that general job-shop scheduling is NP-hard but this constrained version is polynomial",
-      "Noting that result equals Part 1 when k >= max_parallel_width of dependency graph"
+      "Immediately recognizing min-heap for worker scheduling",
+      "Explaining why max(prereq, worker) handles both constraints",
+      "Noting that algorithm reduces to Part 1 when k \u2265 n",
+      "Mentioning this is similar to process scheduling in OS"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Event-Driven Simulation with Priority Queues",
+    "pattern": "Simulation with Priority Queue",
     "indicators": [
-      "Limited resources (k workers) competing for tasks",
-      "Tasks have both dependencies AND resource constraints",
-      "Need to track 'when things become available' (workers, tasks)",
-      "Order of events matters for correctness"
+      "Limited resources (k workers)",
+      "Events at different times",
+      "Need to track 'next available'"
     ],
     "similar_problems": [
-      "LC 621 - Task Scheduler (CPU with cooldown)",
       "LC 1882 - Process Tasks Using Servers",
-      "LC 1834 - Single-Threaded CPU",
-      "Classic OS: CPU scheduling with process dependencies"
+      "LC 621 - Task Scheduler",
+      "LC 358 - Rearrange String k Distance Apart"
     ],
-    "template": "```python\\n# Generic resource-constrained scheduling template\\nresources = [0] * k  # min-heap of resource free times\\nready = []  # tasks ready to execute\\nwhile ready or pending_events:\\n    task = get_next_ready_task()\\n    resource_free = heappop(resources)\\n    start = max(task.ready_time, resource_free)\\n    end = start + task.duration\\n    heappush(resources, end)\\n    update_dependent_tasks(task, end)\\n```"
+    "template": "heap = [initial_states]\\nwhile tasks_remain:\\n    resource = heappop(heap)\\n    assign_task_to_resource()\\n    heappush(heap, new_resource_state)"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'k workers' instead of 'unlimited', I immediately think simulation",
-      "why": "No closed-form formula can capture resource contention; must track state over time"
+      "thought": "Limited resources (k workers) \u2192 need to track availability",
+      "why": "Classic resource scheduling pattern"
     },
     {
       "step": 2,
-      "thought": "Min-heap for workers is the natural choice",
-      "why": "We always want the earliest-free worker; heap gives O(log k) access"
+      "thought": "Finding 'earliest available' efficiently \u2192 min-heap",
+      "why": "O(log k) vs O(k) linear scan"
     },
     {
       "step": 3,
-      "thought": "The formula max(ready_time, worker_free) elegantly handles both constraints",
-      "why": "Can't start before dependencies complete (ready_time), can't start without worker (worker_free)"
+      "thought": "Dependencies still matter \u2192 keep topo sort",
+      "why": "Can't start task until prereqs done"
     },
     {
       "step": 4,
-      "thought": "Greedy assignment is optimal here",
-      "why": "No benefit to delaying a ready task or keeping a worker idle; proof: any delay can only increase total time"
+      "thought": "Combine constraints with max()",
+      "why": "Task starts when BOTH conditions satisfied"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you identify the core algorithmic change needed?",
-      "Do you understand the simulation approach?",
-      "Can you code the heap-based solution correctly?",
-      "Do you handle edge cases (k=1, k>=n, cycles)?"
+      "Can you identify min-heap as the right data structure?",
+      "Do you understand how to combine dependency and resource constraints?",
+      "Clean extension of existing code?"
     ],
     "bonus_points": [
-      "Explaining why greedy works",
-      "Noting complexity change from Part 1",
-      "Clean code that extends Part 1 naturally",
-      "Mentioning that this reduces to Part 1 when k is large"
+      "Analyzing when workers vs critical path is the bottleneck",
+      "Mentioning this models real build systems",
+      "Discussing when k workers equals unlimited"
     ],
     "red_flags": [
-      "Trying to use Part 1's formula directly without modification",
-      "Not recognizing the need for simulation",
-      "Incorrect handling of the max(ready, worker_free) formula",
-      "Forgetting to return worker to the heap"
+      "Rewriting topo sort from scratch",
+      "Using O(k) scan instead of heap",
+      "Forgetting to handle cycles"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI for heap syntax if unfamiliar",
-      "Let AI help with the ready_time calculation for dependents",
-      "Use AI for test case generation"
+      "Let AI help with heapq syntax if unsure",
+      "Use AI for boilerplate like graph building"
     ],
     "what_not_to_do": [
-      "Don't let AI write the entire simulation without understanding it",
-      "Verify the max formula is correct (AI might use wrong constraint)",
-      "Check that worker heap size stays k (AI might miss the push back)"
+      "Don't let AI change the approach to event-driven simulation (overkill)",
+      "Verify heap operations are correct"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without explaining the simulation approach",
-      "Not drawing an example with time progression",
-      "Silent for more than 30 seconds while coding"
+      "Jumping to code without explaining the heap insight",
+      "Not tracing through an example"
     ],
     "technical": [
-      "Using Part 1's code without modification",
-      "Incorrect start time formula",
-      "Breaking the worker heap invariant (not exactly k elements)"
+      "O(k) linear scan instead of O(log k) heap",
+      "Wrong heap direction (max-heap instead of min-heap)"
     ],
     "communication": [
-      "Not explaining WHY we need simulation instead of critical path",
-      "Not mentioning the complexity change from Part 1",
-      "Not verifying with the provided examples"
+      "Not explaining why max(prereq, worker) is correct",
+      "Forgetting to mention complexity improvement"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Worker heap initialized with k zeros?",
-      "start_time = max(ready_time, worker_free)?",
-      "Worker pushed back to heap with end_time?",
-      "Ready_time for dependent = max of all prerequisite completions?",
-      "Cycle detection still works?",
-      "Traced through Example 1 (3 tasks, k=2) \u2192 result is 10?"
+      "Did I initialize heap with k zeros?",
+      "Am I using max(prereq_done, worker_free)?",
+      "Do I push back to heap after popping?",
+      "Does cycle detection still work?"
     ],
     "quick_code_review": [
-      "Imports: heapq, defaultdict, List, Tuple, Dict",
-      "Type hints on method and parameters",
-      "Docstring with complexity analysis",
-      "Consistent variable naming (snake_case for Python)"
+      "heapq imported",
+      "worker_heap = [0] * k",
+      "heappush after heappop in every iteration"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Logging: 'Task {id} assigned to worker {w} at t={start}, completing at t={end}'",
-      "Metrics: Track worker utilization (busy_time / total_time per worker)",
-      "Input validation: Verify all dependency task IDs exist",
-      "Return detailed schedule, not just total time"
+      "Logging which worker handles which task",
+      "Return full schedule not just time",
+      "Handle worker failures/recovery"
     ],
-    "why_not_in_interview": "Interview focuses on core algorithm. Production details can be mentioned verbally.",
-    "how_to_mention": "Say: 'In production, I'd add logging for each task assignment and return a full schedule object, not just the total time.'"
+    "why_not_in_interview": "Focus on core algorithm; these are mentioned verbally",
+    "how_to_mention": "Say: 'In production, I'd return the full schedule with task-to-worker assignments for debugging.'"
   },
-  "generated_at": "2026-01-18T18:59:24.699525",
+  "generated_at": "2026-01-19T04:49:50.936098",
   "_meta": {
     "problem_id": "task_scheduling_dependencies",
     "part_number": 2,

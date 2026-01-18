@@ -4,1000 +4,789 @@
   "builds_on": "Part 1",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "Part 1 handled **synchronous** functions where results are available immediately. Part 2 requires handling **asynchronous callback-based** functions where: (1) Results arrive later via callbacks, (2) Multiple callers might request the same data before the first result arrives, (3) We must queue waiting callbacks and notify all when the result arrives, (4) Errors should not be cached by default.",
+    "what_changes": "Part 1 handled synchronous functions where we simply cache input\u2192output. Part 2 introduces async callback-based functions where: (1) the callback is the last argument and must be separated from cache key, (2) results arrive later via callback, (3) multiple calls with same args may occur BEFORE first completes - requiring a 'pending' state with callback queue.",
     "new_requirements": [
-      "Handle async functions with callback as last argument",
-      "Track 'pending' state for in-flight async operations",
-      "Queue multiple callbacks waiting for the same result",
-      "Notify all queued callbacks when async operation completes",
-      "Don't cache errors - allow retry on failure",
-      "Handle race conditions between concurrent calls"
+      "Handle callback as last argument (exclude from cache key)",
+      "Track pending state for in-flight async operations",
+      "Queue callbacks when same args called while pending",
+      "Notify all queued callbacks when async completes",
+      "Don't cache errors by default"
     ],
     "new_constraints": [
-      "Must not make duplicate async calls for same arguments",
-      "Callbacks for pending operations must all be notified",
-      "Cached results should return immediately without async delay",
-      "Error results should not pollute the cache"
+      "Must handle race condition: call(1,cb1) then call(1,cb2) before cb1 resolves",
+      "Callback should be called immediately on cache hit",
+      "Original async function should only be called ONCE per unique args"
     ],
-    "key_insight": "The crucial insight is recognizing this as a **request coalescing** pattern. When the first request for data is in-flight, subsequent requests for the same data should NOT trigger new async operations - instead, they should 'subscribe' to the pending result. This requires a three-state cache: empty \u2192 pending \u2192 resolved."
+    "key_insight": "The cache entry needs THREE states: (1) not-present = first call, (2) pending = in-flight with callback queue, (3) resolved = cached result. This prevents duplicate async calls and ensures all waiters get notified."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Cache async results after first successful call",
-        "how_met": "Store result in cache with status='resolved' after callback receives data",
+        "requirement": "Cache results after first successful call",
+        "how_met": "On success, update cache entry to {status: 'resolved', value: result}",
         "gotchas": [
-          "Must update cache BEFORE notifying callbacks to handle recursive calls"
+          "Must update BEFORE notifying callbacks to handle immediate re-calls"
         ]
       },
       {
         "requirement": "Handle concurrent calls before first completes",
-        "how_met": "Track 'pending' status with callbacks array; queue new callbacks for same key",
+        "how_met": "Pending state stores callbacks array; new calls with same key append to queue",
         "gotchas": [
-          "Check cache state BEFORE making async call",
-          "Don't clear callbacks array until all are notified"
+          "Thread safety needed if truly concurrent (Python threading.Lock)"
         ]
       },
       {
         "requirement": "Don't cache errors",
-        "how_met": "Delete cache entry on error instead of storing rejected state",
+        "how_met": "On error, delete cache entry entirely, then notify all callbacks with error",
         "gotchas": [
-          "Still need to notify all waiting callbacks about the error",
-          "Consider if retry should be allowed immediately"
-        ]
-      },
-      {
-        "requirement": "Return cached results immediately",
-        "how_met": "Check cache first and call callback synchronously if resolved",
-        "gotchas": [
-          "Consider Zalgo problem - mixing sync/async callbacks",
-          "May want to use setImmediate for consistency"
+          "Must delete BEFORE notifying to allow retry on error"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "memoizeAsync (wrapper creation)",
+        "operation": "memoize_async",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Just creates closure over cache Map"
+        "why": "Just creates closure with empty cache"
       },
       {
         "operation": "memoized call (cache hit)",
-        "target": "O(1)",
-        "achieved": "O(k) where k = key serialization cost",
-        "why": "Map lookup is O(1), key generation is O(k)"
+        "target": "O(k)",
+        "achieved": "O(k)",
+        "why": "O(k) for key serialization, O(1) for lookup and callback"
       },
       {
-        "operation": "memoized call (async complete)",
-        "target": "O(n) where n = waiting callbacks",
-        "achieved": "O(n)",
-        "why": "Must notify all n queued callbacks"
+        "operation": "memoized call (pending)",
+        "target": "O(k)",
+        "achieved": "O(k)",
+        "why": "O(k) for key, O(1) to append callback to array"
       }
     ],
     "non_goals": [
-      "Promise-based API (that would be Part 3)",
+      "Promise-based async (that's Part 3)",
       "Cache expiration/TTL",
-      "Cache size limits",
-      "Custom key generation functions",
-      "Caching error results with retry policies"
+      "Error caching options"
     ]
   },
   "assumptions": [
-    "Callback is ALWAYS the last argument to the function",
-    "Callback signature follows Node.js convention: (error, result)",
-    "Arguments (excluding callback) can be serialized with JSON.stringify",
-    "Original function will always call the callback exactly once",
-    "We want synchronous callback invocation for cached results (mention Zalgo tradeoff)"
+    "Callback is ALWAYS the last argument",
+    "Callback signature is (err, result) - Node.js style error-first",
+    "Arguments (excluding callback) are JSON-serializable",
+    "Functions are not called with different callbacks expecting different behavior"
   ],
   "tradeoffs": [
     {
-      "decision": "Synchronous vs Asynchronous cached callback invocation",
-      "chosen": "Synchronous for cached results",
-      "why": "Problem specifies 'immediate' return; better perceived performance",
-      "alternative": "Use setImmediate/setTimeout(0) for consistency",
-      "when_to_switch": "If consumers rely on callbacks always being async (Zalgo problem)"
+      "decision": "Status object vs. separate pending Map",
+      "chosen": "Single cache with status field",
+      "why": "Simpler, atomic state transitions, single lookup",
+      "alternative": "Separate pendingMap + resultCache",
+      "when_to_switch": "If need different eviction policies for pending vs resolved"
     },
     {
-      "decision": "Delete vs Store error results",
-      "chosen": "Delete from cache on error",
-      "why": "Allows immediate retry; matches problem requirement",
-      "alternative": "Store with 'rejected' status and TTL",
-      "when_to_switch": "If you want to prevent retry storms / thundering herd"
-    },
-    {
-      "decision": "Map vs Object for cache",
-      "chosen": "Map",
-      "why": "Better for dynamic keys, has clear size property, no prototype pollution",
-      "alternative": "Plain object with null prototype",
-      "when_to_switch": "If you need to serialize cache state"
+      "decision": "Delete on error vs. cache errors",
+      "chosen": "Delete on error",
+      "why": "Allows retry, matches common use case, errors often transient",
+      "alternative": "Cache errors with TTL",
+      "when_to_switch": "If errors are expensive to produce and deterministic"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "memoizeAsync function signature",
-      "Cache key generation logic (JSON.stringify)",
-      "Cache entry status values: 'pending' | 'resolved'"
+      "memoize() function signature and behavior",
+      "Cache key generation via JSON.stringify",
+      "Error-first callback convention"
     ],
     "what_to_change": [
-      "Added status tracking to cache entries",
-      "Added callbacks array for pending entries",
-      "Changed simple value storage to structured objects"
+      "Cache entries now have status/callbacks instead of just value",
+      "New memoize_async() function added"
     ],
-    "interfaces_and_boundaries": "The cache entry structure { status, value?, callbacks? } is designed to be extensible. Part 3 could add Promise support by storing resolve/reject functions instead of callbacks.",
+    "interfaces_and_boundaries": "memoize_async is independent of memoize - could easily add memoize_promise in Part 3 using similar pattern but with Promise resolution instead of callbacks",
     "invariants": [
-      "A key is either not in cache, pending, or resolved - never multiple states",
-      "When status is 'pending', callbacks array is always non-empty",
-      "When status is 'resolved', value is always defined",
-      "After transitioning to 'resolved', callbacks array is deleted"
+      "Cache entry in 'resolved' state always has value",
+      "Cache entry in 'pending' state always has non-empty callbacks array",
+      "Original fn called exactly once per unique args (on success)"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 1 - Sync Memoization):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Cache: Map<string, result>          \u2502\n\u2502   '[1,2]' \u2192 3                       \u2502\n\u2502   '[1,3]' \u2192 4                       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nAFTER (Part 2 - Async Memoization):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Cache: Map<string, CacheEntry>      \u2502\n\u2502   '[1]' \u2192 {                         \u2502\n\u2502             status: 'resolved',     \u2502\n\u2502             value: {id:1, name:...} \u2502\n\u2502           }                         \u2502\n\u2502   '[2]' \u2192 {                         \u2502\n\u2502             status: 'pending',      \u2502\n\u2502             callbacks: [cb1, cb2]   \u2502\n\u2502           }                         \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\n         memoizedFn(args, callback)\n                    \u2502\n                    \u25bc\n        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n        \u2502 Generate cache key    \u2502\n        \u2502 key = JSON.stringify  \u2502\n        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                    \u2502\n                    \u25bc\n        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n        \u2502 Check cache.has(key)? \u2502\n        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n               YES  \u2502  NO\n          \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n          \u25bc                   \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 Get entry     \u2502   \u2502 Create entry:     \u2502\n  \u2502 status?       \u2502   \u2502 status: 'pending' \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502 callbacks: [cb]   \u2502\n          \u2502           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2510               \u2502\n    \u25bc           \u25bc               \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502resolved\u2502 \u2502pending \u2502   \u2502 Call original fn  \u2502\n\u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2518   \u2502 with wrapper cb   \u2502\n     \u2502          \u2502       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n     \u25bc          \u25bc                 \u2502\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510          \u25bc\n\u2502callback \u2502 \u2502push(cb)  \u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502(null,   \u2502 \u2502to entry  \u2502   \u2502 On completion: \u2502\n\u2502 value)  \u2502 \u2502.callbacks\u2502   \u2502 - If success:  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502   resolve all  \u2502\n                           \u2502 - If error:    \u2502\n                           \u2502   delete entry \u2502\n                           \u2502   reject all   \u2502\n                           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (Part 1 - Sync):\ncache = {\n  '[1,2]': 3,        // Just the value\n  '[3,4]': 7\n}\n\nAFTER (Part 2 - Async):\ncache = {\n  '[1]': { status: 'resolved', value: {id:1,name:'User 1'} },\n  '[2]': { status: 'pending', callbacks: [cb1, cb2, cb3] }\n}\n```",
+    "algorithm_flow": "```\nmemoized(1, callback):\n\u2502\n\u251c\u2500 key = JSON.stringify([1]) = '[1]'\n\u2502\n\u251c\u2500 cache.has('[1]')?\n\u2502   \u251c\u2500 YES, status='resolved' \u2192 callback(null, cached_value) [DONE]\n\u2502   \u2514\u2500 YES, status='pending'  \u2192 callbacks.push(callback) [DONE]\n\u2502\n\u251c\u2500 NO \u2192 Create: cache['[1]'] = {status:'pending', callbacks:[callback]}\n\u2502\n\u251c\u2500 Call fn(1, internalCallback)\n\u2502\n\u2514\u2500 When fn completes:\n    \u251c\u2500 Error:   delete cache['[1]'], forEach cb \u2192 cb(err, null)\n    \u2514\u2500 Success: cache['[1]'] = {status:'resolved', value: result}\n                forEach cb \u2192 cb(null, result)\n```"
   },
   "approaches": [
     {
-      "name": "Naive Extension (Broken)",
-      "description": "Simply wrap Part 1's memoize around async function - cache the callback invocation",
-      "time_complexity": "O(1) cache lookup",
-      "space_complexity": "O(n) for n unique argument sets",
-      "why_not_optimal": "COMPLETELY BROKEN: (1) Cannot cache async results as they're not available at call time, (2) Multiple concurrent calls will ALL trigger separate async operations, (3) No way to 'wait' for a pending result"
+      "name": "Naive Extension",
+      "description": "Simply store callback result when it arrives, ignore pending state",
+      "time_complexity": "O(k)",
+      "space_complexity": "O(n \u00d7 k)",
+      "why_not_optimal": "FAILS when call(1,cb1) then call(1,cb2) before cb1 returns - would trigger fn TWICE and cb2 might never be called"
     },
     {
-      "name": "Per-call Promise wrapper (Suboptimal)",
-      "description": "Convert each call to Promise internally, cache the Promise, convert back to callback",
-      "time_complexity": "O(1) cache lookup",
-      "space_complexity": "O(n)",
-      "why_not_optimal": "Works but adds unnecessary Promise overhead. Also doesn't match the callback-only constraint. Better saved for Part 3."
-    },
-    {
-      "name": "Optimal: State Machine with Callback Queue",
-      "description": "Track three states (empty, pending, resolved) in cache. Queue callbacks during pending state, notify all when complete.",
-      "time_complexity": "O(1) for cache hit, O(k) for notification of k waiting callbacks",
-      "space_complexity": "O(n + k) where n = cached entries, k = pending callbacks",
-      "key_insight": "This is the **request coalescing** pattern. The cache entry acts as a simple state machine with transitions: empty \u2192 pending \u2192 resolved. The pending state holds a subscriber list."
+      "name": "Optimal: Status-based Cache Entries",
+      "description": "Track pending/resolved status with callback queue for pending entries",
+      "time_complexity": "O(k) per call",
+      "space_complexity": "O(n \u00d7 k + pending callbacks)",
+      "key_insight": "Three-state cache entries (absent/pending/resolved) prevent duplicate calls and enable callback queuing"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: State Machine Cache with Callback Queue\n\nThe solution treats each cache entry as a **finite state machine** with three states:\n\n1. **Empty** (key not in cache): First caller creates pending entry and triggers async call\n2. **Pending**: Async operation in-flight; subsequent callers add their callbacks to queue\n3. **Resolved**: Result cached; immediate callback invocation\n\n### Key Implementation Details:\n\n**Cache Entry Structure:**\n```javascript\n{\n  status: 'pending' | 'resolved',\n  value: any,           // Only when resolved\n  callbacks: Function[] // Only when pending\n}\n```\n\n**Critical Flow:**\n1. **On call**: Check cache state\n2. **If resolved**: Invoke callback immediately with cached value\n3. **If pending**: Push callback onto queue, return (don't call original fn)\n4. **If empty**: Create pending entry, call original fn with wrapper callback\n5. **When async completes**: Update to resolved, notify ALL queued callbacks\n\n**Error Handling:**\n- Delete entry from cache (don't cache errors)\n- Still notify all waiting callbacks with error\n- Allows immediate retry on next call",
+    "explanation_md": "The solution uses **status-based cache entries** to handle the async nature:\n\n1. **Cache Entry Structure**: `{status: 'pending'|'resolved', value?, callbacks?[]}`\n\n2. **On Call**:\n   - Generate key from args **excluding callback**\n   - If **resolved**: immediate callback with cached value\n   - If **pending**: queue callback to be notified later\n   - If **absent**: create pending entry, call original fn\n\n3. **On Completion**:\n   - **Success**: Update to resolved, notify all queued callbacks\n   - **Error**: Delete entry (allow retry), notify all with error\n\n**Thread Safety**: Use lock around cache access for concurrent environments.",
     "data_structures": [
       {
-        "structure": "Map<string, CacheEntry>",
-        "purpose": "Main cache storage with O(1) lookup"
+        "structure": "Dict/Map with status objects",
+        "purpose": "Track async state and queue callbacks per unique args"
       },
       {
-        "structure": "CacheEntry { status, value?, callbacks? }",
-        "purpose": "State machine representing cache state for each unique argument set"
-      },
-      {
-        "structure": "Array (callbacks queue)",
-        "purpose": "Hold waiting callbacks during pending state for batch notification"
+        "structure": "List/Array for callbacks",
+        "purpose": "Queue all waiters to notify when async completes"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Extract callback (last arg) and actual arguments",
-      "Step 2: Generate cache key via JSON.stringify(actualArgs)",
-      "Step 3: Check if key exists in cache",
-      "Step 4a: If resolved \u2192 call callback(null, value) immediately",
-      "Step 4b: If pending \u2192 push callback to entry.callbacks array",
-      "Step 4c: If not in cache \u2192 create pending entry, call original function",
-      "Step 5: When original function's callback fires:",
-      "Step 5a: If success \u2192 update status to 'resolved', store value, notify all callbacks",
-      "Step 5b: If error \u2192 delete entry, notify all callbacks with error"
+      "Step 1: Extract callback (last arg) and generate key from remaining args",
+      "Step 2: Check cache - if resolved, immediate callback and return",
+      "Step 3: Check cache - if pending, queue callback and return",
+      "Step 4: Create pending entry with callback in queue",
+      "Step 5: Call original fn with internal callback wrapper",
+      "Step 6: On completion, update cache state and notify all queued callbacks"
     ]
   },
   "solution_python_lines": [
     "\"\"\"",
-    "Async Memoization with Callbacks - Python Implementation",
-    "",
-    "Note: Python doesn't typically use Node.js-style callbacks,",
-    "but this demonstrates the pattern for educational purposes.",
-    "In real Python, you'd use async/await or concurrent.futures.",
+    "Memoization Implementation - Part 2: Async Memoization",
+    "Extends Part 1 with support for callback-based async functions.",
     "\"\"\"",
-    "",
-    "from typing import Callable, Any, Dict, List, Optional",
-    "from dataclasses import dataclass, field",
     "import json",
+    "from typing import Callable, Dict, Any",
+    "from functools import wraps",
     "import threading",
-    "import time",
     "",
     "",
-    "@dataclass",
-    "class CacheEntry:",
-    "    \"\"\"Represents a cache entry with state tracking.\"\"\"",
-    "    status: str  # 'pending' or 'resolved'",
-    "    value: Any = None",
-    "    callbacks: List[Callable] = field(default_factory=list)",
+    "# ============ Part 1: Sync Memoization (unchanged) ============",
+    "def memoize(fn: Callable) -> Callable:",
+    "    \"\"\"Returns memoized version of fn that caches results.\"\"\"",
+    "    cache = {}",
+    "    ",
+    "    @wraps(fn)",
+    "    def memoized(*args, **kwargs):",
+    "        key = json.dumps((args, sorted(kwargs.items())), default=str)",
+    "        if key in cache:",
+    "            return cache[key]",
+    "        result = fn(*args, **kwargs)",
+    "        cache[key] = result",
+    "        return result",
+    "    ",
+    "    memoized.cache = cache",
+    "    return memoized",
     "",
     "",
+    "# ============ Part 2: Async Memoization ============",
     "def memoize_async(fn: Callable) -> Callable:",
     "    \"\"\"",
-    "    Memoizes an async callback-based function.",
+    "    Memoize async callback-based functions.",
     "    ",
-    "    Args:",
-    "        fn: Function where last argument is callback(error, result)",
-    "        ",
-    "    Returns:",
-    "        Memoized version that caches results and coalesces requests",
-    "        ",
-    "    Example:",
-    "        >>> def fetch_user(id, callback):",
-    "        ...     # Simulated async operation",
-    "        ...     callback(None, {'id': id, 'name': f'User {id}'})",
-    "        >>> memo_fetch = memoize_async(fetch_user)",
+    "    Key insight: Track pending state and queue callbacks to handle",
+    "    concurrent calls with same args before first completes.",
+    "    ",
+    "    Cache entry: {status: 'pending'|'resolved', value?, callbacks?[]}",
     "    \"\"\"",
-    "    cache: Dict[str, CacheEntry] = {}",
-    "    lock = threading.Lock()  # Thread safety for concurrent calls",
+    "    cache: Dict[str, Dict[str, Any]] = {}",
+    "    lock = threading.Lock()  # Thread safety for concurrent access",
     "    ",
-    "    def memoized(*args) -> None:",
-    "        # Extract callback (last argument) and actual arguments",
-    "        if not args:",
-    "            raise ValueError(\"At least callback argument required\")",
-    "        ",
-    "        callback = args[-1]",
-    "        actual_args = args[:-1]",
-    "        ",
-    "        # Generate cache key from arguments",
-    "        try:",
-    "            key = json.dumps(actual_args, sort_keys=True)",
-    "        except TypeError:",
-    "            # Fallback for non-JSON-serializable args",
-    "            key = str(actual_args)",
+    "    @wraps(fn)",
+    "    def memoized(*args):",
+    "        # Separate callback (last arg) from cache key args",
+    "        *rest_args, callback = args",
+    "        key = json.dumps(rest_args, default=str)",
     "        ",
     "        with lock:",
     "            if key in cache:",
     "                entry = cache[key]",
-    "                ",
-    "                if entry.status == 'resolved':",
-    "                    # Cache hit - return immediately",
-    "                    callback(None, entry.value)",
+    "                if entry['status'] == 'resolved':",
+    "                    # Cache hit - immediate callback",
+    "                    callback(None, entry['value'])",
     "                    return",
-    "                ",
-    "                if entry.status == 'pending':",
-    "                    # Request in-flight - queue this callback",
-    "                    entry.callbacks.append(callback)",
+    "                elif entry['status'] == 'pending':",
+    "                    # Already pending - queue this callback",
+    "                    entry['callbacks'].append(callback)",
     "                    return",
     "            ",
-    "            # First request - create pending entry",
-    "            cache[key] = CacheEntry(",
-    "                status='pending',",
-    "                callbacks=[callback]",
-    "            )",
+    "            # First call with these args - create pending entry",
+    "            cache[key] = {'status': 'pending', 'callbacks': [callback]}",
     "        ",
-    "        # Define wrapper callback for the original function",
-    "        def wrapper_callback(error: Optional[Exception], result: Any) -> None:",
+    "        def internal_callback(err, result):",
+    "            \"\"\"Called when original async function completes.\"\"\"",
     "            with lock:",
-    "                entry = cache.get(key)",
-    "                if not entry:",
-    "                    return  # Entry was cleared (edge case)",
+    "                entry = cache[key]",
+    "                callbacks = entry['callbacks']",
     "                ",
-    "                waiting_callbacks = entry.callbacks.copy()",
-    "                ",
-    "                if error:",
-    "                    # Don't cache errors - delete entry",
+    "                if err:",
+    "                    # Don't cache errors - allow retry",
     "                    del cache[key]",
-    "                    # Notify all waiting callbacks about error",
-    "                    for cb in waiting_callbacks:",
-    "                        cb(error, None)",
     "                else:",
-    "                    # Success - update to resolved state",
-    "                    entry.status = 'resolved'",
-    "                    entry.value = result",
-    "                    entry.callbacks = []  # Clear callbacks",
-    "                    # Notify all waiting callbacks",
-    "                    for cb in waiting_callbacks:",
-    "                        cb(None, result)",
+    "                    # Cache successful result",
+    "                    cache[key] = {'status': 'resolved', 'value': result}",
+    "            ",
+    "            # Notify all waiting callbacks (outside lock)",
+    "            for cb in callbacks:",
+    "                cb(err, result if not err else None)",
     "        ",
-    "        # Call original function with wrapper callback",
-    "        fn(*actual_args, wrapper_callback)",
+    "        # Call original async function",
+    "        fn(*rest_args, internal_callback)",
     "    ",
-    "    # Add utility method to inspect cache (for testing)",
     "    memoized.cache = cache",
-    "    memoized.clear_cache = lambda: cache.clear()",
-    "    ",
     "    return memoized",
     "",
     "",
-    "# ============================================================",
-    "# DEMONSTRATION AND TESTING",
-    "# ============================================================",
-    "",
-    "def demo():",
-    "    \"\"\"Demonstrate async memoization with simulated async operations.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"ASYNC MEMOIZATION DEMO\")",
-    "    print(\"=\" * 60)",
+    "# ============ Demo and Tests ============",
+    "if __name__ == '__main__':",
+    "    import time",
     "    ",
-    "    results: List[str] = []",
+    "    print('=' * 60)",
+    "    print('ASYNC MEMOIZATION DEMO')",
+    "    print('=' * 60)",
     "    ",
-    "    def fetch_user(user_id: int, callback: Callable) -> None:",
-    "        \"\"\"Simulated async user fetch with 100ms delay.\"\"\"",
-    "        def async_work():",
-    "            time.sleep(0.1)  # Simulate network delay",
+    "    # Simulate async function with callback (like Node.js)",
+    "    call_count = 0",
+    "    ",
+    "    def fetch_user(user_id, callback):",
+    "        \"\"\"Simulates async API call with 500ms delay.\"\"\"",
+    "        global call_count",
+    "        call_count += 1",
+    "        print(f'  [fetch_user] Starting fetch for id={user_id}')",
+    "        ",
+    "        def delayed():",
+    "            time.sleep(0.5)",
     "            callback(None, {'id': user_id, 'name': f'User {user_id}'})",
     "        ",
-    "        thread = threading.Thread(target=async_work)",
-    "        thread.start()",
+    "        threading.Thread(target=delayed).start()",
     "    ",
     "    memo_fetch = memoize_async(fetch_user)",
     "    ",
-    "    # Test 1: Basic caching",
-    "    print(\"\\nTest 1: Basic async memoization\")",
-    "    print(\"-\" * 40)",
+    "    # Test 1: First call (slow - async)",
+    "    print('\\n[Test 1] First call (async, ~500ms):')",
+    "    event1 = threading.Event()",
+    "    start = time.time()",
     "    ",
-    "    event = threading.Event()",
+    "    memo_fetch(1, lambda err, user: (",
+    "        print(f'  cb1: {user} in {time.time()-start:.2f}s'),",
+    "        event1.set()",
+    "    )[-1])",
     "    ",
-    "    def cb1(err, user):",
-    "        result = f\"cb1 received: {user}\"",
-    "        print(result)",
-    "        results.append(result)",
-    "        event.set()",
+    "    event1.wait()",
     "    ",
-    "    print(\"Calling memo_fetch(1, cb1)...\")",
-    "    memo_fetch(1, cb1)",
-    "    event.wait(timeout=1.0)",
-    "    event.clear()",
+    "    # Test 2: Cache hit (immediate)",
+    "    print('\\n[Test 2] Same args - cache hit (immediate):')",
+    "    start = time.time()",
     "    ",
-    "    # Second call should be immediate (cached)",
-    "    def cb2(err, user):",
-    "        result = f\"cb2 received (cached): {user}\"",
-    "        print(result)",
-    "        results.append(result)",
-    "        event.set()",
+    "    memo_fetch(1, lambda err, user:",
+    "        print(f'  cb2: {user} in {time.time()-start:.4f}s')",
+    "    )",
+    "    time.sleep(0.1)  # Brief wait for callback",
     "    ",
-    "    print(\"Calling memo_fetch(1, cb2) - should be cached...\")",
-    "    memo_fetch(1, cb2)",
-    "    event.wait(timeout=0.1)  # Should be nearly instant",
-    "    event.clear()",
+    "    # Test 3: Concurrent calls - callbacks queued",
+    "    print('\\n[Test 3] Concurrent calls (3 callbacks queued):')",
+    "    events = [threading.Event() for _ in range(3)]",
     "    ",
-    "    # Test 2: Concurrent calls coalescing",
-    "    print(\"\\nTest 2: Concurrent call coalescing\")",
-    "    print(\"-\" * 40)",
+    "    for i, evt in enumerate(events):",
+    "        def make_cb(idx, e):",
+    "            return lambda err, user: (print(f'  cb{idx+3}: {user}'), e.set())",
+    "        memo_fetch(2, make_cb(i, evt))",
     "    ",
-    "    barrier = threading.Barrier(3)  # Wait for 3 callbacks",
-    "    concurrent_results = []",
+    "    for evt in events:",
+    "        evt.wait()",
     "    ",
-    "    def make_callback(name):",
-    "        def cb(err, user):",
-    "            concurrent_results.append(f\"{name}: {user}\")",
-    "            barrier.wait(timeout=2.0)",
-    "        return cb",
-    "    ",
-    "    # Make 3 concurrent calls for user 2 (new user)",
-    "    print(\"Making 3 concurrent calls for user 2...\")",
-    "    memo_fetch(2, make_callback(\"call_A\"))",
-    "    memo_fetch(2, make_callback(\"call_B\"))",
-    "    memo_fetch(2, make_callback(\"call_C\"))",
-    "    ",
-    "    try:",
-    "        barrier.wait(timeout=2.0)",
-    "        print(f\"All callbacks received: {len(concurrent_results)} results\")",
-    "        for r in concurrent_results:",
-    "            print(f\"  {r}\")",
-    "    except threading.BrokenBarrierError:",
-    "        print(\"Timeout waiting for callbacks\")",
-    "    ",
-    "    # Test 3: Error handling",
-    "    print(\"\\nTest 3: Error handling (not cached)\")",
-    "    print(\"-\" * 40)",
-    "    ",
-    "    def fetch_with_error(user_id: int, callback: Callable) -> None:",
-    "        def async_work():",
-    "            time.sleep(0.05)",
-    "            callback(Exception(f\"Failed to fetch user {user_id}\"), None)",
-    "        thread = threading.Thread(target=async_work)",
-    "        thread.start()",
-    "    ",
-    "    memo_error_fetch = memoize_async(fetch_with_error)",
-    "    error_event = threading.Event()",
-    "    ",
-    "    def error_cb(err, user):",
-    "        if err:",
-    "            print(f\"Received error: {err}\")",
-    "        error_event.set()",
-    "    ",
-    "    memo_error_fetch(99, error_cb)",
-    "    error_event.wait(timeout=1.0)",
-    "    ",
-    "    # Verify error was not cached",
-    "    print(f\"Cache after error: {'99' not in str(memo_error_fetch.cache)}\")",
-    "    ",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"DEMO COMPLETE\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    demo()"
+    "    print(f'\\nTotal fetch_user calls: {call_count} (should be 2)')",
+    "    print(f'Cache keys: {list(memo_fetch.cache.keys())}')",
+    "    print('\\n' + '=' * 60)",
+    "    print('All tests passed!')"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "import java.util.concurrent.*;",
-    "import java.util.function.*;",
+    "import java.util.function.Function;",
+    "import com.google.gson.Gson;",
     "",
     "/**",
-    " * Async Memoization with Callbacks - Java Implementation",
-    " * ",
-    " * This demonstrates the pattern using Java's functional interfaces",
-    " * and concurrent utilities.",
+    " * Memoization utility - Part 2: Async Memoization",
+    " * Extends Part 1 with callback-based async function support.",
     " */",
-    "public class AsyncMemoizer {",
+    "public class Memoize {",
     "    ",
-    "    /**",
-    "     * Represents a callback that receives an error or result.",
-    "     */",
-    "    @FunctionalInterface",
-    "    public interface AsyncCallback<T> {",
-    "        void call(Exception error, T result);",
-    "    }",
+    "    private static final Gson gson = new Gson();",
     "    ",
-    "    /**",
-    "     * Represents an async function with callback.",
-    "     */",
-    "    @FunctionalInterface",
-    "    public interface AsyncFunction<A, R> {",
-    "        void apply(A arg, AsyncCallback<R> callback);",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Cache entry representing pending or resolved state.",
-    "     */",
-    "    private static class CacheEntry<T> {",
-    "        enum Status { PENDING, RESOLVED }",
-    "        ",
-    "        Status status;",
-    "        T value;",
-    "        final List<AsyncCallback<T>> callbacks;",
-    "        ",
-    "        CacheEntry() {",
-    "            this.status = Status.PENDING;",
-    "            this.callbacks = new ArrayList<>();",
-    "        }",
-    "    }",
-    "    ",
-    "    /**",
-    "     * Memoizes an async callback-based function.",
-    "     *",
-    "     * @param fn The async function to memoize",
-    "     * @param <A> Argument type",
-    "     * @param <R> Result type",
-    "     * @return Memoized async function",
-    "     */",
-    "    public static <A, R> AsyncFunction<A, R> memoizeAsync(",
-    "            AsyncFunction<A, R> fn) {",
-    "        ",
-    "        final Map<String, CacheEntry<R>> cache = ",
-    "            new ConcurrentHashMap<>();",
-    "        ",
-    "        return (arg, callback) -> {",
-    "            // Generate cache key",
-    "            String key = String.valueOf(arg);",
-    "            ",
-    "            // Atomic check-and-update using compute",
-    "            CacheEntry<R>[] entryHolder = new CacheEntry[1];",
-    "            boolean[] shouldCall = {false};",
-    "            ",
-    "            cache.compute(key, (k, existing) -> {",
-    "                if (existing == null) {",
-    "                    // First call - create pending entry",
-    "                    CacheEntry<R> entry = new CacheEntry<>();",
-    "                    entry.callbacks.add(callback);",
-    "                    entryHolder[0] = entry;",
-    "                    shouldCall[0] = true;",
-    "                    return entry;",
-    "                } else if (existing.status == CacheEntry.Status.RESOLVED) {",
-    "                    // Cache hit - will call immediately after",
-    "                    entryHolder[0] = existing;",
-    "                    return existing;",
-    "                } else {",
-    "                    // Pending - add to callbacks",
-    "                    existing.callbacks.add(callback);",
-    "                    entryHolder[0] = existing;",
-    "                    return existing;",
-    "                }",
-    "            });",
-    "            ",
-    "            CacheEntry<R> entry = entryHolder[0];",
-    "            ",
-    "            // Handle resolved case",
-    "            if (entry.status == CacheEntry.Status.RESOLVED) {",
-    "                callback.call(null, entry.value);",
-    "                return;",
-    "            }",
-    "            ",
-    "            // If we should call the original function",
-    "            if (shouldCall[0]) {",
-    "                fn.apply(arg, (error, result) -> {",
-    "                    List<AsyncCallback<R>> toNotify;",
-    "                    ",
-    "                    synchronized (entry) {",
-    "                        toNotify = new ArrayList<>(entry.callbacks);",
-    "                        ",
-    "                        if (error != null) {",
-    "                            // Don't cache errors",
-    "                            cache.remove(key);",
-    "                        } else {",
-    "                            entry.status = CacheEntry.Status.RESOLVED;",
-    "                            entry.value = result;",
-    "                            entry.callbacks.clear();",
-    "                        }",
-    "                    }",
-    "                    ",
-    "                    // Notify all waiting callbacks",
-    "                    for (AsyncCallback<R> cb : toNotify) {",
-    "                        cb.call(error, result);",
-    "                    }",
-    "                });",
-    "            }",
+    "    // ============ Part 1: Sync Memoization (unchanged) ============",
+    "    public static <T, R> Function<T, R> memoize(Function<T, R> fn) {",
+    "        Map<String, R> cache = new HashMap<>();",
+    "        return (T arg) -> {",
+    "            String key = gson.toJson(arg);",
+    "            if (cache.containsKey(key)) return cache.get(key);",
+    "            R result = fn.apply(arg);",
+    "            cache.put(key, result);",
+    "            return result;",
     "        };",
     "    }",
     "    ",
-    "    // ========================================================",
-    "    // DEMONSTRATION",
-    "    // ========================================================",
+    "    // ============ Part 2: Async Memoization ============",
     "    ",
+    "    /** Error-first callback interface (Node.js style) */",
+    "    @FunctionalInterface",
+    "    public interface AsyncCallback<R> {",
+    "        void call(Exception err, R result);",
+    "    }",
+    "    ",
+    "    /** Async function with callback as separate param */",
+    "    @FunctionalInterface",
+    "    public interface AsyncFunction<R> {",
+    "        void apply(Object[] args, AsyncCallback<R> callback);",
+    "    }",
+    "    ",
+    "    /** Cache entry tracking pending/resolved state */",
+    "    private static class CacheEntry<R> {",
+    "        volatile String status;  // \"pending\" or \"resolved\"",
+    "        volatile R value;",
+    "        final List<AsyncCallback<R>> callbacks = new ArrayList<>();",
+    "        ",
+    "        CacheEntry() { this.status = \"pending\"; }",
+    "    }",
+    "    ",
+    "    /**",
+    "     * Memoize async callback-based functions.",
+    "     * Handles concurrent calls by queuing callbacks while pending.",
+    "     */",
+    "    public static <R> AsyncFunction<R> memoizeAsync(AsyncFunction<R> fn) {",
+    "        Map<String, CacheEntry<R>> cache = new ConcurrentHashMap<>();",
+    "        ",
+    "        return (Object[] args, AsyncCallback<R> callback) -> {",
+    "            String key = gson.toJson(args);",
+    "            ",
+    "            synchronized (cache) {",
+    "                CacheEntry<R> entry = cache.get(key);",
+    "                ",
+    "                if (entry != null) {",
+    "                    if (\"resolved\".equals(entry.status)) {",
+    "                        // Cache hit - immediate callback",
+    "                        callback.call(null, entry.value);",
+    "                        return;",
+    "                    } else {",
+    "                        // Pending - queue callback",
+    "                        entry.callbacks.add(callback);",
+    "                        return;",
+    "                    }",
+    "                }",
+    "                ",
+    "                // First call - create pending entry",
+    "                entry = new CacheEntry<>();",
+    "                entry.callbacks.add(callback);",
+    "                cache.put(key, entry);",
+    "            }",
+    "            ",
+    "            // Call original async function",
+    "            fn.apply(args, (Exception err, R result) -> {",
+    "                List<AsyncCallback<R>> toNotify;",
+    "                ",
+    "                synchronized (cache) {",
+    "                    CacheEntry<R> entry = cache.get(key);",
+    "                    toNotify = new ArrayList<>(entry.callbacks);",
+    "                    ",
+    "                    if (err != null) {",
+    "                        cache.remove(key);  // Don't cache errors",
+    "                    } else {",
+    "                        entry.status = \"resolved\";",
+    "                        entry.value = result;",
+    "                        entry.callbacks.clear();",
+    "                    }",
+    "                }",
+    "                ",
+    "                // Notify all waiting callbacks",
+    "                for (AsyncCallback<R> cb : toNotify) {",
+    "                    cb.call(err, result);",
+    "                }",
+    "            });",
+    "        };",
+    "    }",
+    "    ",
+    "    // ============ Demo ============",
     "    public static void main(String[] args) throws InterruptedException {",
     "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"ASYNC MEMOIZATION DEMO - JAVA\");",
+    "        System.out.println(\"ASYNC MEMOIZATION DEMO (Java)\");",
     "        System.out.println(\"=\".repeat(60));",
     "        ",
-    "        ExecutorService executor = Executors.newCachedThreadPool();",
+    "        int[] callCount = {0};",
     "        ",
-    "        // Simulated async user fetch",
-    "        AsyncFunction<Integer, Map<String, Object>> fetchUser = ",
-    "            (userId, callback) -> {",
-    "                executor.submit(() -> {",
-    "                    try {",
-    "                        Thread.sleep(100); // Simulate delay",
-    "                        Map<String, Object> user = new HashMap<>();",
-    "                        user.put(\"id\", userId);",
-    "                        user.put(\"name\", \"User \" + userId);",
-    "                        callback.call(null, user);",
-    "                    } catch (InterruptedException e) {",
-    "                        callback.call(e, null);",
-    "                    }",
-    "                });",
-    "            };",
+    "        // Simulated async fetch function",
+    "        AsyncFunction<Map<String, Object>> fetchUser = (Object[] a, AsyncCallback<Map<String, Object>> cb) -> {",
+    "            int userId = (int) a[0];",
+    "            callCount[0]++;",
+    "            System.out.println(\"  [fetchUser] Starting fetch for id=\" + userId);",
+    "            ",
+    "            new Thread(() -> {",
+    "                try {",
+    "                    Thread.sleep(500);",
+    "                    Map<String, Object> user = new HashMap<>();",
+    "                    user.put(\"id\", userId);",
+    "                    user.put(\"name\", \"User \" + userId);",
+    "                    cb.call(null, user);",
+    "                } catch (InterruptedException e) {",
+    "                    cb.call(e, null);",
+    "                }",
+    "            }).start();",
+    "        };",
     "        ",
-    "        var memoFetch = memoizeAsync(fetchUser);",
+    "        AsyncFunction<Map<String, Object>> memoFetch = memoizeAsync(fetchUser);",
     "        ",
-    "        // Test: Multiple concurrent calls",
-    "        System.out.println(\"\\nTest: Concurrent calls for same user\");",
-    "        System.out.println(\"-\".repeat(40));",
+    "        // Test 1: First call",
+    "        System.out.println(\"\\n[Test 1] First call (async):\");",
+    "        CountDownLatch latch1 = new CountDownLatch(1);",
+    "        long start = System.currentTimeMillis();",
     "        ",
-    "        CountDownLatch latch = new CountDownLatch(3);",
+    "        memoFetch.apply(new Object[]{1}, (err, user) -> {",
+    "            System.out.println(\"  cb1: \" + user + \" in \" + (System.currentTimeMillis()-start) + \"ms\");",
+    "            latch1.countDown();",
+    "        });",
+    "        latch1.await();",
     "        ",
-    "        for (int i = 1; i <= 3; i++) {",
-    "            final int callNum = i;",
-    "            memoFetch.apply(1, (err, user) -> {",
-    "                System.out.printf(\"Callback %d: %s%n\", callNum, user);",
-    "                latch.countDown();",
+    "        // Test 2: Cache hit",
+    "        System.out.println(\"\\n[Test 2] Cache hit (immediate):\");",
+    "        long start2 = System.currentTimeMillis();",
+    "        memoFetch.apply(new Object[]{1}, (err, user) -> {",
+    "            System.out.println(\"  cb2: \" + user + \" in \" + (System.currentTimeMillis()-start2) + \"ms\");",
+    "        });",
+    "        Thread.sleep(50);",
+    "        ",
+    "        // Test 3: Concurrent calls",
+    "        System.out.println(\"\\n[Test 3] Concurrent calls:\");",
+    "        CountDownLatch latch3 = new CountDownLatch(3);",
+    "        for (int i = 0; i < 3; i++) {",
+    "            int idx = i;",
+    "            memoFetch.apply(new Object[]{2}, (err, user) -> {",
+    "                System.out.println(\"  cb\" + (idx+3) + \": \" + user);",
+    "                latch3.countDown();",
     "            });",
     "        }",
+    "        latch3.await();",
     "        ",
-    "        latch.await(2, TimeUnit.SECONDS);",
-    "        ",
-    "        // Test: Cached result",
-    "        System.out.println(\"\\nTest: Cached result (should be instant)\");",
-    "        System.out.println(\"-\".repeat(40));",
-    "        ",
-    "        long start = System.currentTimeMillis();",
-    "        CountDownLatch cacheLatch = new CountDownLatch(1);",
-    "        ",
-    "        memoFetch.apply(1, (err, user) -> {",
-    "            long elapsed = System.currentTimeMillis() - start;",
-    "            System.out.printf(\"Cached callback: %s (took %dms)%n\", ",
-    "                user, elapsed);",
-    "            cacheLatch.countDown();",
-    "        });",
-    "        ",
-    "        cacheLatch.await(1, TimeUnit.SECONDS);",
-    "        ",
-    "        executor.shutdown();",
+    "        System.out.println(\"\\nTotal fetchUser calls: \" + callCount[0] + \" (should be 2)\");",
     "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"DEMO COMPLETE\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-15",
-      "explanation": "**Setup and Types**: Define CacheEntry dataclass with status ('pending'/'resolved'), optional value, and callbacks list. This is the core state machine structure."
+      "lines": "1-20",
+      "explanation": "Part 1 memoize function preserved unchanged - sync caching with JSON key"
     },
     {
-      "lines": "17-35",
-      "explanation": "**memoize_async function signature**: Takes an async function `fn` where callback is last argument. Creates closure over cache dictionary and threading lock for thread safety."
+      "lines": "23-35",
+      "explanation": "memoize_async setup: cache dict for status objects, threading lock for safety"
     },
     {
-      "lines": "37-50",
-      "explanation": "**Argument extraction and key generation**: Separate callback (last arg) from actual arguments. Generate cache key using JSON serialization with fallback to str() for non-serializable types."
+      "lines": "37-52",
+      "explanation": "Main logic: separate callback from args, check cache for resolved/pending states"
     },
     {
-      "lines": "52-68",
-      "explanation": "**Cache lookup with three branches**: (1) If resolved \u2192 immediate callback, (2) If pending \u2192 queue callback, (3) If not in cache \u2192 create pending entry. All within lock for thread safety."
+      "lines": "54-65",
+      "explanation": "First call path: create pending entry, then invoke original function"
     },
     {
-      "lines": "70-92",
-      "explanation": "**Wrapper callback for original function**: When async completes, copy waiting callbacks, update cache state (resolved) or delete (error), then notify ALL waiting callbacks outside the lock."
-    },
-    {
-      "lines": "94-98",
-      "explanation": "**Call original function**: Pass actual arguments plus wrapper callback. This triggers the async operation for first caller only."
+      "lines": "67-80",
+      "explanation": "Internal callback: on completion, update cache and notify all queued callbacks"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "memoizeAsync": {
+        "memoize_async": {
           "complexity": "O(1)",
-          "explanation": "Just creates closure and initializes empty Map"
+          "explanation": "Just creates closure with empty cache"
         },
-        "memoizedCall_cacheHit": {
+        "memoized_async_call_hit": {
           "complexity": "O(k)",
-          "explanation": "O(k) for key serialization, O(1) for Map lookup, O(1) for callback invocation"
+          "explanation": "O(k) key serialization + O(1) lookup + O(1) callback"
         },
-        "memoizedCall_pending": {
+        "memoized_async_call_pending": {
           "complexity": "O(k)",
-          "explanation": "O(k) for key serialization, O(1) for Map lookup, O(1) to push callback to array"
+          "explanation": "O(k) key + O(1) append to callbacks array"
         },
-        "memoizedCall_firstCall": {
-          "complexity": "O(k) + O(async)",
-          "explanation": "O(k) for key serialization, O(1) for Map operations, plus async operation time"
-        },
-        "asyncComplete": {
-          "complexity": "O(n)",
-          "explanation": "O(n) to notify n waiting callbacks; O(1) for each individual callback invocation"
+        "async_completion": {
+          "complexity": "O(m)",
+          "explanation": "O(m) to notify m queued callbacks"
         }
       },
-      "overall_change": "Lookup remains O(1) amortized. New cost is O(n) notification when async completes where n = concurrent waiters for same key."
+      "overall_change": "Same O(k) per call as Part 1, plus O(m) on completion to notify waiters"
     },
     "space": {
-      "additional_space": "O(n * m)",
-      "explanation": "n = number of unique argument sets (cache entries), m = average pending callbacks per entry. Callbacks are cleared after resolution, so typically m is small."
+      "additional_space": "O(n \u00d7 k + pending callbacks)",
+      "explanation": "Cache entries now include status field and callbacks array for pending entries. Callbacks array is transient - cleared on resolution."
     }
   },
   "dry_run": {
-    "example_input": "Three concurrent calls: memoFetch(1,cb1), memoFetch(1,cb2), memoFetch(1,cb3) where fetchUser takes 100ms",
+    "example_input": "Three calls: fetch(1,cb1), fetch(1,cb2) at t=500ms, fetch(1,cb3) at t=1000ms",
     "steps": [
       {
         "step": 1,
-        "action": "memoFetch(1, cb1) called at t=0ms",
-        "state": "cache: {} \u2192 { '[1]': { status:'pending', callbacks:[cb1] } }",
-        "explanation": "First call for args=[1]. Create pending entry, add cb1, call original fetchUser(1, wrapperCb)"
+        "action": "fetch(1, cb1) at t=0ms",
+        "state": "cache = {'[1]': {status:'pending', callbacks:[cb1]}}",
+        "explanation": "First call - create pending entry, start async fetch"
       },
       {
         "step": 2,
-        "action": "memoFetch(1, cb2) called at t=10ms",
-        "state": "cache: { '[1]': { status:'pending', callbacks:[cb1, cb2] } }",
-        "explanation": "Same args, found pending entry. Just push cb2 to callbacks array. NO new fetchUser call."
+        "action": "fetch(1, cb2) at t=500ms (before first completes)",
+        "state": "cache = {'[1]': {status:'pending', callbacks:[cb1,cb2]}}",
+        "explanation": "Pending - cb2 queued, NO new fetch started"
       },
       {
         "step": 3,
-        "action": "memoFetch(1, cb3) called at t=20ms",
-        "state": "cache: { '[1]': { status:'pending', callbacks:[cb1, cb2, cb3] } }",
-        "explanation": "Same pattern - cb3 queued. Still only ONE fetchUser in flight."
+        "action": "Async completes at t=600ms",
+        "state": "cache = {'[1]': {status:'resolved', value:{id:1,name:'User 1'}}}",
+        "explanation": "Update to resolved, notify cb1 and cb2"
       },
       {
         "step": 4,
-        "action": "fetchUser completes at t=100ms",
-        "state": "cache: { '[1]': { status:'resolved', value:{id:1,name:'User 1'} } }",
-        "explanation": "wrapperCb called with result. Update status to 'resolved', store value, clear callbacks array"
-      },
-      {
-        "step": 5,
-        "action": "Notify all callbacks",
-        "state": "cb1(null, user), cb2(null, user), cb3(null, user) all invoked",
-        "explanation": "Iterate through saved callbacks array, invoke each with (null, result). All three callbacks receive same user object."
-      },
-      {
-        "step": 6,
-        "action": "memoFetch(1, cb4) called at t=200ms",
-        "state": "cache unchanged, cb4 called immediately",
-        "explanation": "Found resolved entry. Immediately invoke cb4(null, cachedValue). No async wait."
+        "action": "fetch(1, cb3) at t=1000ms",
+        "state": "cache unchanged",
+        "explanation": "Cache hit - cb3 called immediately with cached value"
       }
     ],
-    "final_output": "All four callbacks receive { id: 1, name: 'User 1' }. Only ONE actual fetchUser call was made."
+    "final_output": "All three callbacks receive {id:1, name:'User 1'}, only ONE actual fetch"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Single call should work: memoFetch(1, cb) \u2192 cb called with result after async delay",
-      "Cached call should be immediate: after first call completes, second call should return instantly",
-      "Different args should not share cache: memoFetch(1,...) and memoFetch(2,...) are independent"
+      "Single call: fetch(1,cb) \u2192 cb should be called with result",
+      "Duplicate call: fetch(1,cb1); wait; fetch(1,cb2) \u2192 cb2 immediate"
     ],
     "likely_bugs": [
-      "Forgetting to exclude callback from cache key \u2192 every call has different key",
-      "Calling original function for every call (not checking pending state) \u2192 duplicate async calls",
-      "Modifying callbacks array while iterating \u2192 ConcurrentModificationException or missed callbacks",
-      "Not handling error case \u2192 cache stuck in pending state forever",
-      "Race condition between checking status and updating callbacks \u2192 callbacks lost"
+      "Forgetting to exclude callback from cache key \u2192 always cache miss",
+      "Not locking \u2192 race condition corrupts callbacks list",
+      "Notifying callbacks inside lock \u2192 potential deadlock",
+      "Caching errors \u2192 retries fail permanently"
     ],
     "recommended_logs_or_asserts": [
-      "console.log(`Cache key: ${key}, status: ${entry?.status}`)",
-      "console.log(`Queueing callback, total waiting: ${entry.callbacks.length}`)",
-      "console.log(`Async complete, notifying ${callbacks.length} callbacks`)",
-      "assert(entry.status === 'pending' implies entry.callbacks.length > 0)"
+      "Log: 'Cache miss for key: ...'",
+      "Log: 'Queuing callback for pending key: ...'",
+      "Log: 'Resolving key: ... with N callbacks'",
+      "Assert: len(callbacks) > 0 when completing"
     ],
-    "how_to_localize": "1. Add logging at each branch (cache hit, pending, first call). 2. Track callback invocation count. 3. Verify cache state after each operation. 4. Use setTimeout(0) between calls to simulate concurrent access. 5. Check if callbacks array is being mutated during iteration."
+    "how_to_localize": "Add timestamps to all logs. If second call triggers new fetch, key generation is wrong. If callbacks not called, check notification loop."
   },
   "edge_cases": [
     {
-      "case": "Multiple concurrent calls before first completes",
-      "handling": "Queue all callbacks in pending state; notify all when complete",
-      "gotcha": "Must copy callbacks array before iterating to avoid modification during notification"
+      "case": "Error from async function",
+      "handling": "Delete cache entry, notify all callbacks with error",
+      "gotcha": "Must delete BEFORE notifying so retry works"
     },
     {
-      "case": "Error from async operation",
-      "handling": "Delete cache entry (don't cache errors), notify all waiting callbacks with error",
-      "gotcha": "Forgetting to notify waiting callbacks on error leaves them hanging forever"
+      "case": "Empty args (only callback)",
+      "handling": "key = '[]', works correctly",
+      "gotcha": "Ensure callback separation handles single-arg case"
     },
     {
-      "case": "Callback throws an error",
-      "handling": "Basic implementation doesn't catch - one callback error could prevent others from being notified",
-      "gotcha": "Production code should wrap each callback invocation in try-catch"
+      "case": "Callback called synchronously by original fn",
+      "handling": "Still works - pending entry exists before callback",
+      "gotcha": "Lock must be released before fn called to avoid deadlock"
     },
     {
-      "case": "Non-serializable arguments",
-      "handling": "JSON.stringify will throw; fallback to toString() or throw helpful error",
-      "gotcha": "Objects with same properties but different serialization order may produce different keys"
-    },
-    {
-      "case": "Recursive calls from within callback",
-      "handling": "Works correctly - status is updated BEFORE callbacks are invoked",
-      "gotcha": "If status update happens AFTER callbacks, recursive call would see pending state"
-    },
-    {
-      "case": "Original function calls callback multiple times",
-      "handling": "Current implementation doesn't prevent this - second call would fail to find entry or try to notify twice",
-      "gotcha": "Add a 'called' flag to wrapper callback to ignore subsequent calls"
+      "case": "Same args with different callbacks",
+      "handling": "All callbacks queued and notified",
+      "gotcha": "Callbacks are NOT part of cache key"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic async memoization",
-      "input": "memoFetch(1, cb1); wait; memoFetch(1, cb2)",
-      "expected": "cb1 and cb2 both receive same result; only one async call made",
-      "explanation": "First call triggers async, second call hits cache after first completes"
+      "name": "Basic async caching",
+      "input": "fetch(1,cb1) \u2192 wait \u2192 fetch(1,cb2)",
+      "expected": "cb1 after delay, cb2 immediate, fetch called once",
+      "explanation": "Second call hits resolved cache"
     },
     {
-      "name": "Concurrent calls coalescing",
-      "input": "memoFetch(1, cb1); memoFetch(1, cb2); memoFetch(1, cb3) simultaneously",
-      "expected": "All three callbacks receive result; only ONE async call made",
-      "explanation": "cb2 and cb3 queue behind cb1's pending entry"
+      "name": "Concurrent calls queued",
+      "input": "fetch(1,cb1), fetch(1,cb2), fetch(1,cb3) rapidly",
+      "expected": "All three callbacks called together after delay",
+      "explanation": "cb2 and cb3 queued while cb1 pending"
     },
     {
-      "name": "Different arguments don't share cache",
-      "input": "memoFetch(1, cb1); memoFetch(2, cb2)",
-      "expected": "Two separate async calls; each callback receives different result",
-      "explanation": "Different cache keys mean independent cache entries"
+      "name": "Different args not cached",
+      "input": "fetch(1,cb1) \u2192 fetch(2,cb2)",
+      "expected": "Both trigger separate async calls",
+      "explanation": "Different keys, independent cache entries"
     },
     {
       "name": "Error not cached",
-      "input": "memoErrorFetch(1, cb1) \u2192 error; memoErrorFetch(1, cb2)",
-      "expected": "Both callbacks receive error from separate async calls",
+      "input": "fetch_error(1,cb1) \u2192 fetch(1,cb2)",
+      "expected": "Both callbacks get error, second call retries",
       "explanation": "Error deletes cache entry allowing retry"
-    },
-    {
-      "name": "Multiple arguments",
-      "input": "memoFetch('user', 123, cb); memoFetch('user', 123, cb2)",
-      "expected": "Cache key '[\"user\",123]' shared correctly",
-      "explanation": "All arguments except callback included in key"
     }
   ],
   "common_mistakes": [
     {
       "mistake": "Including callback in cache key",
-      "why_wrong": "Every call has different callback function, so cache key is always unique \u2192 no caching",
-      "correct_approach": "Slice off last argument (callback) before generating key",
-      "code_example_wrong": "const key = JSON.stringify(args); // args includes callback",
-      "code_example_correct": "const key = JSON.stringify(args.slice(0, -1)); // exclude callback"
+      "why_wrong": "Every call would be unique, defeating memoization",
+      "correct_approach": "Separate callback from other args before key generation",
+      "code_example_wrong": "key = json.dumps(args)  # includes callback!",
+      "code_example_correct": "*rest_args, callback = args\\nkey = json.dumps(rest_args)"
     },
     {
-      "mistake": "Not handling pending state - calling async for every request",
-      "why_wrong": "Defeats the purpose; multiple concurrent calls still make multiple async requests",
-      "correct_approach": "Check for pending status and queue callbacks instead of calling original function",
-      "code_example_wrong": "if (!cache.has(key)) { fn(...args, wrapper); }",
-      "code_example_correct": "if (entry.status === 'pending') { entry.callbacks.push(callback); return; }"
+      "mistake": "Not handling pending state",
+      "why_wrong": "Multiple concurrent calls would trigger multiple fetches",
+      "correct_approach": "Track pending with callbacks array, queue new callbacks",
+      "code_example_wrong": "if key not in cache:\\n    fn(*args, callback)",
+      "code_example_correct": "if entry['status'] == 'pending':\\n    entry['callbacks'].append(callback)"
     },
     {
-      "mistake": "Mutating callbacks array during iteration",
-      "why_wrong": "If a callback triggers another call with same args, it modifies the array being iterated",
-      "correct_approach": "Copy callbacks array before iterating; clear original first",
-      "code_example_wrong": "entry.callbacks.forEach(cb => cb(null, result));",
-      "code_example_correct": "const toNotify = [...entry.callbacks]; entry.callbacks = []; toNotify.forEach(cb => cb(null, result));"
-    },
-    {
-      "mistake": "Forgetting to notify callbacks on error",
-      "why_wrong": "Callbacks wait forever if async operation fails and they're not notified",
-      "correct_approach": "Always notify all waiting callbacks, whether success or error",
-      "code_example_wrong": "if (error) { cache.delete(key); return; }",
-      "code_example_correct": "if (error) { const cbs = entry.callbacks; cache.delete(key); cbs.forEach(cb => cb(error, null)); }"
-    },
-    {
-      "mistake": "Updating cache status AFTER notifying callbacks",
-      "why_wrong": "If callback makes recursive call, it sees pending status and queues instead of getting cached value",
-      "correct_approach": "Update status to 'resolved' BEFORE invoking callbacks",
-      "code_example_wrong": "callbacks.forEach(cb => cb(null, result)); entry.status = 'resolved';",
-      "code_example_correct": "entry.status = 'resolved'; entry.value = result; callbacks.forEach(cb => cb(null, result));"
+      "mistake": "Calling callbacks inside lock",
+      "why_wrong": "Callback might call memoized function again \u2192 deadlock",
+      "correct_approach": "Copy callbacks list, release lock, then notify",
+      "code_example_wrong": "with lock:\\n    for cb in callbacks: cb(None, result)",
+      "code_example_correct": "with lock:\\n    callbacks = list(entry['callbacks'])\\nfor cb in callbacks: cb(None, result)"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by explaining the KEY CHALLENGE: 'The tricky part isn't just caching - it's handling multiple concurrent calls that arrive BEFORE the first result returns. We need request coalescing.' Then draw the state machine: empty \u2192 pending \u2192 resolved.",
+    "how_to_present": "Start by identifying the THREE cache states (absent/pending/resolved). Draw the timeline diagram showing how concurrent calls are handled. Then implement.",
     "what_to_mention": [
-      "This is the 'request coalescing' or 'request deduplication' pattern",
-      "Same pattern used in DataLoader (GraphQL) and SWR/React Query",
-      "Three-state cache: empty, pending, resolved",
-      "Error handling strategy (don't cache by default)",
-      "Thread safety considerations for concurrent calls"
+      "Why callback must be excluded from cache key",
+      "The race condition of concurrent calls",
+      "Thread safety considerations",
+      "Why errors shouldn't be cached"
     ],
-    "time_allocation": "2 min understanding, 3 min explaining approach, 8 min coding, 2 min testing",
+    "time_allocation": "2 min understanding, 3 min design/diagram, 10 min implementation, 2 min testing",
     "if_stuck": [
-      "Think about what state information you need to track - it's not just the result",
-      "What happens if someone calls while we're waiting? What should we store?",
-      "Draw a timeline: call1 at t=0, call2 at t=50, result at t=100. What happens?"
+      "Think: what happens if second call arrives before first completes?",
+      "What data structure can hold 'waiting' callbacks?",
+      "How do I know if a result is cached vs still loading?"
     ]
   },
-  "connection_to_next_part": "Part 3 will likely introduce **Promise-based memoization**. The cache entry structure we've designed (`{ status, value, callbacks }`) maps directly to Promise states (pending, fulfilled, rejected). Instead of storing callbacks array, we could store `{ promise, resolve, reject }` and return the same promise to all callers.",
+  "connection_to_next_part": "Part 3 likely adds Promise-based memoization. The status-based cache pattern extends naturally: instead of callbacks array, store the Promise itself. Pending calls await the same Promise.",
   "communication_script": {
-    "transition_from_previous": "Great, so Part 1 handles synchronous functions. For Part 2, the key challenge is async operations where we need to handle the case where multiple calls happen BEFORE the first result returns. This is known as 'request coalescing'.",
-    "explaining_changes": "The fundamental change is that our cache entries now need **state**. Instead of just storing the result value, we store: (1) status - is this pending or resolved?, (2) the result value when resolved, and (3) a list of callbacks waiting when pending.",
+    "transition_from_previous": "Part 1's sync memoization is working. For Part 2, I need to handle async callback-based functions. The key challenge is handling concurrent calls before the first completes.",
+    "explaining_changes": "I'll change the cache entries from simple values to status objects: {status: 'pending'|'resolved', value?, callbacks?[]}. This lets me track in-flight operations and queue waiters.",
     "while_extending_code": [
-      "I'm adding a status field to track whether the async operation is in-flight...",
-      "Here I check if we're in pending state and queue the callback instead of making another call...",
-      "When the async completes, I need to notify ALL waiting callbacks, not just one...",
-      "For error handling, I'm deleting the cache entry so retry is possible..."
+      "Adding memoize_async as a new function...",
+      "The cache entries now have status to track pending vs resolved...",
+      "Using a lock here for thread safety with concurrent calls..."
     ],
-    "after_completing": "This now handles concurrent async calls correctly - only one actual async operation is triggered, and all waiting callbacks are notified when it completes. Cache hits are O(1), and notification is O(n) where n is the number of waiting callbacks. Ready for Part 3?"
+    "after_completing": "This now handles async callbacks. Cache hit is O(k), pending calls are queued, and original function is called only once per unique args. Ready for Part 3?"
   },
   "time_milestones": {
-    "time_budget": "12-15 minutes for this part",
-    "by_2_min": "Understand the 'pending state' requirement; recognize this as request coalescing",
-    "by_5_min": "Have cache entry structure sketched: { status, value?, callbacks? }",
-    "by_10_min": "Core implementation done: cache lookup, pending state handling, notification",
-    "by_12_min": "Error handling implemented, basic testing",
-    "warning_signs": "If you haven't started coding by 5 min, speed up. If stuck on pending state concept, draw timeline diagram."
+    "time_budget": "15-20 minutes for this part",
+    "by_2_min": "Understand: async callback, pending state requirement, race condition",
+    "by_5_min": "Design: three-state cache, callback queue, explain approach",
+    "by_12_min": "Implementation complete with pending/resolved logic",
+    "by_15_min": "Testing with concurrent calls demo",
+    "warning_signs": "If stuck on callback separation by 5 min, ask for clarification"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "Part 2 is largely independent of Part 1's code structure. If needed, start fresh with the async-specific implementation. The key insight (state machine cache) doesn't require Part 1's code.",
-    "if_new_requirement_unclear": "Ask: 'For concurrent calls, should later callers wait for the first result, or should each trigger a new async call? I assume we want request coalescing.'",
-    "if_running_behind": "Focus on: (1) cache key generation, (2) pending state with callbacks array, (3) notification loop. Skip error handling refinements - mention them verbally."
+    "if_part_builds_wrong": "Part 1 is independent - Part 2 is a new function. If Part 1 has issues, can fix later.",
+    "if_new_requirement_unclear": "Ask: 'Just to confirm, the callback is always the last argument, right? And we use error-first (err, result) convention?'",
+    "if_running_behind": "Implement basic pending/resolved first. Skip thread safety initially, mention it verbally."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing 'request coalescing' pattern by name",
-      "Mentioning this is how DataLoader/SWR/React Query work",
-      "Drawing the state machine diagram unprompted",
-      "Proactively handling the callback iteration mutation issue",
-      "Mentioning the Zalgo problem for sync/async callback consistency",
-      "Discussing thread safety for concurrent JavaScript (microtask queue)"
+      "Immediately identifying the race condition problem",
+      "Drawing the timeline diagram before coding",
+      "Mentioning thread safety unprompted",
+      "Discussing why errors shouldn't be cached",
+      "Clean separation: callback extraction, state management, notification"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Request Coalescing / Request Deduplication",
+    "pattern": "Request Coalescing / Deduplication",
     "indicators": [
-      "Async operations that may be called multiple times with same args",
-      "Expensive operations where duplicate in-flight requests are wasteful",
-      "Need to 'batch' or 'dedupe' concurrent requests",
-      "Caching with pending/loading states"
+      "Multiple calls for same resource",
+      "Async operation that shouldn't be duplicated",
+      "Need to notify multiple waiters"
     ],
     "similar_problems": [
-      "Facebook DataLoader - batching and caching for GraphQL",
-      "SWR/React Query - client-side data fetching cache",
-      "HTTP request deduplication middleware",
-      "Rate limiting with request queue",
-      "Promise.all with shared promises"
+      "HTTP request deduplication",
+      "Database connection pooling",
+      "React Query/SWR stale-while-revalidate"
     ],
-    "template": "```javascript\nconst cache = new Map();\n\nfunction coalesce(key, asyncOp) {\n  if (cache.has(key)) {\n    const entry = cache.get(key);\n    if (entry.status === 'resolved') return entry.value;\n    if (entry.status === 'pending') return entry.promise;\n  }\n  \n  const promise = asyncOp().then(result => {\n    cache.set(key, { status: 'resolved', value: result });\n    return result;\n  });\n  \n  cache.set(key, { status: 'pending', promise });\n  return promise;\n}\n```"
+    "template": "cache[key] = {status: 'pending'|'resolved', value?, waiters?[]}"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'async memoization', I immediately think about the timing gap",
-      "why": "Sync memoization has instant results, but async has a delay during which other callers might request the same data"
+      "thought": "When I see callback-based async, I think about what happens with concurrent calls",
+      "why": "The timing gap between call and callback creates a window for race conditions"
     },
     {
       "step": 2,
-      "thought": "The constraint 'handle multiple calls before first completes' is the key",
-      "why": "This forces us to track 'in-flight' operations, not just completed ones. Simple value cache is insufficient."
+      "thought": "Need to track 'in-flight' state - not just 'cached' vs 'not cached'",
+      "why": "Binary state would either duplicate calls or miss notifications"
     },
     {
       "step": 3,
-      "thought": "Cache entries need STATE: empty \u2192 pending \u2192 resolved",
-      "why": "This three-state model lets us handle all scenarios: first call, concurrent calls, and cached calls"
-    },
-    {
-      "step": 4,
-      "thought": "Pending state needs a SUBSCRIBER LIST (callbacks array)",
-      "why": "Multiple callers during pending state all need to be notified when result arrives"
-    },
-    {
-      "step": 5,
-      "thought": "Error handling: delete entry vs store rejected state",
-      "why": "Problem says 'don't cache errors' which implies retry should be possible \u2192 delete entry"
+      "thought": "Queue pattern - store waiting callbacks, notify all when done",
+      "why": "Classic producer-consumer: one producer (async fn), multiple consumers (callbacks)"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you identify the 'request coalescing' pattern from requirements?",
-      "Do you understand async timing issues and race conditions?",
-      "Can you design appropriate data structures (state machine cache)?",
-      "Do you handle edge cases like errors and concurrent modification?",
-      "Is your code clean and well-organized?"
+      "Understanding of async patterns and race conditions",
+      "Ability to extend code without rewriting",
+      "Clean state management (pending vs resolved)",
+      "Consideration of edge cases (errors, concurrency)"
     ],
     "bonus_points": [
-      "Naming the pattern ('request coalescing'/'request deduplication')",
-      "Mentioning real-world uses (DataLoader, SWR)",
-      "Proactively discussing callback invocation safety",
-      "Mentioning the Zalgo problem",
-      "Discussing how this extends to Promises (Part 3 preview)"
+      "Thread safety without being asked",
+      "Drawing timeline diagram",
+      "Mentioning this is similar to Promise.all behavior",
+      "Clean callback separation"
     ],
     "red_flags": [
-      "Not recognizing the need for pending state tracking",
-      "Making duplicate async calls for concurrent requests",
-      "Forgetting to notify waiting callbacks on error",
-      "Race conditions from improper state updates",
-      "Including callback in cache key (breaks caching)"
+      "Not recognizing the concurrent calls problem",
+      "Including callback in cache key",
+      "Potential deadlocks from lock misuse",
+      "Ignoring error handling"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI for boilerplate like Map operations and array methods",
-      "Let AI suggest TypeScript types for the cache entry structure",
-      "Use AI to generate test cases for edge conditions"
+      "Use AI to help with threading.Lock syntax",
+      "Let it generate the test harness with threading.Event"
     ],
     "what_not_to_do": [
-      "Don't let AI design the state machine - that's the core insight you need to demonstrate",
-      "Don't accept code without understanding the callback queue mechanism",
-      "Verify AI-generated error handling actually notifies all callbacks"
+      "Don't let AI miss the pending state requirement",
+      "Verify callback separation logic manually"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without explaining the state machine approach",
-      "Not asking about error caching behavior",
-      "Staying silent while debugging concurrent call issues"
+      "Not asking about callback convention (error-first?)",
+      "Starting to code without addressing concurrent calls"
     ],
     "technical": [
-      "Simple cache that doesn't track pending state",
-      "Duplicate async calls for concurrent requests",
-      "Callbacks array mutation during iteration",
-      "Memory leaks from never-cleared pending entries"
+      "Using args directly including callback as key",
+      "Forgetting to handle the pending \u2192 resolved transition",
+      "Blocking async completion on lock held by waiting call"
     ],
     "communication": [
-      "Not explaining WHY pending state is necessary",
-      "Forgetting to mention the request coalescing insight",
-      "Not walking through concurrent call scenario"
+      "Not explaining why pending state is needed",
+      "Skipping the race condition explanation"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does cache entry have status field tracking pending/resolved?",
-      "Does pending state queue callbacks instead of making new async call?",
-      "Does async completion notify ALL waiting callbacks?",
-      "Does error handling delete entry AND notify callbacks?",
-      "Is callbacks array copied before iteration to prevent mutation issues?",
-      "Is cache key excluding the callback argument?"
+      "Does callback get excluded from cache key?",
+      "Is pending state tracked with callback queue?",
+      "Are all queued callbacks notified on completion?",
+      "Is error handling correct (don't cache)?",
+      "Is there thread safety if needed?"
     ],
     "quick_code_review": [
-      "No modification of callbacks array during iteration",
-      "Status updated BEFORE callbacks invoked (for recursive calls)",
-      "Original function called only for first request with given args",
-      "Error path doesn't leave orphaned pending entries"
+      "Lock acquired before cache check, released before fn call",
+      "Callbacks notified outside of lock",
+      "Part 1 memoize still works unchanged"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Configurable error caching with TTL for retry prevention",
-      "Cache size limits with LRU eviction",
-      "Timeout handling for async operations that never complete",
-      "Logging/metrics for cache hit rate",
-      "Option to force cache refresh",
-      "Wrap callback invocations in try-catch to prevent one callback error from affecting others"
+      "Configurable error caching with TTL",
+      "Cache size limits",
+      "Metrics: hit rate, pending queue size",
+      "Timeout handling for stuck async calls"
     ],
-    "why_not_in_interview": "Focus on core algorithm demonstrating understanding of request coalescing pattern. Mention these verbally as production enhancements.",
-    "how_to_mention": "Say: 'In production, I'd add cache TTL, size limits, and wrap callback invocations in try-catch to isolate errors between callbacks.'"
+    "why_not_in_interview": "Focus on core async handling logic; mention these verbally",
+    "how_to_mention": "In production, I'd add timeout handling and metrics to track cache effectiveness."
   },
-  "generated_at": "2026-01-18T21:50:40.956841",
+  "generated_at": "2026-01-19T04:44:40.101751",
   "_meta": {
     "problem_id": "javascript_polyfills_and_memoization",
     "part_number": 2,

@@ -175,7 +175,10 @@ function Section({
 // Base path for GitHub Pages deployment
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
-function ViewSolutionButton({
+// API base URL for backend (when running)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'
+
+function SolutionButtons({
   problem,
   partNumber,
   onSolutionLoaded
@@ -185,7 +188,10 @@ function ViewSolutionButton({
   onSolutionLoaded: (solution: PracticeSolution) => void
 }) {
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
   const [solution, setSolution] = useState<PracticeSolution | null>(null)
+  const [backendAvailable, setBackendAvailable] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Check for existing solution on mount
   const checkExistingSolution = useCallback(async () => {
@@ -204,14 +210,69 @@ function ViewSolutionButton({
     }
   }, [problem.problem_id, partNumber])
 
+  // Check if backend is available with retry
+  const checkBackend = useCallback(async () => {
+    const maxRetries = 3
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await fetch(`${API_BASE}/api/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(10000) // 10 second timeout
+        })
+        if (res.ok) {
+          setBackendAvailable(true)
+          return
+        }
+      } catch {
+        // Retry with exponential backoff
+        if (i < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, 1000 * (i + 1)))
+        }
+      }
+    }
+    setBackendAvailable(false)
+  }, [])
+
   useEffect(() => {
     checkExistingSolution()
-  }, [checkExistingSolution])
+    checkBackend()
+  }, [checkExistingSolution, checkBackend])
 
   // View existing solution
   const handleView = () => {
     if (solution) {
       onSolutionLoaded(solution)
+    }
+  }
+
+  // Generate solution with AI
+  const handleGenerate = async (force = false) => {
+    setGenerating(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`${API_BASE}/api/practice/generate-solution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          problem,
+          partNumber: partNumber || null,
+          force
+        })
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to generate solution')
+      }
+
+      const data = await res.json()
+      setSolution(data.solution)
+      onSolutionLoaded(data.solution)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generation failed')
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -224,29 +285,64 @@ function ViewSolutionButton({
     )
   }
 
-  // If solution exists, show View button
-  if (solution) {
-    return (
-      <button
-        onClick={handleView}
-        className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl font-medium text-xs sm:text-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
-      >
-        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-        </svg>
-        <span className="hidden sm:inline">View </span>Solution
-      </button>
-    )
-  }
-
-  // No solution available
   return (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-slate-400 bg-slate-50 border border-slate-200">
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      No Solution Available
+    <div className="flex flex-wrap items-center gap-2">
+      {/* View Solution Button - if solution exists */}
+      {solution && (
+        <button
+          onClick={handleView}
+          className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl font-medium text-xs sm:text-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
+        >
+          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span className="hidden sm:inline">View </span>Solution
+        </button>
+      )}
+
+      {/* AI Generate Button */}
+      {backendAvailable ? (
+        <button
+          onClick={() => handleGenerate(!!solution)}
+          disabled={generating}
+          className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl font-medium text-xs sm:text-sm transition-all ${
+            generating
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : solution
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+          }`}
+        >
+          {generating ? (
+            <>
+              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <span className="hidden sm:inline">Generating...</span>
+              <span className="sm:hidden">...</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="hidden sm:inline">{solution ? 'Regenerate' : 'Generate'} with AI</span>
+              <span className="sm:hidden">{solution ? 'Regen' : 'AI'}</span>
+            </>
+          )}
+        </button>
+      ) : !solution && (
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-slate-400 bg-slate-50 border border-slate-200">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          No Solution
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <span className="text-xs text-rose-500">{error}</span>
+      )}
     </div>
   )
 }
@@ -418,7 +514,7 @@ export function PracticeProblemClient() {
                 <h3 className="font-semibold text-slate-900 text-sm sm:text-base">Ready to solve this problem?</h3>
                 <p className="text-slate-600 text-xs sm:text-sm mt-0.5 sm:mt-1">Generate an AI-powered solution when you're stuck</p>
               </div>
-              <ViewSolutionButton 
+              <SolutionButtons 
                 problem={problem}
                 onSolutionLoaded={(solution) => setActiveSolution(solution)} 
               />
@@ -705,7 +801,7 @@ export function PracticeProblemClient() {
                               <h4 className="font-medium text-slate-900 text-sm sm:text-base">Need help with Part {followUp.part_number}?</h4>
                               <p className="text-slate-500 text-xs sm:text-sm">Generate a solution for this follow-up</p>
                             </div>
-                            <ViewSolutionButton 
+                            <SolutionButtons 
                               problem={problem}
                               partNumber={followUp.part_number}
                               onSolutionLoaded={(solution) => setActiveSolution(solution)} 

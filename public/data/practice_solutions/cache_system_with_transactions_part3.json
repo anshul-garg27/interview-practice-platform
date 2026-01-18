@@ -4,56 +4,50 @@
   "builds_on": "Part 2",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "Part 2 supported a single transaction level. Part 3 extends this to **nested transactions** where each BEGIN creates a new layer. COMMIT now merges to the parent transaction (not main cache), and only the outermost commit writes to main. GET must traverse all levels from innermost to outermost.",
+    "what_changes": "Part 2 had a single transaction layer (buffer + deleted set). Part 3 requires a STACK of transaction layers to support nesting. Each BEGIN pushes a new layer, COMMIT merges to parent (not directly to main store), and ROLLBACK pops the current layer. GET must traverse the entire stack from top to bottom.",
     "new_requirements": [
-      "Multiple nested transaction levels (stack of transactions)",
-      "COMMIT merges current level to parent, not directly to main cache",
-      "ROLLBACK only discards current level, parent levels remain intact",
-      "GET traverses all levels from innermost to outermost",
-      "DELETE must be tracked per-level to properly shadow values in outer levels"
+      "Multiple BEGIN commands create nested transaction levels",
+      "COMMIT merges current level into parent level (not main cache unless top-level)",
+      "ROLLBACK discards only current level, preserving parent levels",
+      "GET must traverse all levels from innermost to outermost",
+      "Only a top-level COMMIT affects the main cache"
     ],
     "new_constraints": [
-      "Unbounded nesting depth (theoretically)",
-      "Each level independently tracks its own changes AND deletions",
-      "Deletions must propagate correctly during commit"
+      "Arbitrary nesting depth must be supported",
+      "Each level maintains independent buffer and deleted set",
+      "Commit to parent must handle set-after-delete correctly (undelete)"
     ],
-    "key_insight": "Model transactions as a **stack of layers**, where each layer has its own changes dict AND deletion set. The deletion set is crucial - it marks keys as 'explicitly deleted at this level' which shadows any values in outer levels. During GET, we traverse from top to bottom, checking deletions first."
+    "key_insight": "Replace single (buffer, deleted) pair with a STACK of such pairs. Each layer acts as an overlay on layers below it. Commit 'squashes' the top layer into the next layer down."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Multiple nested BEGIN calls",
-        "how_met": "Push new HashMap and new Set to respective stacks on each BEGIN",
+        "requirement": "Nested BEGIN creates new level",
+        "how_met": "Push new (buffer, deleted) tuple onto tx_stack",
         "gotchas": [
-          "Forgetting to create deletion set alongside changes dict"
+          "Don't reset previous levels"
         ]
       },
       {
-        "requirement": "COMMIT merges to parent (not main)",
-        "how_met": "Check if stack has parent after pop; merge to parent if yes, main if no",
+        "requirement": "COMMIT merges to parent, not main store",
+        "how_met": "After pop, check if stack non-empty; if so, merge to stack[-1]",
         "gotchas": [
-          "Merging deletions incorrectly - must remove key from parent's SET when inheriting deletion"
-        ]
-      },
-      {
-        "requirement": "ROLLBACK only affects current level",
-        "how_met": "Simply pop from both stacks without any merging",
-        "gotchas": [
-          "Accidentally merging before popping"
+          "Must handle both buffer merge AND deleted merge",
+          "Must undelete keys that child set but parent had deleted"
         ]
       },
       {
         "requirement": "GET traverses all levels",
-        "how_met": "Loop from top of stack (innermost) to bottom (outermost), then check main",
+        "how_met": "Iterate reversed(tx_stack), check deleted\u2192buffer at each level, then fall through to store",
         "gotchas": [
-          "Checking value before deletion - must check deletion FIRST at each level"
+          "Stop at first deleted OR first buffer hit"
         ]
       },
       {
-        "requirement": "DELETE shadows outer values",
-        "how_met": "Maintain deletion_set per level; GET returns NULL if key in deletion_set",
+        "requirement": "ROLLBACK discards only current level",
+        "how_met": "Simply pop from stack without merging",
         "gotchas": [
-          "SET after DELETE in same level should cancel the deletion"
+          "Must return False if stack empty"
         ]
       }
     ],
@@ -62,661 +56,441 @@
         "operation": "begin",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Just append empty dict and set"
+        "why": "Just append empty structures to stack"
       },
       {
         "operation": "commit",
         "target": "O(k)",
         "achieved": "O(k)",
-        "why": "k = number of changes in current level"
+        "why": "Must iterate over k items in current level's buffer and deleted set"
       },
       {
         "operation": "rollback",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Just pop from stacks"
+        "why": "Just pop from stack"
       },
       {
         "operation": "get",
         "target": "O(d)",
         "achieved": "O(d)",
-        "why": "d = nesting depth, traverse all levels"
-      },
-      {
-        "operation": "set",
-        "target": "O(1)",
-        "achieved": "O(1)",
-        "why": "Single dict/set operations"
-      },
-      {
-        "operation": "delete",
-        "target": "O(1)",
-        "achieved": "O(1)",
-        "why": "Single dict/set operations"
+        "why": "Must traverse d nesting levels in worst case"
       }
     ],
     "non_goals": [
-      "Concurrent/parallel transactions",
-      "Transaction isolation levels",
-      "Savepoints within a transaction",
-      "Transaction timeout/expiry"
+      "Thread safety",
+      "Savepoints within a level",
+      "Partial commits"
     ]
   },
   "assumptions": [
-    "Nesting depth is reasonable (won't cause stack overflow)",
-    "Keys and values are non-null strings",
+    "No limit on nesting depth",
+    "COMMIT/ROLLBACK with empty stack returns False (no exception)",
     "Commands are well-formed (no validation needed)",
-    "Single-threaded execution (no concurrency)"
+    "Single-threaded execution"
   ],
   "tradeoffs": [
     {
-      "decision": "Separate deletion_stack vs. sentinel value in changes",
-      "chosen": "Separate deletion_stack",
-      "why": "Cleaner semantics - SET after DELETE in same level naturally works; no special sentinel handling",
-      "alternative": "Use sentinel like '__DELETED__' as value",
-      "when_to_switch": "If memory is extremely constrained and deletions are rare"
-    },
-    {
-      "decision": "ArrayList vs. LinkedList for stacks",
-      "chosen": "ArrayList",
-      "why": "O(1) amortized append/pop, better cache locality",
-      "alternative": "LinkedList or actual Stack class",
-      "when_to_switch": "Rarely - ArrayList is almost always better for stack operations"
-    },
-    {
-      "decision": "Traverse on GET vs. maintain merged view",
-      "chosen": "Traverse on GET",
-      "why": "Simpler implementation, O(d) is acceptable for typical nesting depths",
-      "alternative": "Maintain a merged view updated on each SET/DELETE",
-      "when_to_switch": "If GET is extremely frequent and nesting is very deep"
+      "decision": "Stack of tuples vs parallel stacks",
+      "chosen": "Stack of (buffer, deleted) tuples",
+      "why": "Keeps related data together, single pop operation",
+      "alternative": "Two parallel stacks (bufferStack, deletedStack)",
+      "when_to_switch": "If using a language without tuple support"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Public method signatures (set, get, delete, begin, commit, rollback, execute)",
-      "Return value semantics ('NULL' for missing keys, 'true'/'false' for boolean)",
-      "Core invariant: changes don't affect main cache until outermost commit"
+      "execute() interface",
+      "set/get/delete method signatures",
+      "Return value semantics"
     ],
     "what_to_change": [
-      "Added deletion_stack alongside transaction_stack",
-      "Modified commit() to handle parent vs. main differently",
-      "Modified get() to check deletions at each level"
+      "tx_active replaced by len(tx_stack) > 0",
+      "tx_buffer/tx_deleted replaced by tx_stack"
     ],
-    "interfaces_and_boundaries": "The execute() method provides a clean command interface. Individual operations (set/get/delete/begin/commit/rollback) are public for direct API use. Future parts could add new commands by extending execute() switch/if-else.",
+    "interfaces_and_boundaries": "Transaction state is fully encapsulated in tx_stack. Each level is isolated.",
     "invariants": [
-      "len(transaction_stack) == len(deletion_stack) always",
-      "A key cannot be in both changes AND deletions at the same level",
-      "After rollback, parent state is exactly as before inner BEGIN"
+      "A key cannot be in both buffer AND deleted at the same level",
+      "After commit/rollback, the popped level is gone",
+      "Empty stack means no active transaction",
+      "get() always returns string (value or 'NULL')"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 2):                    AFTER (Part 3):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Single txn dict \u2502                 \u2502 Stack of layers \u2502\n\u2502 {a: 10, b: 20}  \u2502                 \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                 \u2502 Level 3 (top)   \u2502\n         \u2502                          \u2502  changes: {z:3} \u2502\n         \u2502 COMMIT                   \u2502  deletions: {}  \u2502\n         \u25bc                          \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                 \u2502 Level 2         \u2502\n\u2502   Main Cache    \u2502                 \u2502  changes: {y:2} \u2502\n\u2502 {a: 10, b: 20}  \u2502                 \u2502  deletions: {x} \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                 \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n                                    \u2502 Level 1         \u2502\n                                    \u2502  changes: {x:1} \u2502\n                                    \u2502  deletions: {}  \u2502\n                                    \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n                                    \u2502   Main Cache    \u2502\n                                    \u2502  {a: 1, x: 0}   \u2502\n                                    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nGET x \u2192 Level 3: not found\n      \u2192 Level 2: x in deletions \u2192 'NULL'\n\nGET y \u2192 Level 3: not found\n      \u2192 Level 2: y=2 \u2192 '2'\n```",
-    "algorithm_flow": "```\nCOMMIT Flow (from Level 2 to Level 1):\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Level 2: changes={y:20}, deletions={a}                     \u2502\n\u2502 Level 1: changes={x:10, a:5}, deletions={}                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                              \u2502\n                              \u25bc COMMIT\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Step 1: Merge deletions                                    \u2502\n\u2502   - Add 'a' to Level 1 deletions                           \u2502\n\u2502   - Remove 'a' from Level 1 changes (was a:5)              \u2502\n\u2502   Level 1: changes={x:10}, deletions={a}                   \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 Step 2: Merge SET operations                               \u2502\n\u2502   - Add y:20 to Level 1 changes                            \u2502\n\u2502   Level 1: changes={x:10, y:20}, deletions={a}             \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 Step 3: Pop Level 2                                        \u2502\n\u2502   Stack now has only Level 1                               \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (Part 2):               AFTER (Part 3):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510            \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 tx_buffer: {}   \u2502            \u2502 tx_stack: [     \u2502\n\u2502 tx_deleted: {}  \u2502     \u2192      \u2502   (buf0, del0), \u2502\n\u2502 tx_active: bool \u2502            \u2502   (buf1, del1), \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518            \u2502   (buf2, del2)  \u2502 \u2190 current\n                               \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "algorithm_flow": "```\nGET key traversal:\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 Level 2  \u2502 \u2500\u2500 deleted? \u2192 NULL\n  \u2502 (top)    \u2502 \u2500\u2500 in buffer? \u2192 return value\n  \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2518         \u2502\n       \u2193 (not found)   \u2502\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510         \u2502\n  \u2502 Level 1  \u2502 \u2500\u2500 deleted? \u2192 NULL\n  \u2502          \u2502 \u2500\u2500 in buffer? \u2192 return value\n  \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2518         \u2502\n       \u2193 (not found)   \u2502\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510         \u2502\n  \u2502 Main     \u2502 \u2500\u2500 in store? \u2192 return value\n  \u2502 Store    \u2502 \u2500\u2500 else \u2192 NULL\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nCOMMIT flow:\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 Level 2  \u2502 \u2500\u2500\u2510 pop & merge\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n       \u2193         \u2502\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n  \u2502 Level 1  \u2502 \u2190\u2500\u2518 buffer.update(), handle deletions\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
   },
   "approaches": [
     {
-      "name": "Naive Extension (Single Deletion Flag)",
-      "description": "Keep Part 2's single transaction dict, add a single deletion set, try to track 'depth' with a counter",
+      "name": "Naive Extension - Keep Single Level",
+      "description": "Try to use Part 2's single buffer/deleted and somehow track nesting depth",
       "time_complexity": "O(1) for operations",
-      "space_complexity": "O(n) where n = total changes",
-      "why_not_optimal": "Cannot properly isolate levels. When rolling back inner transaction, can't distinguish which changes belong to which level. Deletions at inner level incorrectly persist after rollback."
+      "space_complexity": "O(k) for k changes",
+      "why_not_optimal": "Impossible to rollback inner level while preserving outer level changes. Would need to replay commands."
     },
     {
-      "name": "Optimal Approach (Stack of Layers)",
-      "description": "Maintain parallel stacks: one for changes (List<Dict>), one for deletions (List<Set>). Each BEGIN pushes to both, each COMMIT/ROLLBACK pops from both. COMMIT merges popped layer to next layer (or main).",
+      "name": "Optimal Approach - Stack of Layers",
+      "description": "Replace single buffer/deleted with a stack. Each BEGIN pushes, each COMMIT/ROLLBACK pops. COMMIT merges down.",
       "time_complexity": "O(d) for GET, O(k) for COMMIT, O(1) for others",
-      "space_complexity": "O(d * k) where d = depth, k = avg changes per level",
-      "key_insight": "Each transaction level is independent. The deletion set is crucial - it lets inner levels 'shadow' values from outer levels by marking keys as explicitly deleted, which is different from 'not set at this level'."
+      "space_complexity": "O(total changes across all levels)",
+      "key_insight": "Each layer is an independent overlay. The stack naturally represents nesting. Commit is just 'squash top two layers'."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Stack-Based Nested Transactions\n\nThe key insight is that nested transactions form a **stack** where each level has **two components**:\n\n1. **Changes Dict**: Keys that were SET at this level\n2. **Deletions Set**: Keys that were DELETE'd at this level\n\n### Why Deletions Need Separate Tracking\n\nConsider:\n```\nMain: {a: 1}\nBEGIN\n  DELETE a\n  GET a \u2192 should return NULL\nROLLBACK\nGET a \u2192 should return 1\n```\n\nIf we only track changes, there's no way to distinguish between:\n- Key was never touched at this level (check outer levels)\n- Key was explicitly deleted (return NULL, don't check outer levels)\n\n### Algorithm\n\n**GET**: Traverse stack top-to-bottom. At each level:\n1. If key in deletions \u2192 return NULL (shadowed)\n2. If key in changes \u2192 return value\n3. Continue to next level\n4. Finally check main cache\n\n**SET**: Add to current level's changes, remove from deletions (SET cancels DELETE)\n\n**DELETE**: Add to current level's deletions, remove from changes\n\n**COMMIT**: Pop current level, **merge into parent** (not main!):\n- Parent inherits all deletions (and removes those keys from its changes)\n- Parent inherits all SET operations (and removes those keys from its deletions)\n\n**ROLLBACK**: Simply pop current level, no merging",
+    "explanation_md": "The solution models nested transactions as a **stack of overlays**. Each transaction level has its own `buffer` (for SETs) and `deleted` set (for DELETEs).\n\n**Key Operations:**\n- **BEGIN**: Push `({}, set())` onto stack\n- **GET**: Traverse stack top-to-bottom; at each level, if key is deleted return NULL, if key is in buffer return value, else continue to next level. Finally check main store.\n- **SET**: Add to top level's buffer, remove from top level's deleted\n- **DELETE**: Check existence by traversing stack, then add to top level's deleted and remove from buffer\n- **COMMIT**: Pop top level. If stack non-empty, merge buffer and deleted into new top. Else merge into main store. **Critical**: when merging buffer, also `discard` from parent's deleted (handles set-after-delete).\n- **ROLLBACK**: Simply pop top level.",
     "data_structures": [
       {
-        "structure": "HashMap (main_cache)",
-        "purpose": "Permanent storage for committed key-value pairs"
+        "structure": "List of (dict, set) tuples",
+        "purpose": "Stack of transaction layers, each with buffer and deleted set"
       },
       {
-        "structure": "List<HashMap> (transaction_stack)",
-        "purpose": "Stack of changes at each transaction level"
-      },
-      {
-        "structure": "List<HashSet> (deletion_stack)",
-        "purpose": "Stack of deleted keys at each transaction level"
+        "structure": "dict (store)",
+        "purpose": "Main committed cache"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Initialize empty main_cache, empty transaction_stack, empty deletion_stack",
-      "Step 2: On BEGIN - push new empty dict to transaction_stack, new empty set to deletion_stack",
-      "Step 3: On SET - if in transaction, add to top of transaction_stack and remove from top of deletion_stack; else add to main_cache",
-      "Step 4: On DELETE - if in transaction, add to top of deletion_stack and remove from transaction_stack; else remove from main_cache",
-      "Step 5: On GET - traverse from top of stacks to bottom, checking deletions before changes at each level, finally check main_cache",
-      "Step 6: On COMMIT - pop from both stacks, merge to parent (or main if no parent): deletions first, then changes",
-      "Step 7: On ROLLBACK - pop from both stacks without merging"
+      "BEGIN: Append empty (buffer={}, deleted=set()) to tx_stack",
+      "GET: For each level from top, check deleted\u2192buffer; finally check store",
+      "SET in tx: Add to tx_stack[-1][0], discard from tx_stack[-1][1]",
+      "DELETE in tx: Check _key_exists, then add to deleted, pop from buffer",
+      "COMMIT: Pop top; merge buffer to parent/store (with undelete); merge deleted to parent/store",
+      "ROLLBACK: Pop top without merging"
     ]
   },
   "solution_python_lines": [
-    "from typing import Dict, List, Set, Optional",
+    "from typing import List",
     "",
     "",
     "class Cache:",
     "    \"\"\"",
-    "    Key-Value Cache System with Nested Transaction Support.",
-    "    ",
-    "    Supports SET, GET, DELETE operations with nested transactions.",
-    "    Each BEGIN starts a new transaction level that can be independently",
-    "    committed (to parent) or rolled back.",
+    "    Key-Value Cache with nested transaction support.",
+    "    Stack-based: each transaction level is a (buffer, deleted) pair.",
     "    \"\"\"",
-    "    ",
+    "",
     "    def __init__(self):",
-    "        \"\"\"Initialize empty cache with no active transactions.\"\"\"",
-    "        self._main_cache: Dict[str, str] = {}",
-    "        self._transaction_stack: List[Dict[str, str]] = []",
-    "        self._deletion_stack: List[Set[str]] = []",
-    "    ",
+    "        self.store = {}  # Main cache storage",
+    "        self.tx_stack = []  # Stack of (buffer_dict, deleted_set) tuples",
+    "",
     "    def set(self, key: str, value: str) -> None:",
-    "        \"\"\"",
-    "        Store a key-value pair.",
-    "        ",
-    "        If in a transaction, stores in current transaction level.",
-    "        Otherwise stores directly in main cache.",
-    "        SET after DELETE at same level cancels the deletion.",
-    "        \"\"\"",
-    "        if self._transaction_stack:",
-    "            # Store in current transaction level",
-    "            self._transaction_stack[-1][key] = value",
-    "            # SET cancels any previous DELETE at this level",
-    "            self._deletion_stack[-1].discard(key)",
+    "        \"\"\"Store key-value. In transaction, buffers at current level.\"\"\"",
+    "        if self.tx_stack:",
+    "            buffer, deleted = self.tx_stack[-1]",
+    "            buffer[key] = value",
+    "            deleted.discard(key)",
     "        else:",
-    "            self._main_cache[key] = value",
-    "    ",
+    "            self.store[key] = value",
+    "",
     "    def get(self, key: str) -> str:",
-    "        \"\"\"",
-    "        Retrieve a value by key.",
-    "        ",
-    "        Traverses from innermost transaction to outermost, then main cache.",
-    "        Returns 'NULL' if key not found or explicitly deleted.",
-    "        \"\"\"",
-    "        # Traverse from innermost (top) to outermost (bottom)",
-    "        for i in range(len(self._transaction_stack) - 1, -1, -1):",
-    "            # Check if explicitly deleted at this level FIRST",
-    "            if key in self._deletion_stack[i]:",
+    "        \"\"\"Get value. Traverse stack top-to-bottom, then main store.\"\"\"",
+    "        for buffer, deleted in reversed(self.tx_stack):",
+    "            if key in deleted:",
     "                return \"NULL\"",
-    "            # Check if value exists at this level",
-    "            if key in self._transaction_stack[i]:",
-    "                return self._transaction_stack[i][key]",
-    "        ",
-    "        # Check main cache",
-    "        return self._main_cache.get(key, \"NULL\")",
-    "    ",
-    "    def delete(self, key: str) -> None:",
-    "        \"\"\"",
-    "        Remove a key.",
-    "        ",
-    "        If in a transaction, marks as deleted in current level.",
-    "        Otherwise removes directly from main cache.",
-    "        \"\"\"",
-    "        if self._transaction_stack:",
-    "            # Remove from current level's changes if present",
-    "            self._transaction_stack[-1].pop(key, None)",
-    "            # Mark as deleted at this level",
-    "            self._deletion_stack[-1].add(key)",
+    "            if key in buffer:",
+    "                return buffer[key]",
+    "        return self.store.get(key, \"NULL\")",
+    "",
+    "    def _key_exists(self, key: str) -> bool:",
+    "        \"\"\"Check if key exists from current transaction's perspective.\"\"\"",
+    "        for buffer, deleted in reversed(self.tx_stack):",
+    "            if key in deleted:",
+    "                return False",
+    "            if key in buffer:",
+    "                return True",
+    "        return key in self.store",
+    "",
+    "    def delete(self, key: str) -> bool:",
+    "        \"\"\"Delete key. In transaction, marks for deletion at current level.\"\"\"",
+    "        if self.tx_stack:",
+    "            if self._key_exists(key):",
+    "                buffer, deleted = self.tx_stack[-1]",
+    "                deleted.add(key)",
+    "                buffer.pop(key, None)",
+    "                return True",
+    "            return False",
     "        else:",
-    "            self._main_cache.pop(key, None)",
-    "    ",
+    "            if key in self.store:",
+    "                del self.store[key]",
+    "                return True",
+    "            return False",
+    "",
     "    def begin(self) -> None:",
-    "        \"\"\"",
-    "        Start a new nested transaction level.",
-    "        ",
-    "        Creates a new layer that captures all subsequent changes",
-    "        until COMMIT or ROLLBACK.",
-    "        \"\"\"",
-    "        self._transaction_stack.append({})",
-    "        self._deletion_stack.append(set())",
-    "    ",
+    "        \"\"\"Start a new nested transaction level.\"\"\"",
+    "        self.tx_stack.append(({}, set()))",
+    "",
     "    def commit(self) -> bool:",
-    "        \"\"\"",
-    "        Commit current transaction level.",
-    "        ",
-    "        If at innermost level with parent: merges changes to parent.",
-    "        If at outermost level: merges changes to main cache.",
-    "        ",
-    "        Returns:",
-    "            True if committed successfully, False if no active transaction.",
-    "        \"\"\"",
-    "        if not self._transaction_stack:",
+    "        \"\"\"Commit current level to parent (or main). Returns False if no tx.\"\"\"",
+    "        if not self.tx_stack:",
     "            return False",
     "        ",
-    "        # Pop current level",
-    "        current_changes = self._transaction_stack.pop()",
-    "        current_deletions = self._deletion_stack.pop()",
+    "        buffer, deleted = self.tx_stack.pop()",
     "        ",
-    "        if self._transaction_stack:",
-    "            # Merge to parent transaction",
-    "            parent_changes = self._transaction_stack[-1]",
-    "            parent_deletions = self._deletion_stack[-1]",
-    "            ",
-    "            # Step 1: Merge deletions - parent inherits all deletions",
-    "            for key in current_deletions:",
-    "                parent_deletions.add(key)",
-    "                parent_changes.pop(key, None)  # Remove from parent's SET",
-    "            ",
-    "            # Step 2: Merge SET operations - these override deletions",
-    "            for key, value in current_changes.items():",
-    "                parent_changes[key] = value",
-    "                parent_deletions.discard(key)  # SET cancels DELETE",
+    "        if self.tx_stack:",
+    "            # Merge to parent level",
+    "            parent_buffer, parent_deleted = self.tx_stack[-1]",
+    "            # Apply buffer (and undelete if parent had deleted)",
+    "            for key, value in buffer.items():",
+    "                parent_buffer[key] = value",
+    "                parent_deleted.discard(key)",
+    "            # Apply deletions",
+    "            for key in deleted:",
+    "                parent_deleted.add(key)",
+    "                parent_buffer.pop(key, None)",
     "        else:",
-    "            # Merge to main cache",
-    "            # Apply deletions first",
-    "            for key in current_deletions:",
-    "                self._main_cache.pop(key, None)",
-    "            ",
-    "            # Then apply SET operations",
-    "            for key, value in current_changes.items():",
-    "                self._main_cache[key] = value",
+    "            # Merge to main store",
+    "            self.store.update(buffer)",
+    "            for key in deleted:",
+    "                self.store.pop(key, None)",
     "        ",
     "        return True",
-    "    ",
+    "",
     "    def rollback(self) -> bool:",
-    "        \"\"\"",
-    "        Rollback current transaction level.",
-    "        ",
-    "        Discards all changes in current level without affecting",
-    "        parent transactions or main cache.",
-    "        ",
-    "        Returns:",
-    "            True if rolled back, False if no active transaction.",
-    "        \"\"\"",
-    "        if not self._transaction_stack:",
+    "        \"\"\"Rollback current level. Returns False if no transaction.\"\"\"",
+    "        if not self.tx_stack:",
     "            return False",
-    "        ",
-    "        self._transaction_stack.pop()",
-    "        self._deletion_stack.pop()",
+    "        self.tx_stack.pop()",
     "        return True",
-    "    ",
+    "",
     "    def execute(self, commands: List[str]) -> List[str]:",
-    "        \"\"\"",
-    "        Execute a list of commands and return results.",
-    "        ",
-    "        Commands:",
-    "            SET <key> <value> - Store value (no output)",
-    "            GET <key> - Returns value or 'NULL'",
-    "            DELETE <key> - Remove key (no output)",
-    "            BEGIN - Start nested transaction (no output)",
-    "            COMMIT - Commit to parent/main (returns 'true'/'false')",
-    "            ROLLBACK - Rollback current level (returns 'true'/'false')",
-    "        \"\"\"",
-    "        results: List[str] = []",
-    "        ",
+    "        \"\"\"Parse and execute commands.\"\"\"",
+    "        results = []",
     "        for command in commands:",
-    "            parts = command.split()",
-    "            op = parts[0].upper()",
-    "            ",
+    "            parts = command.split(\" \")",
+    "            op = parts[0]",
     "            if op == \"SET\":",
-    "                key, value = parts[1], parts[2]",
-    "                self.set(key, value)",
+    "                self.set(parts[1], parts[2])",
     "            elif op == \"GET\":",
-    "                key = parts[1]",
-    "                results.append(self.get(key))",
+    "                results.append(self.get(parts[1]))",
     "            elif op == \"DELETE\":",
-    "                key = parts[1]",
-    "                self.delete(key)",
+    "                results.append(\"true\" if self.delete(parts[1]) else \"false\")",
     "            elif op == \"BEGIN\":",
     "                self.begin()",
     "            elif op == \"COMMIT\":",
-    "                success = self.commit()",
-    "                results.append(\"true\" if success else \"false\")",
+    "                results.append(\"true\" if self.commit() else \"false\")",
     "            elif op == \"ROLLBACK\":",
-    "                success = self.rollback()",
-    "                results.append(\"true\" if success else \"false\")",
-    "        ",
+    "                results.append(\"true\" if self.rollback() else \"false\")",
     "        return results",
     "",
     "",
-    "def main():",
-    "    \"\"\"Demonstrate nested transaction functionality.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"NESTED TRANSACTIONS DEMO\")",
-    "    print(\"=\" * 60)",
-    "    ",
-    "    # Example 1: Nested commit then rollback",
-    "    print(\"\\n--- Example 1: Nested Commit then Rollback ---\")",
-    "    cache1 = Cache()",
-    "    commands1 = [",
-    "        \"SET a 1\",",
-    "        \"BEGIN\",",
-    "        \"SET a 10\",",
-    "        \"BEGIN\",",
-    "        \"SET a 100\",",
-    "        \"GET a\",",
-    "        \"COMMIT\",",
-    "        \"GET a\",",
-    "        \"ROLLBACK\",",
-    "        \"GET a\"",
-    "    ]",
-    "    print(f\"Commands: {commands1}\")",
-    "    results1 = cache1.execute(commands1)",
-    "    print(f\"Results:  {results1}\")",
-    "    print(\"Expected: ['100', 'true', '100', 'true', '1']\")",
-    "    ",
-    "    # Example 2: Inner rollback, outer commit",
-    "    print(\"\\n--- Example 2: Inner Rollback, Outer Commit ---\")",
-    "    cache2 = Cache()",
-    "    commands2 = [",
-    "        \"BEGIN\",",
-    "        \"SET x 1\",",
-    "        \"BEGIN\",",
-    "        \"SET y 2\",",
-    "        \"ROLLBACK\",",
-    "        \"GET y\",",
-    "        \"COMMIT\",",
-    "        \"GET x\",",
-    "        \"GET y\"",
-    "    ]",
-    "    print(f\"Commands: {commands2}\")",
-    "    results2 = cache2.execute(commands2)",
-    "    print(f\"Results:  {results2}\")",
-    "    print(\"Expected: ['true', 'NULL', 'true', '1', 'NULL']\")",
-    "    ",
-    "    # Example 3: Deep nesting (3 levels)",
-    "    print(\"\\n--- Example 3: Deep Nesting (3 levels) ---\")",
-    "    cache3 = Cache()",
-    "    commands3 = [",
-    "        \"SET x 1\",",
-    "        \"BEGIN\",      # Level 1",
-    "        \"SET x 10\",",
-    "        \"BEGIN\",      # Level 2",
-    "        \"SET x 100\",",
-    "        \"BEGIN\",      # Level 3",
-    "        \"SET x 1000\",",
-    "        \"GET x\",      # Should be 1000",
-    "        \"COMMIT\",     # Level 3 -> Level 2",
-    "        \"GET x\",      # Should be 1000",
-    "        \"COMMIT\",     # Level 2 -> Level 1",
-    "        \"GET x\",      # Should be 1000",
-    "        \"COMMIT\",     # Level 1 -> Main",
-    "        \"GET x\"       # Should be 1000",
-    "    ]",
-    "    print(f\"Commands: {commands3}\")",
-    "    results3 = cache3.execute(commands3)",
-    "    print(f\"Results:  {results3}\")",
-    "    print(\"Expected: ['1000', 'true', '1000', 'true', '1000', 'true', '1000']\")",
-    "    ",
-    "    # Example 4: DELETE in nested transaction",
-    "    print(\"\\n--- Example 4: DELETE in Nested Transaction ---\")",
-    "    cache4 = Cache()",
-    "    commands4 = [",
-    "        \"SET a 1\",",
-    "        \"SET b 2\",",
-    "        \"BEGIN\",",
-    "        \"DELETE a\",",
-    "        \"GET a\",      # NULL (deleted in L1)",
-    "        \"BEGIN\",",
-    "        \"SET a 100\",  # Re-set in L2",
-    "        \"GET a\",      # 100",
-    "        \"ROLLBACK\",   # L2 rolled back",
-    "        \"GET a\",      # NULL (still deleted in L1)",
-    "        \"COMMIT\",     # L1 commits deletion to main",
-    "        \"GET a\",      # NULL",
-    "        \"GET b\"       # 2 (unchanged)",
-    "    ]",
-    "    print(f\"Commands: {commands4}\")",
-    "    results4 = cache4.execute(commands4)",
-    "    print(f\"Results:  {results4}\")",
-    "    print(\"Expected: ['NULL', '100', 'true', 'NULL', 'true', 'NULL', '2']\")",
-    "    ",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"All demos completed!\")",
-    "",
-    "",
     "if __name__ == \"__main__\":",
-    "    main()"
+    "    print(\"=\" * 60)",
+    "    print(\"Test 1: Nested commit - inner merges to outer, outer rollback\")",
+    "    print(\"=\" * 60)",
+    "    cache = Cache()",
+    "    result = cache.execute([",
+    "        \"SET a 1\", \"BEGIN\", \"SET a 10\", \"BEGIN\", \"SET a 100\",",
+    "        \"GET a\", \"COMMIT\", \"GET a\", \"ROLLBACK\", \"GET a\"",
+    "    ])",
+    "    print(f\"Result: {result}\")",
+    "    print(f\"Expected: ['100', 'true', '100', 'true', '1']\")",
+    "    assert result == [\"100\", \"true\", \"100\", \"true\", \"1\"]",
+    "",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Test 2: Inner rollback preserves outer\")",
+    "    print(\"=\" * 60)",
+    "    cache2 = Cache()",
+    "    result2 = cache2.execute([",
+    "        \"BEGIN\", \"SET x 1\", \"BEGIN\", \"SET y 2\",",
+    "        \"ROLLBACK\", \"GET y\", \"COMMIT\", \"GET x\", \"GET y\"",
+    "    ])",
+    "    print(f\"Result: {result2}\")",
+    "    print(f\"Expected: ['true', 'NULL', 'true', '1', 'NULL']\")",
+    "    assert result2 == [\"true\", \"NULL\", \"true\", \"1\", \"NULL\"]",
+    "",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Test 3: Delete in inner, rollback restores\")",
+    "    print(\"=\" * 60)",
+    "    cache3 = Cache()",
+    "    result3 = cache3.execute([",
+    "        \"SET k v\", \"BEGIN\", \"BEGIN\", \"DELETE k\", \"GET k\",",
+    "        \"ROLLBACK\", \"GET k\", \"COMMIT\", \"GET k\"",
+    "    ])",
+    "    print(f\"Result: {result3}\")",
+    "    print(f\"Expected: ['true', 'NULL', 'true', 'v', 'true', 'v']\")",
+    "    assert result3 == [\"true\", \"NULL\", \"true\", \"v\", \"true\", \"v\"]",
+    "",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"Test 4: Set after parent delete - commit undeletes\")",
+    "    print(\"=\" * 60)",
+    "    cache4 = Cache()",
+    "    result4 = cache4.execute([",
+    "        \"SET x 1\", \"BEGIN\", \"DELETE x\", \"BEGIN\", \"SET x 99\",",
+    "        \"COMMIT\", \"GET x\", \"COMMIT\", \"GET x\"",
+    "    ])",
+    "    print(f\"Result: {result4}\")",
+    "    print(f\"Expected: ['true', 'true', '99', 'true', '99']\")",
+    "    assert result4 == [\"true\", \"true\", \"99\", \"true\", \"99\"]",
+    "",
+    "    print(\"\\n\" + \"=\" * 60)",
+    "    print(\"All tests passed!\")",
+    "    print(\"=\" * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
     "/**",
-    " * Key-Value Cache System with Nested Transaction Support.",
-    " * ",
-    " * Supports SET, GET, DELETE operations with nested transactions.",
-    " * Each BEGIN starts a new transaction level that can be independently",
-    " * committed (to parent) or rolled back.",
+    " * Key-Value Cache with nested transaction support.",
+    " * Stack-based: each level is a (buffer, deleted) pair.",
     " */",
     "public class Cache {",
-    "    private Map<String, String> mainCache;",
-    "    private List<Map<String, String>> transactionStack;",
-    "    private List<Set<String>> deletionStack;",
-    "    ",
+    "    private Map<String, String> store;",
+    "    private List<Map<String, String>> txBufferStack;",
+    "    private List<Set<String>> txDeletedStack;",
+    "",
     "    public Cache() {",
-    "        mainCache = new HashMap<>();",
-    "        transactionStack = new ArrayList<>();",
-    "        deletionStack = new ArrayList<>();",
+    "        this.store = new HashMap<>();",
+    "        this.txBufferStack = new ArrayList<>();",
+    "        this.txDeletedStack = new ArrayList<>();",
     "    }",
-    "    ",
-    "    /**",
-    "     * Store a key-value pair.",
-    "     * If in transaction, stores in current level. SET cancels DELETE.",
-    "     */",
+    "",
     "    public void set(String key, String value) {",
-    "        if (!transactionStack.isEmpty()) {",
-    "            transactionStack.get(transactionStack.size() - 1).put(key, value);",
-    "            deletionStack.get(deletionStack.size() - 1).remove(key);",
+    "        if (!txBufferStack.isEmpty()) {",
+    "            int top = txBufferStack.size() - 1;",
+    "            txBufferStack.get(top).put(key, value);",
+    "            txDeletedStack.get(top).remove(key);",
     "        } else {",
-    "            mainCache.put(key, value);",
+    "            store.put(key, value);",
     "        }",
     "    }",
-    "    ",
-    "    /**",
-    "     * Retrieve value by key.",
-    "     * Traverses from innermost to outermost, checking deletions first.",
-    "     */",
+    "",
     "    public String get(String key) {",
-    "        // Traverse from innermost (top) to outermost (bottom)",
-    "        for (int i = transactionStack.size() - 1; i >= 0; i--) {",
-    "            // Check deletions FIRST",
-    "            if (deletionStack.get(i).contains(key)) {",
-    "                return \"NULL\";",
-    "            }",
-    "            // Then check changes",
-    "            if (transactionStack.get(i).containsKey(key)) {",
-    "                return transactionStack.get(i).get(key);",
+    "        for (int i = txBufferStack.size() - 1; i >= 0; i--) {",
+    "            if (txDeletedStack.get(i).contains(key)) return \"NULL\";",
+    "            if (txBufferStack.get(i).containsKey(key)) {",
+    "                return txBufferStack.get(i).get(key);",
     "            }",
     "        }",
-    "        return mainCache.getOrDefault(key, \"NULL\");",
+    "        return store.getOrDefault(key, \"NULL\");",
     "    }",
-    "    ",
-    "    /**",
-    "     * Remove a key.",
-    "     * If in transaction, marks as deleted at current level.",
-    "     */",
-    "    public void delete(String key) {",
-    "        if (!transactionStack.isEmpty()) {",
-    "            transactionStack.get(transactionStack.size() - 1).remove(key);",
-    "            deletionStack.get(deletionStack.size() - 1).add(key);",
+    "",
+    "    private boolean keyExists(String key) {",
+    "        for (int i = txBufferStack.size() - 1; i >= 0; i--) {",
+    "            if (txDeletedStack.get(i).contains(key)) return false;",
+    "            if (txBufferStack.get(i).containsKey(key)) return true;",
+    "        }",
+    "        return store.containsKey(key);",
+    "    }",
+    "",
+    "    public boolean delete(String key) {",
+    "        if (!txBufferStack.isEmpty()) {",
+    "            if (keyExists(key)) {",
+    "                int top = txBufferStack.size() - 1;",
+    "                txDeletedStack.get(top).add(key);",
+    "                txBufferStack.get(top).remove(key);",
+    "                return true;",
+    "            }",
+    "            return false;",
     "        } else {",
-    "            mainCache.remove(key);",
+    "            return store.remove(key) != null;",
     "        }",
     "    }",
-    "    ",
-    "    /**",
-    "     * Start a new nested transaction level.",
-    "     */",
+    "",
     "    public void begin() {",
-    "        transactionStack.add(new HashMap<>());",
-    "        deletionStack.add(new HashSet<>());",
+    "        txBufferStack.add(new HashMap<>());",
+    "        txDeletedStack.add(new HashSet<>());",
     "    }",
-    "    ",
-    "    /**",
-    "     * Commit current transaction level.",
-    "     * Merges to parent if exists, otherwise to main cache.",
-    "     * @return true if committed, false if no active transaction",
-    "     */",
+    "",
     "    public boolean commit() {",
-    "        if (transactionStack.isEmpty()) {",
-    "            return false;",
-    "        }",
+    "        if (txBufferStack.isEmpty()) return false;",
     "        ",
-    "        // Pop current level",
-    "        Map<String, String> currentChanges = ",
-    "            transactionStack.remove(transactionStack.size() - 1);",
-    "        Set<String> currentDeletions = ",
-    "            deletionStack.remove(deletionStack.size() - 1);",
+    "        int top = txBufferStack.size() - 1;",
+    "        Map<String, String> buffer = txBufferStack.remove(top);",
+    "        Set<String> deleted = txDeletedStack.remove(top);",
     "        ",
-    "        if (!transactionStack.isEmpty()) {",
-    "            // Merge to parent transaction",
-    "            Map<String, String> parentChanges = ",
-    "                transactionStack.get(transactionStack.size() - 1);",
-    "            Set<String> parentDeletions = ",
-    "                deletionStack.get(deletionStack.size() - 1);",
-    "            ",
-    "            // Step 1: Merge deletions",
-    "            for (String key : currentDeletions) {",
-    "                parentDeletions.add(key);",
-    "                parentChanges.remove(key);",
+    "        if (!txBufferStack.isEmpty()) {",
+    "            int parent = txBufferStack.size() - 1;",
+    "            // Merge buffer (with undelete)",
+    "            for (Map.Entry<String, String> e : buffer.entrySet()) {",
+    "                txBufferStack.get(parent).put(e.getKey(), e.getValue());",
+    "                txDeletedStack.get(parent).remove(e.getKey());",
     "            }",
-    "            ",
-    "            // Step 2: Merge SET operations",
-    "            for (Map.Entry<String, String> entry : currentChanges.entrySet()) {",
-    "                parentChanges.put(entry.getKey(), entry.getValue());",
-    "                parentDeletions.remove(entry.getKey());",
+    "            // Merge deletions",
+    "            for (String key : deleted) {",
+    "                txDeletedStack.get(parent).add(key);",
+    "                txBufferStack.get(parent).remove(key);",
     "            }",
     "        } else {",
-    "            // Merge to main cache",
-    "            for (String key : currentDeletions) {",
-    "                mainCache.remove(key);",
-    "            }",
-    "            mainCache.putAll(currentChanges);",
+    "            store.putAll(buffer);",
+    "            for (String key : deleted) store.remove(key);",
     "        }",
-    "        ",
     "        return true;",
     "    }",
-    "    ",
-    "    /**",
-    "     * Rollback current transaction level.",
-    "     * Discards changes without affecting parent or main.",
-    "     * @return true if rolled back, false if no active transaction",
-    "     */",
+    "",
     "    public boolean rollback() {",
-    "        if (transactionStack.isEmpty()) {",
-    "            return false;",
-    "        }",
-    "        transactionStack.remove(transactionStack.size() - 1);",
-    "        deletionStack.remove(deletionStack.size() - 1);",
+    "        if (txBufferStack.isEmpty()) return false;",
+    "        txBufferStack.remove(txBufferStack.size() - 1);",
+    "        txDeletedStack.remove(txDeletedStack.size() - 1);",
     "        return true;",
     "    }",
-    "    ",
-    "    /**",
-    "     * Execute a list of commands and return results.",
-    "     */",
+    "",
     "    public List<String> execute(List<String> commands) {",
     "        List<String> results = new ArrayList<>();",
-    "        ",
     "        for (String command : commands) {",
     "            String[] parts = command.split(\" \");",
-    "            String op = parts[0].toUpperCase();",
-    "            ",
-    "            switch (op) {",
-    "                case \"SET\":",
-    "                    set(parts[1], parts[2]);",
-    "                    break;",
-    "                case \"GET\":",
-    "                    results.add(get(parts[1]));",
-    "                    break;",
-    "                case \"DELETE\":",
-    "                    delete(parts[1]);",
-    "                    break;",
-    "                case \"BEGIN\":",
-    "                    begin();",
-    "                    break;",
-    "                case \"COMMIT\":",
-    "                    results.add(commit() ? \"true\" : \"false\");",
-    "                    break;",
-    "                case \"ROLLBACK\":",
-    "                    results.add(rollback() ? \"true\" : \"false\");",
-    "                    break;",
+    "            switch (parts[0]) {",
+    "                case \"SET\": set(parts[1], parts[2]); break;",
+    "                case \"GET\": results.add(get(parts[1])); break;",
+    "                case \"DELETE\": results.add(delete(parts[1]) ? \"true\" : \"false\"); break;",
+    "                case \"BEGIN\": begin(); break;",
+    "                case \"COMMIT\": results.add(commit() ? \"true\" : \"false\"); break;",
+    "                case \"ROLLBACK\": results.add(rollback() ? \"true\" : \"false\"); break;",
     "            }",
     "        }",
-    "        ",
     "        return results;",
     "    }",
-    "    ",
+    "",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"NESTED TRANSACTIONS DEMO\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        ",
-    "        // Example 1: Nested commit then rollback",
-    "        System.out.println(\"\\n--- Example 1: Nested Commit then Rollback ---\");",
-    "        Cache cache1 = new Cache();",
-    "        List<String> commands1 = Arrays.asList(",
+    "        System.out.println(\"Test 1: Nested commit - inner merges to outer\");",
+    "        Cache c1 = new Cache();",
+    "        System.out.println(c1.execute(Arrays.asList(",
     "            \"SET a 1\", \"BEGIN\", \"SET a 10\", \"BEGIN\", \"SET a 100\",",
-    "            \"GET a\", \"COMMIT\", \"GET a\", \"ROLLBACK\", \"GET a\"",
-    "        );",
-    "        System.out.println(\"Results: \" + cache1.execute(commands1));",
-    "        System.out.println(\"Expected: [100, true, 100, true, 1]\");",
-    "        ",
-    "        // Example 2: Inner rollback, outer commit",
-    "        System.out.println(\"\\n--- Example 2: Inner Rollback, Outer Commit ---\");",
-    "        Cache cache2 = new Cache();",
-    "        List<String> commands2 = Arrays.asList(",
-    "            \"BEGIN\", \"SET x 1\", \"BEGIN\", \"SET y 2\", \"ROLLBACK\",",
-    "            \"GET y\", \"COMMIT\", \"GET x\", \"GET y\"",
-    "        );",
-    "        System.out.println(\"Results: \" + cache2.execute(commands2));",
-    "        System.out.println(\"Expected: [true, NULL, true, 1, NULL]\");",
-    "        ",
-    "        // Example 3: DELETE in nested transaction",
-    "        System.out.println(\"\\n--- Example 3: DELETE with Re-SET ---\");",
-    "        Cache cache3 = new Cache();",
-    "        List<String> commands3 = Arrays.asList(",
-    "            \"SET a 1\", \"BEGIN\", \"DELETE a\", \"GET a\",",
-    "            \"BEGIN\", \"SET a 100\", \"GET a\", \"ROLLBACK\",",
-    "            \"GET a\", \"COMMIT\", \"GET a\"",
-    "        );",
-    "        System.out.println(\"Results: \" + cache3.execute(commands3));",
-    "        System.out.println(\"Expected: [NULL, 100, true, NULL, true, NULL]\");",
-    "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
-    "        System.out.println(\"All demos completed!\");",
+    "            \"GET a\", \"COMMIT\", \"GET a\", \"ROLLBACK\", \"GET a\")));",
+    "        // Expected: [100, true, 100, true, 1]",
+    "",
+    "        System.out.println(\"\\nTest 2: Inner rollback preserves outer\");",
+    "        Cache c2 = new Cache();",
+    "        System.out.println(c2.execute(Arrays.asList(",
+    "            \"BEGIN\", \"SET x 1\", \"BEGIN\", \"SET y 2\",",
+    "            \"ROLLBACK\", \"GET y\", \"COMMIT\", \"GET x\", \"GET y\")));",
+    "        // Expected: [true, NULL, true, 1, NULL]",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-3",
-      "explanation": "Import typing hints (Python) or java.util (Java)"
+      "lines": "1-12",
+      "explanation": "Class setup with store (main cache) and tx_stack (list of (buffer, deleted) tuples representing nested transaction levels)"
     },
     {
-      "lines": "6-17",
-      "explanation": "Class definition with docstring and three core data structures: main_cache (permanent), transaction_stack (changes per level), deletion_stack (deletions per level)"
+      "lines": "14-21",
+      "explanation": "set() - If in transaction, add to top level's buffer and undelete. Otherwise, write directly to store."
     },
     {
-      "lines": "19-32",
-      "explanation": "SET method: if in transaction, adds to current level's changes and removes from deletions (SET cancels DELETE); otherwise writes to main_cache"
+      "lines": "23-30",
+      "explanation": "get() - Traverse stack from top to bottom. At each level: if deleted\u2192NULL, if in buffer\u2192return value. Finally check store."
     },
     {
-      "lines": "34-50",
-      "explanation": "GET method: traverses stack from innermost to outermost, checking deletions BEFORE changes at each level (critical order!), finally checks main_cache"
+      "lines": "32-39",
+      "explanation": "_key_exists() - Helper to check existence across all levels. Same traversal as get() but returns boolean."
     },
     {
-      "lines": "52-64",
-      "explanation": "DELETE method: if in transaction, removes from changes and adds to deletions; otherwise removes from main_cache"
+      "lines": "41-53",
+      "explanation": "delete() - If in transaction, check existence via helper, then add to deleted and remove from buffer. Otherwise, delete from store."
     },
     {
-      "lines": "66-73",
-      "explanation": "BEGIN method: simply pushes new empty dict and set to respective stacks"
+      "lines": "55-57",
+      "explanation": "begin() - Push new empty (buffer, deleted) tuple onto stack. O(1) operation."
     },
     {
-      "lines": "75-110",
-      "explanation": "COMMIT method: pops current level, then either merges to parent (if stack not empty) or to main_cache. Merge order: deletions first, then SET operations"
+      "lines": "59-78",
+      "explanation": "commit() - Pop top level. If parent exists, merge buffer (with undelete) and merge deletions. If no parent, merge to main store."
     },
     {
-      "lines": "112-125",
-      "explanation": "ROLLBACK method: simply pops from both stacks without any merging"
+      "lines": "80-84",
+      "explanation": "rollback() - Simply pop top level without merging. Discards all changes at current level."
     },
     {
-      "lines": "127-155",
-      "explanation": "EXECUTE method: parses commands and dispatches to appropriate methods, collecting results"
+      "lines": "86-100",
+      "explanation": "execute() - Parse commands and dispatch to appropriate methods. Same interface as Parts 1-2."
     }
   ],
   "complexity_analysis": {
@@ -724,34 +498,30 @@
       "new_methods": {
         "begin": {
           "complexity": "O(1)",
-          "explanation": "Appending empty dict/set to lists"
+          "explanation": "Append empty structures to stack"
         },
         "commit": {
           "complexity": "O(k)",
-          "explanation": "k = number of changes + deletions in current level, must iterate through all"
+          "explanation": "Where k = number of changes in current level. Must iterate buffer and deleted set."
         },
         "rollback": {
           "complexity": "O(1)",
-          "explanation": "Just popping from end of lists"
+          "explanation": "Just pop from stack, no iteration"
         },
         "get": {
           "complexity": "O(d)",
-          "explanation": "d = nesting depth, must traverse all levels in worst case"
+          "explanation": "Where d = nesting depth. Must potentially traverse all levels."
         },
-        "set_in_transaction": {
-          "complexity": "O(1)",
-          "explanation": "Dict put + set discard"
-        },
-        "delete_in_transaction": {
-          "complexity": "O(1)",
-          "explanation": "Dict pop + set add"
+        "_key_exists": {
+          "complexity": "O(d)",
+          "explanation": "Same traversal as get()"
         }
       },
-      "overall_change": "GET is now O(d) instead of O(1) due to traversal. Other operations remain efficient."
+      "overall_change": "GET becomes O(d) instead of O(1). DELETE becomes O(d) due to existence check. Other ops remain O(1) or O(k)."
     },
     "space": {
-      "additional_space": "O(d * k)",
-      "explanation": "d = nesting depth, k = average number of changes per level. Each level has its own HashMap and HashSet."
+      "additional_space": "O(\u03a3 k_i) where k_i = changes in level i",
+      "explanation": "Each level stores its own buffer and deleted set. Total space is sum of all changes across all active levels."
     }
   },
   "dry_run": {
@@ -760,324 +530,339 @@
       {
         "step": 1,
         "action": "SET a 1",
-        "state": "main={a:1}, stack=[], del=[]",
-        "explanation": "No transaction, goes to main cache"
+        "state": "store={a:1}, stack=[]",
+        "explanation": "No transaction, write directly to store"
       },
       {
         "step": 2,
         "action": "BEGIN",
-        "state": "main={a:1}, stack=[{}], del=[{}]",
-        "explanation": "Level 1 created"
+        "state": "store={a:1}, stack=[({},{})]",
+        "explanation": "Push empty level"
       },
       {
         "step": 3,
         "action": "SET a 10",
-        "state": "main={a:1}, stack=[{a:10}], del=[{}]",
-        "explanation": "a=10 added to Level 1"
+        "state": "store={a:1}, stack=[({a:10},{})]",
+        "explanation": "Write to level 0 buffer"
       },
       {
         "step": 4,
         "action": "BEGIN",
-        "state": "main={a:1}, stack=[{a:10},{}], del=[{},{}]",
-        "explanation": "Level 2 created"
+        "state": "store={a:1}, stack=[({a:10},{}),({},{})]",
+        "explanation": "Push another level"
       },
       {
         "step": 5,
         "action": "SET a 100",
-        "state": "main={a:1}, stack=[{a:10},{a:100}], del=[{},{}]",
-        "explanation": "a=100 added to Level 2"
+        "state": "store={a:1}, stack=[({a:10},{}),({a:100},{})]",
+        "explanation": "Write to level 1 buffer"
       },
       {
         "step": 6,
         "action": "GET a",
         "state": "unchanged",
-        "explanation": "Traverse: L2 has a=100, return '100'"
+        "explanation": "Check level 1: a in buffer \u2192 return '100'"
       },
       {
         "step": 7,
         "action": "COMMIT",
-        "state": "main={a:1}, stack=[{a:100}], del=[{}]",
-        "explanation": "L2 merged to L1: L1 now has a=100, return 'true'"
+        "state": "store={a:1}, stack=[({a:100},{})]",
+        "explanation": "Pop level 1, merge buffer to level 0. Level 0 now has a=100"
       },
       {
         "step": 8,
         "action": "GET a",
         "state": "unchanged",
-        "explanation": "Traverse: L1 has a=100, return '100'"
+        "explanation": "Check level 0: a in buffer \u2192 return '100'"
       },
       {
         "step": 9,
         "action": "ROLLBACK",
-        "state": "main={a:1}, stack=[], del=[]",
-        "explanation": "L1 discarded (not merged), return 'true'"
+        "state": "store={a:1}, stack=[]",
+        "explanation": "Pop level 0, discard changes"
       },
       {
         "step": 10,
         "action": "GET a",
         "state": "unchanged",
-        "explanation": "No transactions, check main: a=1, return '1'"
+        "explanation": "Stack empty, check store \u2192 return '1'"
       }
     ],
     "final_output": "['100', 'true', '100', 'true', '1']"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "BEGIN then ROLLBACK returns 'true'",
-      "BEGIN, SET x 1, ROLLBACK, GET x returns 'NULL'",
-      "COMMIT without BEGIN returns 'false'"
+      "Single BEGIN/COMMIT should work like Part 2",
+      "GET with empty stack should hit store"
     ],
     "likely_bugs": [
-      "Checking value before deletion in GET (must check deletion FIRST)",
-      "Not removing key from parent's changes when merging deletion",
-      "Forgetting to discard from deletion_set when SET is called",
-      "Merging to main cache when there's still a parent level"
+      "Commit merging to store instead of parent",
+      "Not undeleting when child sets key parent deleted",
+      "Off-by-one in stack indexing"
     ],
     "recommended_logs_or_asserts": [
-      "assert len(transaction_stack) == len(deletion_stack)",
-      "Log state after each BEGIN/COMMIT/ROLLBACK: depth, current level contents"
+      "assert not (key in buffer and key in deleted)",
+      "Log stack depth on each operation"
     ],
-    "how_to_localize": "1. Print stack state after each command. 2. Trace GET manually through all levels. 3. Check if COMMIT is merging to correct target (parent vs main)."
+    "how_to_localize": "Print stack contents after each operation. Check if buffer/deleted have expected keys at each level."
   },
   "edge_cases": [
     {
-      "case": "COMMIT/ROLLBACK with no transaction",
-      "handling": "Return false immediately",
+      "case": "Commit with no transaction",
+      "handling": "Return False",
       "gotcha": "Don't crash on empty stack"
     },
     {
-      "case": "DELETE then SET same key same level",
-      "handling": "SET removes from deletion_set, value is accessible",
-      "gotcha": "Order matters: SET cancels DELETE"
+      "case": "Deep nesting (many BEGINs)",
+      "handling": "Stack grows, GET traverses all levels",
+      "gotcha": "Don't assume max depth"
     },
     {
-      "case": "SET then DELETE same key same level",
-      "handling": "Key removed from changes, added to deletions",
-      "gotcha": "DELETE shadows outer values"
+      "case": "Set key that parent deleted",
+      "handling": "On commit, undelete from parent's deleted set",
+      "gotcha": "Must discard from parent_deleted when merging buffer"
     },
     {
-      "case": "Deep nesting (10+ levels)",
-      "handling": "Works correctly, just O(d) for GET",
-      "gotcha": "Ensure no stack overflow for very deep nesting"
-    },
-    {
-      "case": "DELETE key that doesn't exist",
-      "handling": "Still marks as deleted (shadows potential outer values)",
-      "gotcha": "Deletion is idempotent but still tracked"
-    },
-    {
-      "case": "Multiple COMMITs in sequence",
-      "handling": "Each commit merges one level up until reaching main",
-      "gotcha": "Count commits needed = current depth"
+      "case": "Delete key only in outer level",
+      "handling": "_key_exists traverses to find it",
+      "gotcha": "Must look beyond current buffer"
     }
   ],
   "test_cases": [
     {
-      "name": "Example 1 - Nested commit then rollback",
-      "input": "[SET a 1, BEGIN, SET a 10, BEGIN, SET a 100, GET a, COMMIT, GET a, ROLLBACK, GET a]",
-      "expected": "['100', 'true', '100', 'true', '1']",
-      "explanation": "Inner commit merges to L1, outer rollback discards L1, back to original"
+      "name": "Basic nesting with commit cascade",
+      "input": [
+        "SET a 1",
+        "BEGIN",
+        "SET a 10",
+        "BEGIN",
+        "SET a 100",
+        "GET a",
+        "COMMIT",
+        "GET a",
+        "ROLLBACK",
+        "GET a"
+      ],
+      "expected": [
+        "100",
+        "true",
+        "100",
+        "true",
+        "1"
+      ],
+      "explanation": "Inner commit merges to outer, outer rollback discards all, back to original"
     },
     {
-      "name": "Example 2 - Inner rollback, outer commit",
-      "input": "[BEGIN, SET x 1, BEGIN, SET y 2, ROLLBACK, GET y, COMMIT, GET x, GET y]",
-      "expected": "['true', 'NULL', 'true', '1', 'NULL']",
-      "explanation": "y is lost with inner rollback, x survives via outer commit"
+      "name": "Inner rollback preserves outer",
+      "input": [
+        "BEGIN",
+        "SET x 1",
+        "BEGIN",
+        "SET y 2",
+        "ROLLBACK",
+        "GET y",
+        "COMMIT",
+        "GET x"
+      ],
+      "expected": [
+        "true",
+        "NULL",
+        "true",
+        "1"
+      ],
+      "explanation": "Inner rollback only discards inner changes"
     },
     {
-      "name": "DELETE shadows outer value",
-      "input": "[SET a 1, BEGIN, DELETE a, GET a]",
-      "expected": "['NULL']",
-      "explanation": "DELETE in transaction shadows main cache value"
-    },
-    {
-      "name": "SET cancels DELETE at same level",
-      "input": "[SET a 1, BEGIN, DELETE a, SET a 2, GET a, COMMIT, GET a]",
-      "expected": "['2', 'true', '2']",
-      "explanation": "SET after DELETE makes value accessible again"
-    },
-    {
-      "name": "No transaction operations",
-      "input": "[COMMIT, ROLLBACK]",
-      "expected": "['false', 'false']",
-      "explanation": "No active transaction returns false"
+      "name": "Set after parent delete",
+      "input": [
+        "SET x 1",
+        "BEGIN",
+        "DELETE x",
+        "BEGIN",
+        "SET x 99",
+        "COMMIT",
+        "GET x",
+        "COMMIT",
+        "GET x"
+      ],
+      "expected": [
+        "true",
+        "true",
+        "99",
+        "true",
+        "99"
+      ],
+      "explanation": "Inner set overrides parent's delete when committed"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Checking value before deletion in GET",
-      "why_wrong": "If DELETE is called, key should return NULL even if SET exists at outer level",
-      "correct_approach": "Check deletion_set BEFORE checking changes at each level",
-      "code_example_wrong": "# Wrong: checks changes first\nif key in self._transaction_stack[i]:\n    return self._transaction_stack[i][key]\nif key in self._deletion_stack[i]:\n    return 'NULL'",
-      "code_example_correct": "# Correct: checks deletions first\nif key in self._deletion_stack[i]:\n    return 'NULL'\nif key in self._transaction_stack[i]:\n    return self._transaction_stack[i][key]"
+      "mistake": "Always committing to main store",
+      "why_wrong": "Nested commit should merge to parent level, not main store",
+      "correct_approach": "Check if stack is non-empty after pop; if so, merge to stack[-1]",
+      "code_example_wrong": "# After pop, always: store.update(buffer)",
+      "code_example_correct": "if self.tx_stack:\\n    parent_buffer, parent_deleted = self.tx_stack[-1]\\n    parent_buffer.update(buffer)\\nelse:\\n    self.store.update(buffer)"
     },
     {
-      "mistake": "Always merging to main cache on commit",
-      "why_wrong": "Part 2 behavior. In Part 3, commit should merge to PARENT if one exists",
-      "correct_approach": "Check if stack is non-empty after pop; if yes, merge to parent",
-      "code_example_wrong": "# Wrong: always merges to main\nself._main_cache.update(current_changes)",
-      "code_example_correct": "# Correct: check for parent\nif self._transaction_stack:\n    # merge to parent\nelse:\n    # merge to main"
+      "mistake": "Not handling set-after-delete on commit",
+      "why_wrong": "If child sets key X and parent had deleted X, the set should win",
+      "correct_approach": "When merging buffer to parent, also discard from parent's deleted set",
+      "code_example_wrong": "parent_buffer.update(buffer)  # Missing undelete",
+      "code_example_correct": "for key, value in buffer.items():\\n    parent_buffer[key] = value\\n    parent_deleted.discard(key)  # Undelete!"
     },
     {
-      "mistake": "Not tracking deletions separately per level",
-      "why_wrong": "Single deletion set can't properly handle rollback of nested deletes",
-      "correct_approach": "Parallel deletion_stack alongside transaction_stack",
-      "code_example_wrong": "# Wrong: single deletion set\nself._deleted_keys.add(key)",
-      "code_example_correct": "# Correct: per-level deletion tracking\nself._deletion_stack[-1].add(key)"
+      "mistake": "GET only checking current level",
+      "why_wrong": "A key might be set in an outer level, not the innermost",
+      "correct_approach": "Traverse entire stack from top to bottom",
+      "code_example_wrong": "if key in self.tx_stack[-1][0]: return self.tx_stack[-1][0][key]",
+      "code_example_correct": "for buffer, deleted in reversed(self.tx_stack):\\n    if key in deleted: return 'NULL'\\n    if key in buffer: return buffer[key]"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by explaining the key insight: transactions form a stack, and each level needs BOTH changes AND deletions. Draw the stack structure with levels before coding.",
+    "how_to_present": "Start by explaining the stack model: 'Each BEGIN pushes a new layer. COMMIT squashes the top two layers. ROLLBACK just pops.' Then walk through GET traversal.",
     "what_to_mention": [
-      "Why deletions need separate tracking (shadowing outer values)",
-      "The order of checking in GET (deletions before values)",
-      "COMMIT merges to parent, not directly to main",
-      "Time complexity trade-off: O(d) GET vs simpler implementation"
+      "The key insight is layers as overlays",
+      "Commit to parent vs commit to store distinction",
+      "Set-after-delete edge case and how commit handles it"
     ],
-    "time_allocation": "2 min understand requirements, 3 min explain approach with diagram, 7-8 min implement, 2 min test",
+    "time_allocation": "2 min to explain approach, 8 min to code, 2 min to test",
     "if_stuck": [
-      "Think about what makes this different from Part 2 - multiple levels, not just one",
-      "How would you distinguish 'key not touched' vs 'key explicitly deleted'?",
-      "What data structure naturally represents nested levels? (stack)"
+      "Draw the stack with example data",
+      "Trace through a nested BEGIN/COMMIT sequence manually"
     ]
   },
-  "connection_to_next_part": "Part 4 might add features like SAVEPOINT (named checkpoints within a transaction), TTL (time-to-live for keys), or COUNT_KEYS operations. The stack-based architecture cleanly extends to these: savepoints are just named positions in the stack, TTL adds metadata alongside values.",
+  "connection_to_next_part": "If Part 4 adds TTL/expiration, each level might need its own expiration tracking. The stack architecture extends naturally - just add TTL info per key at each level.",
   "communication_script": {
-    "transition_from_previous": "Great, Part 2 is working. For Part 3, I need to handle **nested** transactions. The key change is that COMMIT now merges to the parent transaction instead of main cache, and only the outermost commit writes to main.",
-    "explaining_changes": "I'll convert my single transaction dict to a **stack of transaction layers**. Each layer has its own changes dict and deletions set. The crucial insight is that deletions must be tracked separately because we need to distinguish 'key not touched at this level' from 'key explicitly deleted'.",
+    "transition_from_previous": "Part 2 worked great for single transactions. For nesting, I need to replace the single buffer/deleted with a stack of such pairs. Each BEGIN pushes a new layer.",
+    "explaining_changes": "The key change is from single (buffer, deleted) to a stack. BEGIN pushes, COMMIT pops and merges to parent OR store, ROLLBACK just pops.",
     "while_extending_code": [
-      "I'm changing single_transaction to transaction_stack - a list of dicts",
-      "Adding deletion_stack in parallel to track deleted keys per level",
-      "Modifying commit() to check if there's a parent level before merging"
+      "I'm replacing tx_buffer/tx_deleted with tx_stack...",
+      "For GET, I now traverse the stack from top to bottom...",
+      "The tricky part in commit is merging to parent, including handling undelete..."
     ],
-    "after_completing": "This now handles nested transactions correctly. GET is O(d) where d is nesting depth, but that's typically small. COMMIT is O(k) where k is changes in current level. Ready for the next part?"
+    "after_completing": "This now handles arbitrary nesting. GET is O(d) for depth d, commit is O(k) for changes, rollback is O(1). Ready for the next part?"
   },
   "time_milestones": {
     "time_budget": "10-15 minutes for this part",
-    "by_3_min": "Understand nested semantics, identify that we need a stack AND separate deletion tracking",
-    "by_6_min": "Explain approach clearly, draw stack diagram, start modifying code",
-    "by_12_min": "Implementation complete, testing with provided examples",
-    "warning_signs": "If stuck on deletion tracking at 6 min, ask: 'How should DELETE in inner level affect GET?' This is the key insight."
+    "by_2_min": "Explain stack-based approach, understand merge semantics",
+    "by_5_min": "Implement begin, modified get/set with stack",
+    "by_10_min": "Implement commit with parent vs store logic, rollback",
+    "warning_signs": "If struggling with commit merge logic at 8 min, simplify: get store version working first, then add parent case."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "If Part 2 has bugs, fix the single-level case first. A working Part 2 makes Part 3 straightforward.",
-    "if_new_requirement_unclear": "Ask: 'When I COMMIT in a nested transaction, does it go to the parent transaction or directly to main cache?'",
-    "if_running_behind": "Focus on BEGIN/COMMIT/ROLLBACK logic first. GET traversal and DELETE handling can be simplified initially."
+    "if_part_builds_wrong": "If Part 2 logic is interfering, start fresh with stack-based approach. The stack generalizes Part 2.",
+    "if_new_requirement_unclear": "Ask: 'When inner commits, does it go to parent or all the way to store?'",
+    "if_running_behind": "Implement commit to store first, mention parent case verbally. Rollback is trivial."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing this is a stack-based problem",
-      "Identifying the need for separate deletion tracking without hints",
-      "Mentioning the O(d) trade-off for GET and when it matters",
-      "Drawing clear before/after diagrams of the stack state"
+      "Immediately recognizing the stack pattern",
+      "Mentioning the set-after-delete edge case before asked",
+      "Noting GET complexity change from O(1) to O(d)",
+      "Clean separation of parent vs store commit logic"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Transaction Stack / Layered State Management",
+    "pattern": "Stack-based State Management / Overlay Pattern",
     "indicators": [
-      "Nested operations",
-      "Commit/rollback semantics",
-      "Need to isolate changes per level"
+      "Nesting implies push/pop",
+      "Rollback suggests state restoration",
+      "Commit suggests state merge"
     ],
     "similar_problems": [
-      "Git stash/pop",
-      "Undo/redo with nested operations",
-      "Nested scopes in compilers",
-      "Memento pattern with hierarchy"
+      "Undo/Redo system",
+      "Nested scopes in interpreters",
+      "Git stash with nesting",
+      "Database savepoints"
     ],
-    "template": "Stack<Layer> where Layer = {changes: Map, deletions: Set}. BEGIN=push, COMMIT=pop+merge, ROLLBACK=pop"
+    "template": "Each level has its own diff/delta. Read = traverse stack. Commit = merge top into next. Rollback = pop."
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'nested transactions', I immediately think stack",
-      "why": "Each BEGIN pushes a new context, each COMMIT/ROLLBACK pops"
+      "thought": "Nesting means I can't have just one buffer - I need one per level",
+      "why": "Because rollback should only affect current level"
     },
     {
       "step": 2,
-      "thought": "The key constraint is that COMMIT goes to parent, not main",
-      "why": "This is what makes it 'nested' - changes propagate level by level"
+      "thought": "A stack is the natural data structure for nesting",
+      "why": "LIFO matches BEGIN/COMMIT|ROLLBACK semantics"
     },
     {
       "step": 3,
-      "thought": "I need to track deletions separately",
-      "why": "DELETE must shadow outer values; 'not in dict' is different from 'explicitly deleted'"
+      "thought": "COMMIT must merge to parent, not store",
+      "why": "Only outermost commit affects permanent state"
     },
     {
       "step": 4,
-      "thought": "GET must traverse all levels from inner to outer",
-      "why": "Innermost value wins; but must check deletions first at each level"
+      "thought": "GET needs to traverse all levels",
+      "why": "Key might be set in any outer level"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you recognize this as a stack problem?",
-      "Do you understand the subtle difference between 'not set' vs 'deleted'?",
-      "Can you extend existing code cleanly without rewriting everything?",
-      "Do you handle the merge logic correctly (to parent vs to main)?"
+      "Can you extend to nesting without rewriting everything?",
+      "Do you understand the merge semantics?",
+      "Can you handle edge cases like set-after-delete?"
     ],
     "bonus_points": [
-      "Drawing clear diagrams of the stack state",
-      "Mentioning edge cases proactively (delete then set, etc.)",
-      "Discussing the O(d) complexity trade-off",
-      "Clean, readable code with good variable names"
+      "Mentioning O(d) complexity change for GET",
+      "Clean handling of parent vs store commit",
+      "Proactive edge case discussion"
     ],
     "red_flags": [
-      "Not understanding that COMMIT goes to parent in nested case",
-      "Missing the deletion tracking requirement entirely",
-      "Rewriting GET/SET from scratch instead of extending",
-      "Confusing the order of deletion/value checks in GET"
+      "Rewriting entire solution from scratch",
+      "Missing the parent-level commit requirement",
+      "Only testing happy path"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Let AI generate the loop structure for stack traversal",
-      "Use AI for boilerplate dict/set operations"
+      "Let AI help with stack manipulation syntax",
+      "Use AI to generate test cases"
     ],
     "what_not_to_do": [
-      "Don't let AI decide the data structure - you choose stack",
-      "Verify the merge logic manually - AI often gets the order wrong"
+      "Don't let AI miss the parent vs store commit distinction",
+      "Verify the merge logic manually"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Not asking clarifying questions about COMMIT target",
-      "Staying silent while thinking too long"
+      "Not clarifying what 'commit to parent' means",
+      "Rushing without testing nested scenarios"
     ],
     "technical": [
-      "Using a single deletion set instead of per-level",
-      "Checking values before deletions in GET"
+      "Using single buffer for all levels",
+      "Not handling the undelete case in commit"
     ],
     "communication": [
-      "Not explaining why deletions need separate tracking",
-      "Forgetting to trace through an example"
+      "Not explaining why stack is needed",
+      "Skipping edge case discussion"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does GET check deletions BEFORE values at each level?",
-      "Does COMMIT merge to parent (not main) when stack non-empty?",
-      "Does ROLLBACK simply pop without merging?",
-      "Are transaction_stack and deletion_stack always the same length?",
-      "Does SET cancel DELETE at the same level?"
+      "Does nested BEGIN/COMMIT work?",
+      "Does inner ROLLBACK preserve outer changes?",
+      "Does set-after-parent-delete work correctly?",
+      "Are Part 2 tests still passing?"
     ],
     "quick_code_review": [
-      "Both stacks initialized in __init__",
-      "Both stacks pushed in begin()",
-      "Both stacks popped in commit() and rollback()",
-      "Consistent naming between Python and Java versions"
+      "Stack manipulation uses append/pop correctly",
+      "Commit has both parent and store branches",
+      "GET traverses reversed(stack)"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Maximum nesting depth limit to prevent stack overflow",
-      "Logging transaction begin/commit/rollback with timestamps",
-      "Metrics for average nesting depth and transaction duration",
-      "Thread-safety if concurrent access is needed"
+      "Max nesting depth limit",
+      "Stack depth metrics",
+      "Memory monitoring for large transactions"
     ],
-    "why_not_in_interview": "Focus on correctness of core algorithm first; these are enhancements",
-    "how_to_mention": "Say: 'In production, I'd add a max nesting depth limit and log each transaction boundary for debugging.'"
+    "why_not_in_interview": "Focus on core algorithm; mention limits verbally",
+    "how_to_mention": "Say: 'In production, I'd add a configurable max nesting depth to prevent stack overflow.'"
   },
-  "generated_at": "2026-01-18T18:18:20.349226",
+  "generated_at": "2026-01-19T03:59:26.613748",
   "_meta": {
     "problem_id": "cache_system_with_transactions",
     "part_number": 3,

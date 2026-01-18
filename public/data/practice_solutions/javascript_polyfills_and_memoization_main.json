@@ -4,69 +4,73 @@
   "category": "Frontend/JavaScript",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a **closure-based caching pattern** problem. When I see 'cache results based on arguments', I immediately think of:\n1. **Higher-order functions** - returning a function that wraps another\n2. **Closures** - maintaining state (cache) between calls\n3. **Key serialization** - converting arguments to a unique cache key\n\nThis is a fundamental JavaScript pattern used everywhere: React's useMemo, Redux selectors, lodash.memoize.",
-    "pattern_recognition": "**Decorator Pattern** + **HashMap/Cache** + **Closures**\n\nThis combines:\n- **HOF (Higher-Order Function)**: Takes function, returns function\n- **Cache Pattern**: Store computed results for reuse\n- **Closure Pattern**: Inner function accesses outer scope's cache\n- **Serialization Pattern**: Convert complex inputs to cache keys",
+    "first_impressions": "This is a **closure and higher-order function** problem. We need to wrap a function to intercept calls, cache results, and return cached values when the same arguments are seen again. The pattern is extremely common in frontend development (React's useMemo, Redux selectors, etc.).",
+    "pattern_recognition": "**Closure Pattern** + **HashMap/Cache** + **Serialization**. The closure maintains private state (the cache), the HashMap provides O(1) lookup, and serialization creates unique keys from arguments.",
     "key_constraints": [
-      "**Type differentiation** - `fn(1)` and `fn('1')` must have DIFFERENT keys. This eliminates naive `.toString()` approaches",
-      "**Multiple arguments** - Must handle variadic functions: `fn()`, `fn(x)`, `fn(x,y,z)`",
-      "**Primitives + objects** - Must serialize both primitives and objects correctly",
-      "**O(1) cache lookup** - Need efficient key-based retrieval (HashMap/Map)",
-      "**Preserve `this` context** - If original function uses `this`, memoized version must too"
+      "Type differentiation required - `fn(1)` vs `fn('1')` must have DIFFERENT cache keys",
+      "Must handle multiple arguments of varying types",
+      "Must preserve `this` context for methods",
+      "JSON.stringify limitations with undefined, functions, and circular references"
     ],
     "clarifying_questions": [
-      "**Q: How should object arguments be compared?** - By reference or deep equality? This determines if `fn({a:1})` called twice should hit cache. Answer: By value (JSON serialization) for this problem.",
-      "**Q: Should the cache have a size limit?** - Unlimited caches can cause memory leaks. Answer: No limit for Part 1, but mention this concern.",
-      "**Q: What about async functions?** - Do we need to handle Promises? Answer: Part 2 covers async; Part 1 is sync only.",
-      "**Q: Should we handle circular references in objects?** - JSON.stringify throws on these. Answer: Assume no circular refs for Part 1.",
-      "**Q: What about `this` binding?** - Does the original function use `this`? Answer: We should preserve it to be safe.",
-      "**Q: Can the original function have side effects?** - Memoization assumes pure functions. Answer: Assume pure functions.",
-      "**Q: What if the function throws?** - Should we cache errors? Answer: Don't cache errors for Part 1."
+      "**Q: What argument types should be supported?** - Determines if simple JSON.stringify works or if we need custom serialization",
+      "**Q: Should identical objects (different references) be treated as same key?** - `fn({a:1})` called twice with separate objects",
+      "**Q: Do we need cache eviction/LRU?** - For memory management in long-running apps",
+      "**Q: Should we handle async functions?** - Part 2 covers this, so Part 1 is sync-only",
+      "**Q: What about `this` binding?** - Important for memoizing methods on objects",
+      "**Q: Should we handle recursive memoization?** - e.g., memoized fibonacci calling itself"
     ],
     "edge_cases_to_consider": [
-      "**Empty arguments**: `fn()` - should work, key could be `'[]'`",
-      "**undefined vs null**: `fn(undefined)` vs `fn(null)` - must have different keys",
-      "**Type coercion traps**: `fn(1)` vs `fn('1')` vs `fn(true)` - all different",
-      "**Object arguments**: `fn({a:1})` - needs proper serialization",
-      "**Array arguments**: `fn([1,2,3])` vs `fn(1,2,3)` - different!",
-      "**Functions as arguments**: JSON.stringify ignores functions - edge case",
-      "**NaN handling**: `NaN === NaN` is false, but we want cache hit"
+      "Empty arguments: `fn()` should work",
+      "null vs undefined arguments - must be distinguishable",
+      "Number vs string that looks like number: `1` vs `'1'`",
+      "Array argument vs multiple args: `fn([1,2])` vs `fn(1,2)`",
+      "Object with same structure but different reference",
+      "Functions returning undefined vs never cached"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Takes any function fn as input",
-        "how_met": "Function parameter with generic handling via apply()",
+        "requirement": "Takes any function as input",
+        "how_met": "Accept `fn` parameter, return wrapper function",
         "gotchas": [
-          "Must preserve function's `this` context"
+          "Don't validate fn type - assume it's callable"
         ]
       },
       {
-        "requirement": "Returns new function that caches results",
-        "how_met": "Closure returning wrapper function with cache in outer scope",
+        "requirement": "Returns memoized function that caches results",
+        "how_met": "Closure with Map for cache storage",
         "gotchas": [
-          "Must return a function, not call the function"
+          "Must return the RESULT, not a promise (Part 1)"
         ]
       },
       {
         "requirement": "Cache key based on ALL arguments",
-        "how_met": "JSON.stringify(args) captures all args as array",
+        "how_met": "JSON.stringify(args) captures full argument list",
         "gotchas": [
-          "args.toString() loses type info - BAD"
+          "args.toString() fails for type differentiation"
         ]
       },
       {
-        "requirement": "Handle multiple argument types",
-        "how_met": "JSON.stringify preserves type info for primitives",
+        "requirement": "Handle primitives correctly",
+        "how_met": "JSON.stringify preserves type: `[1]` vs `[\"1\"]`",
         "gotchas": [
-          "undefined becomes null in JSON - special handling needed"
+          "undefined in arrays becomes null"
         ]
       },
       {
-        "requirement": "Return cached result for same args",
-        "how_met": "Map.has() check before computation",
+        "requirement": "Handle null and undefined",
+        "how_met": "JSON.stringify works for null; undefined becomes null in arrays",
         "gotchas": [
-          "Must check BEFORE calling fn, not after"
+          "Can use custom replacer for better handling"
+        ]
+      },
+      {
+        "requirement": "Preserve `this` context",
+        "how_met": "Use `fn.apply(this, args)` not `fn(...args)`",
+        "gotchas": [
+          "Arrow functions don't have own `this`"
         ]
       }
     ],
@@ -75,875 +79,743 @@
         "operation": "Cache lookup",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Map/Object provides O(1) key lookup"
+        "why": "Map.has() and Map.get() are O(1)"
+      },
+      {
+        "operation": "Cache storage",
+        "target": "O(1)",
+        "achieved": "O(1)",
+        "why": "Map.set() is O(1)"
       },
       {
         "operation": "Key generation",
-        "target": "O(n)",
-        "achieved": "O(n)",
-        "why": "JSON.stringify is O(n) where n = args size"
+        "target": "O(k)",
+        "achieved": "O(k)",
+        "why": "JSON.stringify is O(k) where k = args size"
       },
       {
-        "operation": "Cache miss (fn execution)",
+        "operation": "Function call (cache miss)",
         "target": "O(fn)",
         "achieved": "O(fn)",
-        "why": "Original function complexity unchanged"
+        "why": "Depends on original function complexity"
       }
     ],
     "non_goals": [
-      "LRU/cache eviction (no size limits in Part 1)",
+      "Cache eviction (no LRU, no max size)",
       "Async function handling (Part 2)",
-      "Cache invalidation/clearing",
-      "Time-based expiration",
-      "WeakMap for object keys (advanced optimization)"
+      "Object reference identity (using structural equality via JSON)",
+      "Thread safety (JS is single-threaded)"
     ]
   },
   "assumptions": [
-    "**Pure functions only**: The memoized function should be deterministic (same input \u2192 same output)",
-    "**Serializable arguments**: Arguments can be JSON.stringify'd (no circular refs, no functions)",
-    "**Unlimited cache**: No memory constraints for this problem",
-    "**Synchronous functions**: No async/Promise handling in Part 1",
-    "**No error caching**: If fn throws, we don't cache the error"
+    "**Primitive focus**: Primary use case is primitive arguments (numbers, strings, booleans)",
+    "**No circular references**: Objects passed don't have circular references (JSON.stringify would throw)",
+    "**Unlimited cache**: No memory limits; cache grows unbounded",
+    "**Sync functions only**: Part 1 assumes synchronous functions",
+    "**Serializable arguments**: All arguments can be JSON.stringify'd meaningfully"
   ],
   "tradeoffs": [
     {
       "decision": "Map vs Object for cache",
       "chosen": "Map",
-      "why": "Map has cleaner API (.has, .get, .set), no prototype pollution risks, and can technically use any key type",
+      "why": "Cleaner API (.has, .get, .set), no prototype chain issues, any key type",
       "alternative": "Plain Object {}",
-      "when_to_switch": "Object is fine for simple cases; Map is better for production"
+      "when_to_switch": "If need to serialize cache for persistence, Object is easier"
     },
     {
-      "decision": "JSON.stringify vs custom key generator",
-      "chosen": "JSON.stringify for Part 1",
-      "why": "Simple, handles most cases, preserves types for primitives",
-      "alternative": "Custom serializer or WeakMap for objects",
-      "when_to_switch": "If handling circular refs, functions as args, or need object identity (not equality)"
+      "decision": "JSON.stringify vs custom serializer",
+      "chosen": "JSON.stringify",
+      "why": "Built-in, handles most cases, type-safe for primitives",
+      "alternative": "Custom serializer with type tags",
+      "when_to_switch": "If need to handle functions, symbols, or circular refs"
     },
     {
-      "decision": "Regular function vs arrow function for returned wrapper",
+      "decision": "Regular function vs arrow function for wrapper",
       "chosen": "Regular function",
-      "why": "Preserves `this` binding - arrow functions capture lexical `this`",
-      "alternative": "Arrow function with explicit context handling",
-      "when_to_switch": "Never for general-purpose memoize; `this` preservation is essential"
+      "why": "Preserves `this` binding for method memoization",
+      "alternative": "Arrow function",
+      "when_to_switch": "Never for memoize wrapper; arrow functions don't have own `this`"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
-      "**Single Responsibility**: memoize only handles caching, not validation or transformation",
-      "**Open/Closed**: Allow custom key generators via optional parameter",
-      "**Dependency Injection**: Cache storage could be injected for testing"
+      "Keep the core memoize function simple and focused",
+      "Use closure to encapsulate cache state",
+      "Separate concerns: key generation could be customizable"
     ],
-    "why_this_design_scales": "The closure + Map pattern is extensible:\n- Add custom key generator: `memoize(fn, keyGen)`\n- Add cache options: `memoize(fn, { maxSize: 100, ttl: 5000 })`\n- Add async support: wrap result in Promise check\n- The core pattern stays the same, just augment the wrapper",
+    "why_this_design_scales": "The cache is isolated per memoized function. To add features like custom key generation, we can add optional parameter: `memoize(fn, keyGenerator)`. For async (Part 2), we wrap the Promise handling around the same core logic.",
     "expected_followup_hooks": [
-      "**keyGenerator function**: Plug in custom serialization for complex objects",
-      "**cache implementation**: Swap Map for LRU cache, Redis, etc.",
-      "**result transformation**: Add .then() handling for async",
-      "**cache.clear() method**: Expose on returned function for manual invalidation"
+      "Key generation function can be swapped for custom serialization",
+      "Cache can be replaced with LRU cache for memory limits",
+      "Result handler can be wrapped for async/Promise support",
+      "Timer can be added for TTL-based expiration"
     ],
     "invariants": [
-      "Same arguments (by serialization) always return same cached result",
-      "Original function called at most once per unique argument combination",
-      "Cache never shrinks (in Part 1)"
+      "Same arguments (by serialization) ALWAYS return same cached result",
+      "First call with new args ALWAYS executes original function",
+      "Cache is private and cannot be accessed externally (unless exposed)"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n                    MEMOIZATION CONCEPT\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502                                                     \u2502\n    \u2502   Original Function          Memoized Function      \u2502\n    \u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510           \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u2502\n    \u2502   \u2502             \u2502           \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502    \u2502\n    \u2502   \u2502  function   \u2502  memoize  \u2502  \u2502   CACHE    \u2502  \u2502    \u2502\n    \u2502   \u2502  add(a,b)   \u2502 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6  \u2502  \u2502 [1,2] \u2192 3  \u2502  \u2502    \u2502\n    \u2502   \u2502  {         \u2502           \u2502  \u2502 [2,3] \u2192 5  \u2502  \u2502    \u2502\n    \u2502   \u2502   return   \u2502           \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502    \u2502\n    \u2502   \u2502   a + b;   \u2502           \u2502        \u2502         \u2502    \u2502\n    \u2502   \u2502  }         \u2502           \u2502        \u25bc         \u2502    \u2502\n    \u2502   \u2502             \u2502           \u2502  fn.apply(this) \u2502    \u2502\n    \u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2502\n    \u2502                                                     \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n    CLOSURE STRUCTURE:\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  memoize(fn) creates:                               \u2502\n    \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n    \u2502  \u2502  OUTER SCOPE (Closure)                        \u2502  \u2502\n    \u2502  \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502  \u2502\n    \u2502  \u2502  \u2502  fn: [reference to original function]   \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502  cache: Map {                           \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502    '[1,2]' \u2192 3                          \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502    '[2,3]' \u2192 5                          \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502    '[\"hello\"]' \u2192 'HELLO'                \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502  }                                      \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502  \u2502\n    \u2502  \u2502                    \u2502                          \u2502  \u2502\n    \u2502  \u2502                    \u25bc                          \u2502  \u2502\n    \u2502  \u2502  INNER FUNCTION (Returned)                    \u2502  \u2502\n    \u2502  \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502  \u2502\n    \u2502  \u2502  \u2502  function(...args) {                    \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502    // Can access fn and cache           \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502    // via closure!                      \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2502  }                                      \u2502  \u2502  \u2502\n    \u2502  \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502  \u2502\n    \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                  MEMOIZATION CONCEPT                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                             \u2502\n\u2502   Original Function:  add(a, b) => a + b                    \u2502\n\u2502                                                             \u2502\n\u2502   Without Memoization:                                      \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500compute\u2500\u2500> 3                            \u2502   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500compute\u2500\u2500> 3  (repeated work!)          \u2502   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500compute\u2500\u2500> 3  (repeated work!)          \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2502   With Memoization:                                         \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500compute\u2500\u2500> 3 \u2500\u2500store\u2500\u2500> cache['[1,2]']  \u2502   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500lookup\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500> cache hit! 3     \u2502   \u2502\n\u2502   \u2502  add(1,2) \u2500\u2500lookup\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500> cache hit! 3     \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\n                    CLOSURE STRUCTURE\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  memoize(fn) creates:                                 \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502  Closure Scope (private):                       \u2502  \u2502\n\u2502  \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u2502  \u2502\n\u2502  \u2502  \u2502  fn: [original function reference]      \u2502    \u2502  \u2502\n\u2502  \u2502  \u2502  cache: Map {                           \u2502    \u2502  \u2502\n\u2502  \u2502  \u2502    '[1,2]' => 3,                        \u2502    \u2502  \u2502\n\u2502  \u2502  \u2502    '[5]' => 25,                         \u2502    \u2502  \u2502\n\u2502  \u2502  \u2502    '[]' => 0                            \u2502    \u2502  \u2502\n\u2502  \u2502  \u2502  }                                      \u2502    \u2502  \u2502\n\u2502  \u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                          \u2502                            \u2502\n\u2502                          \u25bc                            \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502  Returns: function memoized(...args) { ... }   \u2502  \u2502\n\u2502  \u2502  - Has access to fn and cache via closure      \u2502  \u2502\n\u2502  \u2502  - Intercepts all calls to original function   \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "Create closure with cache",
-        "visualization": "```\nmemoize(add) called:\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 cache = new Map \u2502 \u2190 Empty cache created\n\u2502 fn = add        \u2502 \u2190 Reference to original\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-        "key_point": "Cache lives in closure, persists across calls"
+        "description": "Receive arguments in memoized function",
+        "visualization": "```\nmemoizedAdd(1, 2)\n     \u2502\n     \u25bc\nargs = [1, 2]\n```",
+        "key_point": "Use rest parameters (...args) to capture all arguments"
       },
       {
         "step": 2,
         "description": "Generate cache key from arguments",
-        "visualization": "```\nmemoizedAdd(1, 2) called:\n\nargs = [1, 2]\nkey = JSON.stringify([1, 2])\nkey = '[1,2]'  \u2190 String key for Map\n```",
-        "key_point": "JSON.stringify preserves types: [1] \u2260 ['1']"
+        "visualization": "```\nargs = [1, 2]\n     \u2502\n     \u25bc JSON.stringify\nkey = '[1,2]'\n```",
+        "key_point": "JSON.stringify preserves types: number 1 vs string '1'"
       },
       {
         "step": 3,
-        "description": "Check cache for existing result",
-        "visualization": "```\ncache.has('[1,2]')?\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502    CACHE      \u2502\n\u2502   (empty)     \u2502  \u2192 NO \u2192 Cache miss!\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-        "key_point": "O(1) lookup using Map"
+        "description": "Check if key exists in cache",
+        "visualization": "```\ncache.has('[1,2]')?\n     \u2502\n  \u250c\u2500\u2500\u2534\u2500\u2500\u2510\n YES   NO\n  \u2502     \u2502\n  \u25bc     \u25bc\n```",
+        "key_point": "Map.has() is O(1) lookup"
       },
       {
         "step": 4,
-        "description": "Execute function and store result",
-        "visualization": "```\nCache MISS \u2192 Execute original:\n\nresult = fn.apply(this, [1, 2])\nresult = add(1, 2) = 3\n\ncache.set('[1,2]', 3)\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502     CACHE       \u2502\n\u2502  '[1,2]' \u2192 3    \u2502  \u2190 Stored!\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nreturn 3\n```",
-        "key_point": "Use fn.apply() to preserve `this` context"
-      },
-      {
-        "step": 5,
-        "description": "Subsequent call with same args",
-        "visualization": "```\nmemoizedAdd(1, 2) called again:\n\nkey = '[1,2]'\ncache.has('[1,2]')? \u2192 YES!\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502     CACHE       \u2502\n\u2502  '[1,2]' \u2192 3 \u2713  \u2502  \u2192 Return 3 immediately!\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n\u26a1 No computation needed!\n```",
-        "key_point": "Cache HIT = instant return, fn never called"
+        "description": "Return cached or compute new result",
+        "visualization": "```\nCACHE HIT:              CACHE MISS:\nreturn cache.get(key)   result = fn.apply(this, args)\n                        cache.set(key, result)\n                        return result\n```",
+        "key_point": "Use fn.apply(this, args) to preserve 'this' context"
       }
     ],
-    "dry_run_table": "| Call | args | Key Generated | Cache State | Action | Result |\n|------|------|---------------|-------------|--------|--------|\n| `memoize(add)` | - | - | `{}` | Create wrapper | memoizedAdd |\n| `memoizedAdd(1, 2)` | `[1, 2]` | `'[1,2]'` | `{'[1,2]': 3}` | MISS \u2192 compute | `3` |\n| `memoizedAdd(1, 2)` | `[1, 2]` | `'[1,2]'` | `{'[1,2]': 3}` | HIT \u2192 return | `3` |\n| `memoizedAdd(2, 3)` | `[2, 3]` | `'[2,3]'` | `{'[1,2]': 3, '[2,3]': 5}` | MISS \u2192 compute | `5` |\n| `memoizedAdd('1', '2')` | `['1', '2']` | `'[\"1\",\"2\"]'` | `{..., '[\"1\",\"2\"]': '12'}` | MISS \u2192 compute | `'12'` |"
+    "dry_run_table": "| Step | Call | Key Generated | Cache State | Action | Result |\n|------|------|--------------|-------------|--------|--------|\n| 1 | `memoizedAdd(1, 2)` | `'[1,2]'` | `{}` | MISS \u2192 Compute 1+2 | 3 |\n| 2 | `memoizedAdd(1, 2)` | `'[1,2]'` | `{'[1,2]': 3}` | HIT \u2192 Return cached | 3 |\n| 3 | `memoizedAdd(2, 3)` | `'[2,3]'` | `{'[1,2]': 3}` | MISS \u2192 Compute 2+3 | 5 |\n| 4 | `memoizedAdd('1', '2')` | `'[\"1\",\"2\"]'` | `{'[1,2]': 3, '[2,3]': 5}` | MISS \u2192 Compute | '12' |"
   },
   "thinking_process": {
     "step_by_step": [
-      "**When I see 'cache results based on arguments'**, I think: I need a data structure that maps arguments \u2192 results. That's a HashMap/Map.",
-      "**When I see 'returns a new function'**, I think: This is a higher-order function pattern. The returned function needs access to the cache, so I need a closure.",
-      "**When I see 'different cache keys for 1 vs \"1\"'**, I think: I can't use simple toString() or join(). I need type-preserving serialization. JSON.stringify does this!",
-      "**When I see 'preserve this context'**, I think: Arrow functions capture lexical `this`, so I must use regular function syntax and fn.apply(this, args).",
-      "**When I realize JSON.stringify has edge cases**, I think: undefined \u2192 null, functions ignored, circular refs throw. For Part 1, I'll note these but keep solution simple."
+      "**When I see 'memoization'**, I immediately think of closures and caching. The memoize function needs to create a private cache that persists across calls.",
+      "**The key challenge is argument serialization**. I need a way to convert any set of arguments into a unique string key. JSON.stringify is the standard approach.",
+      "**I must handle type differentiation**. The number `1` and string `'1'` must produce different keys. JSON.stringify handles this: `JSON.stringify([1])` \u2192 `'[1]'` vs `JSON.stringify(['1'])` \u2192 `'[\"1\"]'`.",
+      "**The `this` context matters**. If someone memoizes a method, they expect `this` to work. I must use `fn.apply(this, args)` not `fn(...args)`.",
+      "**Choose Map over Object for cache**. Map has cleaner API, no prototype issues, and works with any key type.",
+      "**Return a regular function, not arrow**. Arrow functions don't have their own `this`, which would break method memoization."
     ],
-    "key_insight": "**The magic is in the closure**: The returned function 'closes over' the cache variable. Each call to `memoize(fn)` creates a NEW closure with its OWN cache. This is why `memoize(add)` and `memoize(multiply)` have separate caches!",
-    "why_this_works": "## Why Memoization Works\n\n1. **Closure Persistence**: The cache Map exists in the closure scope, surviving between function calls\n2. **Key Uniqueness**: JSON.stringify creates unique string keys that preserve argument types\n3. **Map Efficiency**: O(1) lookup means cache checks are nearly free\n4. **Referential Transparency**: For pure functions, same inputs ALWAYS produce same outputs, making caching safe"
+    "key_insight": "**The 'aha' moment**: Memoization is essentially intercepting function calls with a proxy that maintains state. The closure provides the private state, JSON.stringify provides unique keys, and `fn.apply(this, args)` preserves the calling context. These three pieces together create a complete, correct memoization wrapper.",
+    "why_this_works": "Closures in JavaScript allow the inner function to access variables from the outer scope (the cache and original function) even after the outer function returns. Each memoized function gets its own private cache. JSON.stringify is deterministic\u2014same input always produces same output string. Map provides O(1) key lookup. Together, these guarantee correctness and performance."
   },
   "approaches": [
     {
-      "name": "No Memoization (Baseline)",
-      "description": "Just call the original function every time. This is what we're improving upon.",
-      "pseudocode": "function wrapper(...args) {\n  return fn(...args); // Always compute\n}",
-      "time_complexity": "O(fn) per call - no improvement",
-      "space_complexity": "O(1) - no cache storage",
+      "name": "Brute Force: toString() Key Generation",
+      "description": "Use `args.toString()` or `args.join(',')` to create cache key",
+      "pseudocode": "key = args.toString()  // or args.join(',')\nif (cache[key]) return cache[key]\nresult = fn(...args)\ncache[key] = result\nreturn result",
+      "time_complexity": "O(k) for key generation, O(1) for lookup",
+      "space_complexity": "O(n * k) where n = unique calls, k = arg size",
       "pros": [
-        "Simplest possible",
-        "No memory overhead"
+        "Simple to implement",
+        "Fast key generation"
       ],
       "cons": [
-        "Repeated expensive computations",
-        "Defeats the purpose of memoization"
+        "TYPE COLLISION: `[1,2]` and `['1','2']` both become `'1,2'`",
+        "`[null]` and `['null']` collide",
+        "Arrays within args cause issues"
       ],
-      "when_to_use": "Never for memoization - this is the problem we're solving"
+      "when_to_use": "Never in production\u2014only for quick prototyping with known number-only inputs"
     },
     {
-      "name": "Naive Key Generation (Broken)",
-      "description": "Use args.toString() or args.join() for cache key",
-      "pseudocode": "const key = args.toString(); // BAD!\n// [1, 2].toString() === '1,2'\n// ['1', '2'].toString() === '1,2' // COLLISION!",
-      "time_complexity": "O(1) lookup, but incorrect results",
-      "space_complexity": "O(unique_keys)",
+      "name": "Optimal: JSON.stringify with Map Cache",
+      "description": "Use JSON.stringify for type-safe serialization and Map for storage",
+      "pseudocode": "function memoize(fn) {\n  const cache = new Map()\n  return function(...args) {\n    const key = JSON.stringify(args)\n    if (cache.has(key)) return cache.get(key)\n    const result = fn.apply(this, args)\n    cache.set(key, result)\n    return result\n  }\n}",
+      "time_complexity": "O(k) for JSON.stringify, O(1) for Map operations",
+      "space_complexity": "O(n * k) for n unique argument sets of size k",
       "pros": [
-        "Simple to implement"
+        "Type-safe: numbers and strings differentiated",
+        "Handles null properly",
+        "Preserves `this` context",
+        "Clean, readable code"
       ],
       "cons": [
-        "Type collisions: 1 vs '1'",
-        "Array vs multiple args collision",
-        "Completely wrong for production"
+        "undefined becomes null in arrays",
+        "Can't handle circular references",
+        "Functions/Symbols are ignored"
       ],
-      "when_to_use": "NEVER - this approach is broken"
+      "key_insight": "JSON.stringify is the standard because it's built-in, fast, and handles 95% of use cases. The edge cases it misses are rare in practice."
     },
     {
-      "name": "Optimal: JSON.stringify Key Generation",
-      "description": "Use JSON.stringify(args) which preserves type information in the serialized string",
-      "pseudocode": "const key = JSON.stringify(args);\n// [1, 2] \u2192 '[1,2]'\n// ['1', '2'] \u2192 '[\"1\",\"2\"]' // Different!\n// [1] \u2192 '[1]'\n// [[1]] \u2192 '[[1]]' // Different!",
-      "time_complexity": "O(1) lookup + O(args_size) serialization",
-      "space_complexity": "O(unique_arg_combinations)",
+      "name": "Advanced: Custom Serializer with Type Tags",
+      "description": "Prepend type tags to handle edge cases like undefined",
+      "pseudocode": "function serialize(args) {\n  return args.map(arg => {\n    if (arg === undefined) return 'undefined:'\n    if (typeof arg === 'symbol') return `symbol:${arg.toString()}`\n    return `${typeof arg}:${JSON.stringify(arg)}`\n  }).join('|')\n}",
+      "time_complexity": "O(k) same as JSON.stringify",
+      "space_complexity": "O(n * k)",
       "pros": [
-        "Type-safe keys",
-        "Handles nested structures",
-        "Standard JS approach",
-        "Used by lodash, etc."
+        "Handles undefined properly",
+        "Can extend for symbols/functions",
+        "More precise type handling"
       ],
       "cons": [
-        "undefined \u2192 null in JSON",
-        "Functions ignored",
-        "Circular refs throw"
+        "More complex",
+        "Likely overkill for interview",
+        "Still can't handle circular refs"
       ],
-      "key_insight": "JSON.stringify naturally encodes type information: numbers are unquoted, strings are quoted, arrays have brackets. This creates unique keys per type!"
-    },
-    {
-      "name": "Advanced: WeakMap for Object Arguments",
-      "description": "Use WeakMap when objects should be compared by reference, not value",
-      "pseudocode": "// For single object arg:\nconst cache = new WeakMap();\nif (cache.has(objArg)) return cache.get(objArg);",
-      "time_complexity": "O(1)",
-      "space_complexity": "O(unique_objects) with automatic GC",
-      "pros": [
-        "Object identity comparison",
-        "Automatic garbage collection",
-        "Memory efficient for objects"
-      ],
-      "cons": [
-        "Only works for object keys",
-        "Can't use for primitives",
-        "Complex for multiple args"
-      ],
-      "when_to_use": "When you specifically need reference equality for object arguments"
+      "when_to_use": "Production code with strict requirements for edge cases"
     }
   ],
   "optimal_solution": {
-    "name": "Closure-based Memoization with JSON.stringify Keys",
-    "explanation_md": "## Approach\n\nThe optimal solution uses:\n1. **Closure** to maintain a persistent cache between calls\n2. **Map** for O(1) cache operations\n3. **JSON.stringify** for type-preserving key generation\n4. **fn.apply(this, args)** to preserve context\n\n### Why This Works\n\n```\nmemoize(fn) creates:\n\u251c\u2500\u2500 Closure scope containing:\n\u2502   \u251c\u2500\u2500 fn (reference to original function)\n\u2502   \u2514\u2500\u2500 cache (Map instance)\n\u2514\u2500\u2500 Returns wrapper function that:\n    \u251c\u2500\u2500 Generates key from args\n    \u251c\u2500\u2500 Checks cache\n    \u251c\u2500\u2500 Calls fn only on cache miss\n    \u2514\u2500\u2500 Stores and returns result\n```\n\n### The Key Generation Magic\n\n```javascript\nJSON.stringify([1, 2])      // '[1,2]'\nJSON.stringify(['1', '2'])  // '[\"1\",\"2\"]'  \u2190 Different!\nJSON.stringify([true])      // '[true]'\nJSON.stringify(['true'])    // '[\"true\"]'   \u2190 Different!\nJSON.stringify([null])      // '[null]'\nJSON.stringify([[1,2]])     // '[[1,2]]'    \u2190 Array arg vs two args\n```",
+    "name": "JSON.stringify with Map Cache and this Preservation",
+    "explanation_md": "## Approach\n\nThe optimal solution uses three key JavaScript features:\n\n### 1. Closures for Private State\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();  // Private, persists across calls\n  return function(...args) {\n    // Has access to cache and fn via closure\n  };\n}\n```\n\n### 2. JSON.stringify for Type-Safe Keys\n```javascript\nJSON.stringify([1, 2])     // '[1,2]'\nJSON.stringify(['1', '2']) // '[\"1\",\"2\"]'  <- Different!\nJSON.stringify([null])     // '[null]'\nJSON.stringify([])         // '[]'\n```\n\n### 3. fn.apply(this, args) for Context\n```javascript\nconst result = fn.apply(this, args);  // Preserves 'this'\n// NOT fn(...args) which loses 'this'\n```\n\n### Why This Works\n- **Closure** keeps cache private and persistent\n- **JSON.stringify** creates unique keys that differentiate types\n- **Map** provides O(1) lookup without prototype chain issues\n- **apply()** ensures methods work correctly when memoized",
     "data_structures": [
       {
-        "structure": "Closure",
-        "purpose": "Encapsulate cache and original fn reference, persist between calls"
-      },
-      {
         "structure": "Map<string, any>",
-        "purpose": "O(1) cache storage and retrieval"
+        "purpose": "O(1) cache storage and lookup by serialized key"
       },
       {
-        "structure": "JSON.stringify",
-        "purpose": "Convert args array to unique, type-preserving string key"
+        "structure": "Closure scope",
+        "purpose": "Maintains private reference to original fn and cache"
       }
     ],
     "algorithm_steps": [
-      "1. **memoize(fn)** called: Create new Map for cache, return wrapper function",
-      "2. **wrapper(...args)** called: Serialize args to key using JSON.stringify",
-      "3. **Check cache**: If key exists in cache, return cached value immediately",
-      "4. **Cache miss**: Call original fn with args (preserving `this` context)",
-      "5. **Store result**: Add key\u2192result mapping to cache",
-      "6. **Return result**: Return computed value"
+      "1. Create empty Map as cache in closure scope",
+      "2. Return wrapper function that captures all args with rest operator",
+      "3. Serialize args to string using JSON.stringify",
+      "4. Check if key exists in cache using Map.has()",
+      "5. If cache hit: return cached value immediately",
+      "6. If cache miss: call original fn with apply() to preserve this",
+      "7. Store result in cache with key",
+      "8. Return result"
     ],
-    "why_decimal": "N/A - not applicable to this problem"
+    "why_decimal": "N/A for this problem - no currency/precision concerns"
   },
   "solution_python_lines": [
     "\"\"\"",
-    "JavaScript Memoization - Python Equivalent",
+    "Memoization Implementation in Python",
     "",
-    "While the problem is JavaScript-focused, here's the Python equivalent",
-    "using functools.lru_cache pattern and a manual implementation.",
+    "Demonstrates the same concepts as JavaScript memoization:",
+    "- Closures for private state",
+    "- Serialization for cache keys",
+    "- Caching for performance optimization",
     "\"\"\"",
+    "import json",
     "from typing import Callable, Any, TypeVar",
     "from functools import wraps",
-    "import json",
     "",
     "F = TypeVar('F', bound=Callable[..., Any])",
     "",
     "",
-    "def memoize(fn: F) -> F:",
+    "def memoize(fn: Callable) -> Callable:",
     "    \"\"\"",
-    "    Memoize a function by caching results based on arguments.",
-    "    ",
-    "    This is the Python equivalent of the JavaScript memoize pattern.",
-    "    Uses JSON serialization for cache keys to handle multiple arg types.",
-    "    ",
-    "    Args:",
-    "        fn: The function to memoize",
-    "        ",
-    "    Returns:",
-    "        A memoized version of fn that caches results",
-    "        ",
-    "    Example:",
-    "        >>> @memoize",
-    "        ... def add(a, b):",
-    "        ...     print(f'Computing {a} + {b}')",
-    "        ...     return a + b",
-    "        >>> add(1, 2)  # Prints 'Computing 1 + 2'",
-    "        3",
-    "        >>> add(1, 2)  # No print - cache hit!",
-    "        3",
+    "    Returns memoized version of fn that caches results.",
+    "    Uses JSON serialization for type-safe cache keys.",
     "    \"\"\"",
-    "    cache: dict[str, Any] = {}",
+    "    cache = {}  # Private cache via closure",
     "    ",
-    "    @wraps(fn)",
-    "    def memoized(*args: Any) -> Any:",
-    "        # Generate cache key from arguments",
-    "        # Using JSON for type-preserving serialization",
-    "        try:",
-    "            key = json.dumps(args, sort_keys=True)",
-    "        except TypeError:",
-    "            # Fallback for non-JSON-serializable args",
-    "            key = str(args)",
+    "    @wraps(fn)  # Preserves function metadata",
+    "    def memoized(*args, **kwargs):",
+    "        # Generate unique key from all arguments",
+    "        # Combine positional and keyword args for complete key",
+    "        key = json.dumps((args, sorted(kwargs.items())), default=str)",
     "        ",
-    "        # Check cache",
     "        if key in cache:",
-    "            return cache[key]",
+    "            return cache[key]  # Cache hit",
     "        ",
-    "        # Cache miss - compute result",
-    "        result = fn(*args)",
-    "        ",
-    "        # Store in cache",
+    "        result = fn(*args, **kwargs)  # Cache miss - compute",
     "        cache[key] = result",
-    "        ",
     "        return result",
     "    ",
-    "    # Expose cache for testing/debugging",
-    "    memoized.cache = cache  # type: ignore",
-    "    memoized.clear_cache = lambda: cache.clear()  # type: ignore",
-    "    ",
-    "    return memoized  # type: ignore",
+    "    # Expose cache for testing (optional)",
+    "    memoized.cache = cache",
+    "    return memoized",
     "",
     "",
-    "# ============================================================",
-    "# DEMO AND TESTS",
-    "# ============================================================",
-    "",
+    "# ============ Demo and Tests ============",
     "if __name__ == '__main__':",
     "    print('=' * 60)",
     "    print('MEMOIZATION DEMO')",
     "    print('=' * 60)",
     "    ",
-    "    # Test 1: Basic memoization",
-    "    print('\\n--- Test 1: Basic Memoization ---')",
+    "    # Track call count to verify memoization",
     "    call_count = 0",
     "    ",
-    "    @memoize",
-    "    def add(a: int, b: int) -> int:",
+    "    def expensive_add(a, b):",
     "        global call_count",
     "        call_count += 1",
+    "        print(f'  Computing {a} + {b}...')",
     "        return a + b",
     "    ",
-    "    print(f'add(1, 2) = {add(1, 2)}')  # Computes",
-    "    print(f'add(1, 2) = {add(1, 2)}')  # Cache hit",
-    "    print(f'add(2, 3) = {add(2, 3)}')  # Computes",
-    "    print(f'Function called {call_count} times (should be 2)')",
+    "    memoized_add = memoize(expensive_add)",
+    "    ",
+    "    # Test 1: Basic memoization",
+    "    print('\\n[Test 1] Basic Memoization:')",
+    "    print(f'  memoized_add(1, 2) = {memoized_add(1, 2)}')",
+    "    print(f'  memoized_add(1, 2) = {memoized_add(1, 2)}  # Cache hit!')",
+    "    print(f'  memoized_add(2, 3) = {memoized_add(2, 3)}')",
+    "    print(f'  Call count: {call_count} (should be 2)')",
     "    ",
     "    # Test 2: Type differentiation",
-    "    print('\\n--- Test 2: Type Differentiation ---')",
-    "    ",
-    "    @memoize",
-    "    def identity(x: Any) -> Any:",
+    "    print('\\n[Test 2] Type Differentiation:')",
+    "    def identity(x):",
     "        return x",
     "    ",
-    "    print(f'identity(1) = {identity(1)} (type: {type(identity(1)).__name__})')",
-    "    print(f'identity(\"1\") = {identity(\"1\")} (type: {type(identity(\"1\")).__name__})')",
-    "    print(f'Cache has {len(identity.cache)} entries (should be 2)')",
+    "    memo_id = memoize(identity)",
+    "    print(f'  identity(1) = {memo_id(1)} (type: {type(memo_id(1)).__name__})')",
+    "    print(f'  identity(\"1\") = {memo_id(\"1\")} (type: {type(memo_id(\"1\")).__name__})')",
+    "    print(f'  Cache keys: {list(memo_id.cache.keys())}')",
     "    ",
-    "    # Test 3: Expensive computation",
-    "    print('\\n--- Test 3: Fibonacci ---')",
+    "    # Test 3: Expensive computation (Fibonacci)",
+    "    print('\\n[Test 3] Fibonacci Performance:')",
+    "    fib_calls = 0",
     "    ",
-    "    @memoize",
-    "    def fib(n: int) -> int:",
+    "    def fib(n):",
+    "        global fib_calls",
+    "        fib_calls += 1",
     "        if n <= 1:",
     "            return n",
     "        return fib(n - 1) + fib(n - 2)",
     "    ",
+    "    memo_fib = memoize(fib)",
+    "    ",
     "    import time",
     "    start = time.time()",
-    "    result = fib(35)",
-    "    elapsed = time.time() - start",
-    "    print(f'fib(35) = {result} (took {elapsed:.4f}s)')",
+    "    result = memo_fib(30)",
+    "    first_time = time.time() - start",
+    "    print(f'  fib(30) = {result}')",
+    "    print(f'  First call: {first_time:.4f}s')",
     "    ",
     "    start = time.time()",
-    "    result = fib(35)",
-    "    elapsed = time.time() - start",
-    "    print(f'fib(35) = {result} (took {elapsed:.6f}s - cache hit!)')",
+    "    result = memo_fib(30)",
+    "    second_time = time.time() - start",
+    "    print(f'  Second call: {second_time:.6f}s (cache hit!)')",
     "    ",
     "    print('\\n' + '=' * 60)",
-    "    print('ALL TESTS PASSED!')",
-    "    print('=' * 60)"
+    "    print('All tests passed!')"
   ],
   "solution_java_lines": [
-    "// JavaScript Solution (Primary - since this is a JS problem)",
-    "// ============================================================",
+    "import java.util.*;",
+    "import java.util.function.Function;",
+    "import com.google.gson.Gson;  // For JSON serialization",
     "",
     "/**",
-    " * Memoize - Cache function results based on arguments",
-    " * ",
-    " * @param {Function} fn - The function to memoize",
-    " * @returns {Function} - Memoized version of fn",
-    " * ",
-    " * @example",
-    " * const memoizedAdd = memoize((a, b) => a + b);",
-    " * memoizedAdd(1, 2); // Computes, returns 3",
-    " * memoizedAdd(1, 2); // Cache hit, returns 3",
+    " * Memoization utility for Java.",
+    " * Demonstrates caching function results based on arguments.",
     " */",
-    "function memoize(fn) {",
-    "  // Create cache in closure scope",
-    "  // Map is preferred over Object for cleaner API",
-    "  const cache = new Map();",
-    "  ",
-    "  // Return wrapper function",
-    "  // IMPORTANT: Use regular function, not arrow,",
-    "  // to preserve 'this' context",
-    "  return function memoized(...args) {",
-    "    // Generate cache key from all arguments",
-    "    // JSON.stringify preserves type information:",
-    "    // [1, 2] -> '[1,2]'",
-    "    // ['1', '2'] -> '[\"1\",\"2\"]' (different!)",
-    "    const key = JSON.stringify(args);",
+    "public class Memoize {",
     "    ",
-    "    // Check if result is cached",
-    "    if (cache.has(key)) {",
-    "      return cache.get(key);",
+    "    private static final Gson gson = new Gson();",
+    "    ",
+    "    /**",
+    "     * Creates a memoized version of a single-argument function.",
+    "     * Uses JSON serialization for cache keys to handle different types.",
+    "     */",
+    "    public static <T, R> Function<T, R> memoize(Function<T, R> fn) {",
+    "        Map<String, R> cache = new HashMap<>();",
+    "        ",
+    "        return (T arg) -> {",
+    "            String key = gson.toJson(arg);",
+    "            ",
+    "            if (cache.containsKey(key)) {",
+    "                return cache.get(key);  // Cache hit",
+    "            }",
+    "            ",
+    "            R result = fn.apply(arg);  // Cache miss",
+    "            cache.put(key, result);",
+    "            return result;",
+    "        };",
     "    }",
     "    ",
-    "    // Cache miss - execute original function",
-    "    // Use fn.apply(this, args) to preserve 'this' context",
-    "    const result = fn.apply(this, args);",
-    "    ",
-    "    // Store result in cache",
-    "    cache.set(key, result);",
-    "    ",
-    "    return result;",
-    "  };",
-    "}",
-    "",
-    "// ============================================================",
-    "// ENHANCED VERSION WITH OPTIONS",
-    "// ============================================================",
-    "",
-    "/**",
-    " * Enhanced memoize with custom key generator",
-    " * ",
-    " * @param {Function} fn - Function to memoize",
-    " * @param {Object} options - Configuration options",
-    " * @param {Function} options.keyGenerator - Custom key generation function",
-    " * @returns {Function} - Memoized function with cache utilities",
-    " */",
-    "function memoizeEnhanced(fn, options = {}) {",
-    "  const {",
-    "    keyGenerator = (args) => JSON.stringify(args)",
-    "  } = options;",
-    "  ",
-    "  const cache = new Map();",
-    "  ",
-    "  function memoized(...args) {",
-    "    const key = keyGenerator(args);",
-    "    ",
-    "    if (cache.has(key)) {",
-    "      return cache.get(key);",
+    "    /**",
+    "     * Memoized function wrapper for multi-argument functions.",
+    "     * Wraps varargs into a key using JSON array serialization.",
+    "     */",
+    "    @FunctionalInterface",
+    "    public interface MultiArgFunction<R> {",
+    "        R apply(Object... args);",
     "    }",
     "    ",
-    "    const result = fn.apply(this, args);",
-    "    cache.set(key, result);",
-    "    return result;",
-    "  }",
-    "  ",
-    "  // Expose utilities for debugging/testing",
-    "  memoized.cache = cache;",
-    "  memoized.clear = () => cache.clear();",
-    "  memoized.size = () => cache.size;",
-    "  ",
-    "  return memoized;",
-    "}",
-    "",
-    "// ============================================================",
-    "// TEST CASES",
-    "// ============================================================",
-    "",
-    "function runTests() {",
-    "  console.log('='.repeat(60));",
-    "  console.log('MEMOIZATION TESTS');",
-    "  console.log('='.repeat(60));",
-    "  ",
-    "  // Test 1: Basic memoization",
-    "  console.log('\\n--- Test 1: Basic Memoization ---');",
-    "  let callCount = 0;",
-    "  const add = (a, b) => {",
-    "    callCount++;",
-    "    return a + b;",
-    "  };",
-    "  const memoizedAdd = memoize(add);",
-    "  ",
-    "  console.log('memoizedAdd(1, 2):', memoizedAdd(1, 2)); // 3",
-    "  console.log('memoizedAdd(1, 2):', memoizedAdd(1, 2)); // 3 (cached)",
-    "  console.log('memoizedAdd(2, 3):', memoizedAdd(2, 3)); // 5",
-    "  console.log(`Function called ${callCount} times (expected: 2)`);",
-    "  console.assert(callCount === 2, 'Should only compute twice');",
-    "  ",
-    "  // Test 2: Type differentiation",
-    "  console.log('\\n--- Test 2: Type Differentiation ---');",
-    "  const identity = memoize(x => x);",
-    "  console.log('identity(1):', identity(1), typeof identity(1));",
-    "  console.log('identity(\"1\"):', identity('1'), typeof identity('1'));",
-    "  console.assert(identity(1) !== identity('1'), 'Different types');",
-    "  ",
-    "  // Test 3: Expensive computation",
-    "  console.log('\\n--- Test 3: Fibonacci ---');",
-    "  const fib = memoize(function fibonacci(n) {",
-    "    if (n <= 1) return n;",
-    "    return fib(n - 1) + fib(n - 2);",
-    "  });",
-    "  ",
-    "  console.time('fib(35) first call');",
-    "  console.log('fib(35):', fib(35));",
-    "  console.timeEnd('fib(35) first call');",
-    "  ",
-    "  console.time('fib(35) second call');",
-    "  console.log('fib(35):', fib(35));",
-    "  console.timeEnd('fib(35) second call');",
-    "  ",
-    "  // Test 4: Edge cases",
-    "  console.log('\\n--- Test 4: Edge Cases ---');",
-    "  const edgeFn = memoize((...args) => args.length);",
-    "  console.log('edgeFn():', edgeFn()); // 0 args",
-    "  console.log('edgeFn(null):', edgeFn(null));",
-    "  console.log('edgeFn(undefined):', edgeFn(undefined));",
-    "  console.log('edgeFn([1,2]):', edgeFn([1, 2])); // Array arg",
-    "  console.log('edgeFn(1, 2):', edgeFn(1, 2)); // Two args",
-    "  ",
-    "  // Test 5: This context",
-    "  console.log('\\n--- Test 5: This Context ---');",
-    "  const obj = {",
-    "    multiplier: 10,",
-    "    multiply: memoize(function(x) {",
-    "      return x * this.multiplier;",
-    "    })",
-    "  };",
-    "  console.log('obj.multiply(5):', obj.multiply(5)); // 50",
-    "  ",
-    "  console.log('\\n' + '='.repeat(60));",
-    "  console.log('ALL TESTS PASSED!');",
-    "  console.log('='.repeat(60));",
-    "}",
-    "",
-    "// Run tests",
-    "runTests();"
+    "    public static <R> MultiArgFunction<R> memoizeMulti(MultiArgFunction<R> fn) {",
+    "        Map<String, R> cache = new HashMap<>();",
+    "        ",
+    "        return (Object... args) -> {",
+    "            String key = gson.toJson(args);",
+    "            ",
+    "            if (cache.containsKey(key)) {",
+    "                return cache.get(key);",
+    "            }",
+    "            ",
+    "            R result = fn.apply(args);",
+    "            cache.put(key, result);",
+    "            return result;",
+    "        };",
+    "    }",
+    "    ",
+    "    // ============ Demo ============",
+    "    public static void main(String[] args) {",
+    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"MEMOIZATION DEMO (Java)\");",
+    "        System.out.println(\"=\".repeat(60));",
+    "        ",
+    "        // Test: Single argument memoization",
+    "        int[] callCount = {0};  // Array for mutation in lambda",
+    "        ",
+    "        Function<Integer, Integer> square = n -> {",
+    "            callCount[0]++;",
+    "            System.out.println(\"  Computing \" + n + \"^2...\");",
+    "            return n * n;",
+    "        };",
+    "        ",
+    "        Function<Integer, Integer> memoSquare = memoize(square);",
+    "        ",
+    "        System.out.println(\"\\n[Test] Basic Memoization:\");",
+    "        System.out.println(\"  square(5) = \" + memoSquare.apply(5));",
+    "        System.out.println(\"  square(5) = \" + memoSquare.apply(5) + \" (cache hit!)\");",
+    "        System.out.println(\"  square(7) = \" + memoSquare.apply(7));",
+    "        System.out.println(\"  Call count: \" + callCount[0] + \" (should be 2)\");",
+    "        ",
+    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
+    "        System.out.println(\"Demo complete!\");",
+    "    }",
+    "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-14",
-      "section": "JSDoc and Function Signature",
-      "explanation": "We document the function with JSDoc, specifying that it takes any function and returns a memoized version. This is crucial for team code and IDE support."
+      "lines": "1-15 (JS version)",
+      "section": "Function Signature and Cache Setup",
+      "explanation": "The `memoize` function takes any function `fn` as input. We immediately create a `Map` for our cache. This Map lives in the closure scope\u2014it's private and persists for the lifetime of the memoized function. Using Map over Object gives us cleaner `.has()`, `.get()`, `.set()` methods."
     },
     {
-      "lines": "15-18",
-      "section": "Cache Initialization",
-      "explanation": "**The cache lives in the closure scope**. We use `Map` instead of `{}` because:\n- Cleaner API: `.has()`, `.get()`, `.set()`\n- No prototype pollution risks\n- Can technically use any key type\n\nThis Map persists across all calls to the memoized function."
+      "lines": "17-20",
+      "section": "Wrapper Function and Key Generation",
+      "explanation": "We return a **regular function** (not arrow) to preserve `this` binding. The rest parameter `...args` captures all arguments as an array. `JSON.stringify(args)` converts `[1, 2]` to the string `'[1,2]'`\u2014this is our cache key. Critically, `JSON.stringify([1])` \u2192 `'[1]'` while `JSON.stringify(['1'])` \u2192 `'[\"1\"]'`, so types are preserved."
     },
     {
-      "lines": "20-24",
-      "section": "Wrapper Function Declaration",
-      "explanation": "**CRITICAL**: We use a regular `function`, NOT an arrow function!\n\nWhy? Arrow functions capture `this` from the lexical scope (where they're defined), but we need `this` from the call site. If someone does `obj.memoizedMethod()`, we need `this` to be `obj`."
-    },
-    {
-      "lines": "25-30",
-      "section": "Key Generation",
-      "explanation": "`JSON.stringify(args)` is the **key insight**.\n\nIt preserves type information:\n- `[1, 2]` \u2192 `'[1,2]'`\n- `['1', '2']` \u2192 `'[\"1\",\"2\"]'`\n\nThese are DIFFERENT strings, preventing type collisions!"
-    },
-    {
-      "lines": "32-35",
+      "lines": "21-24",
       "section": "Cache Lookup",
-      "explanation": "**O(1) lookup** using Map.has(). If the key exists, we return the cached value immediately without calling the original function. This is the whole point of memoization!"
+      "explanation": "`cache.has(key)` checks in O(1) if we've seen these exact arguments before. If yes, we immediately return the cached result\u2014no computation needed. This is where the performance benefit comes from."
     },
     {
-      "lines": "37-40",
-      "section": "Function Execution",
-      "explanation": "On cache miss, we call the original function using `fn.apply(this, args)`.\n\n**Why apply?**\n1. Preserves `this` context\n2. Spreads args array as individual arguments\n\nAlternative: `fn.call(this, ...args)` works too."
+      "lines": "25-28",
+      "section": "Cache Miss: Compute and Store",
+      "explanation": "On cache miss, we call the original function. We use `fn.apply(this, args)` instead of `fn(...args)` to preserve the `this` context. This matters when memoizing object methods. After computing, we store the result in cache for future calls."
     },
     {
-      "lines": "42-44",
-      "section": "Cache Storage",
-      "explanation": "Store the computed result with the generated key. Next time this argument combination is used, we'll hit the cache instead of recomputing."
-    },
-    {
-      "lines": "46",
+      "lines": "29-31",
       "section": "Return Result",
-      "explanation": "Return the result, whether from cache or freshly computed. The caller doesn't know (or care) which path was taken."
+      "explanation": "Finally, we return the computed result. The next call with the same arguments will hit the cache and skip this computation entirely."
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. **First**: Test that memoized function returns correct results\n2. **Second**: Test that cache is being populated (add console.log in cache miss path)\n3. **Third**: Test cache hits (add console.log at return cache.get())\n4. **Fourth**: Test type differentiation\n5. **Fifth**: Test `this` context with an object method",
+    "how_to_test_incrementally": "1. First test with simple add(1,2) - verify basic caching works. 2. Test same call twice - verify cache hit (add console.log to confirm). 3. Test type differentiation: memoized(1) vs memoized('1'). 4. Test edge cases: empty args, null, undefined. 5. Test `this` binding with a method.",
     "what_to_print_or_assert": [
-      "console.log('Cache key:', key);",
-      "console.log('Cache hit:', cache.has(key));",
-      "console.log('Cache size:', cache.size);",
-      "console.assert(typeof key === 'string', 'Key should be string');",
-      "console.assert(cache instanceof Map, 'Cache should be Map');"
+      "console.log('Key:', key) - See what keys are generated",
+      "console.log('Cache hit!') inside the if block",
+      "console.log('Cache miss, computing...') before fn.apply",
+      "console.log('Cache state:', [...cache.entries()]) after each call"
     ],
     "common_failure_modes": [
-      "**Wrong key generation**: Using toString() causes type collisions",
-      "**Arrow function for wrapper**: Breaks `this` binding",
-      "**Forgetting to return memoized function**: Returns undefined",
-      "**Using fn() instead of fn.apply()**: Loses `this` context",
-      "**Cache outside closure**: All memoized functions share one cache (disaster!)"
+      "Type collision: using `args.toString()` instead of `JSON.stringify`",
+      "Lost `this`: using arrow function for wrapper or `fn(...args)` instead of `fn.apply(this, args)`",
+      "Returning undefined: forgetting to return the result",
+      "Cache not persisting: declaring cache inside the returned function instead of closure scope"
     ],
-    "how_to_fix_fast": "1. **Cache not working?** Add `console.log('key:', key, 'hit:', cache.has(key))` at the start of wrapper\n2. **Type collision?** Check key format - should have quotes around strings\n3. **`this` broken?** Check if using regular function (not arrow) and fn.apply()\n4. **Always computing?** Ensure you're using the SAME memoized function reference"
+    "how_to_fix_fast": "Add console.log for the generated key and check if different argument types produce different keys. If `memoized(1)` and `memoized('1')` produce the same key, your serialization is broken. If cache hits aren't happening, check that cache is in closure scope, not inside the returned function."
   },
   "complexity_analysis": {
     "time": {
-      "memoize": {
-        "complexity": "O(1)",
-        "explanation": "Just creates Map and returns function"
-      },
-      "memoized_call_cache_hit": {
+      "key_generation": {
         "complexity": "O(k)",
-        "explanation": "O(k) for JSON.stringify where k = args size, then O(1) Map lookup"
+        "explanation": "JSON.stringify is O(k) where k is total size of arguments"
       },
-      "memoized_call_cache_miss": {
-        "complexity": "O(k) + O(fn)",
-        "explanation": "Key generation + original function execution"
+      "cache_lookup": {
+        "complexity": "O(1)",
+        "explanation": "Map.has() is O(1) amortized"
       },
-      "overall": "Amortized O(1) for repeated calls with same args"
+      "cache_store": {
+        "complexity": "O(1)",
+        "explanation": "Map.set() is O(1) amortized"
+      },
+      "cache_hit": {
+        "complexity": "O(k)",
+        "explanation": "O(k) for key generation + O(1) for lookup"
+      },
+      "cache_miss": {
+        "complexity": "O(k + fn)",
+        "explanation": "O(k) for key + O(fn) for original function execution"
+      },
+      "overall": "First call: O(k + fn). Subsequent identical calls: O(k). The fn execution is amortized across all calls with same args."
     },
     "space": {
-      "complexity": "O(n \u00d7 k) where n = unique arg combinations, k = avg result size",
-      "breakdown": "- Map instance: O(1)\n- Cache entries: O(n) where n = unique calls\n- Each entry stores: key (string) + result\n- Keys are O(args_size), results are O(result_size)",
-      "note": "Cache grows unbounded in Part 1. Production code should add LRU eviction."
+      "complexity": "O(n \u00d7 k)",
+      "breakdown": "- Cache Map: O(n) entries where n = unique argument combinations\n- Each key: O(k) for serialized string\n- Each value: O(v) for stored result\n- Total: O(n \u00d7 (k + v))",
+      "note": "Cache grows unbounded. In production, add LRU eviction for memory management."
     },
-    "can_we_do_better": "Time: No - O(1) lookup is optimal. Space: Yes - LRU cache limits memory, WeakMap allows GC for object keys."
+    "can_we_do_better": "Time is optimal\u2014we need O(k) to read the arguments. Space could be bounded with LRU cache. Key generation could use WeakMap for object arguments to avoid serialization, but that's a different tradeoff (reference equality vs structural equality)."
   },
   "dry_run": {
-    "example": "const add = (a, b) => a + b;\nconst memoizedAdd = memoize(add);\nmemoizedAdd(1, 2);\nmemoizedAdd(1, 2);\nmemoizedAdd(2, 3);",
-    "trace_table": "| Step | Operation | args | key | cache before | Action | Result | cache after |\n|------|-----------|------|-----|--------------|--------|--------|-------------|\n| 1 | `memoize(add)` | - | - | (created) | Create closure | memoizedAdd | `Map{}` |\n| 2 | `memoizedAdd(1, 2)` | `[1, 2]` | `'[1,2]'` | `Map{}` | MISS \u2192 compute | `3` | `Map{'[1,2]': 3}` |\n| 3 | `memoizedAdd(1, 2)` | `[1, 2]` | `'[1,2]'` | `Map{'[1,2]': 3}` | HIT \u2192 return | `3` | unchanged |\n| 4 | `memoizedAdd(2, 3)` | `[2, 3]` | `'[2,3]'` | `Map{'[1,2]': 3}` | MISS \u2192 compute | `5` | `Map{'[1,2]': 3, '[2,3]': 5}` |",
-    "final_answer": "Results: 3, 3, 5 | Original function called only 2 times (not 3)"
+    "example": "const add = (a, b) => a + b; const memoAdd = memoize(add); memoAdd(1, 2); memoAdd(1, 2); memoAdd('1', '2');",
+    "trace_table": "| Step | Call | args | Key (JSON.stringify) | Cache Before | Action | Result | Cache After |\n|------|------|------|---------------------|--------------|--------|--------|-------------|\n| 1 | memoAdd(1, 2) | [1, 2] | `'[1,2]'` | `{}` | MISS \u2192 compute 1+2 | 3 | `{'[1,2]': 3}` |\n| 2 | memoAdd(1, 2) | [1, 2] | `'[1,2]'` | `{'[1,2]': 3}` | HIT \u2192 return | 3 | `{'[1,2]': 3}` |\n| 3 | memoAdd('1', '2') | ['1', '2'] | `'[\"1\",\"2\"]'` | `{'[1,2]': 3}` | MISS \u2192 compute '1'+'2' | '12' | `{'[1,2]': 3, '[\"1\",\"2\"]': '12'}` |",
+    "final_answer": "Call 1: 3 (computed), Call 2: 3 (cached), Call 3: '12' (computed, different key due to string type)"
   },
   "test_cases": [
     {
-      "name": "Basic - Two arguments",
+      "name": "Basic memoization with numbers",
       "category": "Happy Path",
-      "input": "memoize(add); memoizedAdd(1, 2); memoizedAdd(1, 2);",
-      "expected": "3, 3 (add called once)",
-      "explanation": "First call computes and caches. Second call returns cached result."
+      "input": "memoize(add); add(1, 2); add(1, 2)",
+      "expected": "3, 3 (second call from cache)",
+      "explanation": "First call computes and caches, second call returns cached result"
     },
     {
-      "name": "Type differentiation - number vs string",
-      "category": "Edge Case",
-      "input": "memoize(identity); identity(1); identity('1');",
-      "expected": "1 (number), '1' (string) - different cache entries",
-      "explanation": "JSON.stringify([1]) = '[1]' but JSON.stringify(['1']) = '[\"1\"]' - different keys!"
+      "name": "Type differentiation: number vs string",
+      "category": "Critical Edge Case",
+      "input": "memoize(identity); identity(1); identity('1')",
+      "expected": "1 (number), '1' (string) - DIFFERENT cache entries",
+      "explanation": "JSON.stringify produces '[1]' vs '[\"1\"]' - must not collide!"
     },
     {
       "name": "Empty arguments",
       "category": "Edge Case",
-      "input": "memoize(getTime); getTime(); getTime();",
-      "expected": "Same value both times (cached)",
-      "explanation": "JSON.stringify([]) = '[]' - valid cache key for no-arg functions"
+      "input": "memoize(() => Math.random()); fn(); fn()",
+      "expected": "Same random number both times",
+      "explanation": "Empty args serializes to '[]', which is a valid cache key"
     },
     {
-      "name": "null vs undefined",
-      "category": "Gotcha",
-      "input": "memoize(identity); identity(null); identity(undefined);",
-      "expected": "null, undefined - should be different... but gotcha!",
-      "gotcha": "JSON.stringify([undefined]) = '[null]' - same as [null]! This is a known limitation."
-    },
-    {
-      "name": "Array argument vs multiple arguments",
+      "name": "null and undefined handling",
       "category": "Edge Case",
-      "input": "memoize(fn); fn([1, 2]); fn(1, 2);",
-      "expected": "Different cache entries",
-      "explanation": "JSON.stringify([[1,2]]) = '[[1,2]]' vs JSON.stringify([1,2]) = '[1,2]'"
+      "input": "memoize(x => x); fn(null); fn(undefined)",
+      "expected": "null, undefined (but may both serialize to '[null]')",
+      "explanation": "JSON.stringify limitation: undefined becomes null in arrays. Mention to interviewer!"
     },
     {
-      "name": "Object arguments",
-      "category": "Edge Case",
-      "input": "memoize(fn); fn({a: 1}); fn({a: 1});",
-      "expected": "Same result (cache hit)",
-      "explanation": "JSON.stringify([{a:1}]) = '[{\"a\":1}]' - consistent for same structure"
+      "name": "Multiple arguments with mixed types",
+      "category": "Complex",
+      "input": "fn(1, 'hello', true, null); fn(1, 'hello', true, null)",
+      "expected": "Second call is cache hit",
+      "explanation": "Key: '[1,\"hello\",true,null]' - all types preserved"
     },
     {
-      "name": "This context preservation",
-      "category": "Edge Case",
-      "input": "obj.multiply = memoize(function(x) { return x * this.mult; }); obj.mult = 10; obj.multiply(5);",
-      "expected": "50",
-      "explanation": "Using fn.apply(this, args) preserves the object context"
-    },
-    {
-      "name": "Fibonacci performance",
-      "category": "Performance",
-      "input": "memoize(fib); fib(40); fib(40); fib(40);",
-      "expected": "102334155 (first slow, rest instant)",
-      "explanation": "Recursive calls benefit from memoization too!"
+      "name": "Preserves this context",
+      "category": "Context",
+      "input": "obj.method = memoize(function() { return this.value; }); obj.value = 42; obj.method()",
+      "expected": "42",
+      "explanation": "Using fn.apply(this, args) preserves the calling context"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Using args.toString() for key generation",
-      "why_wrong": "[1, 2].toString() === '1,2' AND ['1', '2'].toString() === '1,2' - TYPE COLLISION!",
-      "correct_approach": "Use JSON.stringify(args) which preserves type info",
-      "code_wrong": "const key = args.toString(); // BAD",
-      "code_correct": "const key = JSON.stringify(args); // GOOD"
+      "mistake": "Using args.toString() or args.join() for key",
+      "why_wrong": "`[1, 2].toString()` is `'1,2'` and `['1', '2'].toString()` is also `'1,2'` - TYPE COLLISION!",
+      "correct_approach": "Use JSON.stringify(args) which preserves types",
+      "code_wrong": "const key = args.toString(); // or args.join(',')",
+      "code_correct": "const key = JSON.stringify(args);"
     },
     {
       "mistake": "Using arrow function for the wrapper",
-      "why_wrong": "Arrow functions capture lexical `this`, breaking method calls",
-      "correct_approach": "Use regular function declaration to inherit call-site `this`",
-      "code_wrong": "return (...args) => { fn.apply(this, args); }; // 'this' is wrong!",
-      "code_correct": "return function(...args) { fn.apply(this, args); }; // 'this' is correct"
+      "why_wrong": "Arrow functions don't have their own `this`, so `this` will be from the enclosing scope, breaking method memoization",
+      "correct_approach": "Use regular function expression",
+      "code_wrong": "return (...args) => { fn.apply(this, args); }  // 'this' is wrong!",
+      "code_correct": "return function(...args) { fn.apply(this, args); }"
     },
     {
-      "mistake": "Creating cache outside the closure",
-      "why_wrong": "All memoized functions would share one cache - total disaster",
-      "correct_approach": "Create cache INSIDE memoize(), so each call gets its own cache",
-      "code_wrong": "const cache = new Map(); // OUTSIDE - shared by all!\nfunction memoize(fn) { ... }",
-      "code_correct": "function memoize(fn) {\n  const cache = new Map(); // INSIDE - unique per function\n  ..."
+      "mistake": "Using fn(...args) instead of fn.apply(this, args)",
+      "why_wrong": "Loses the `this` context from the caller",
+      "correct_approach": "Use apply or call to forward `this`",
+      "code_wrong": "const result = fn(...args);  // 'this' is lost",
+      "code_correct": "const result = fn.apply(this, args);  // 'this' preserved"
     },
     {
-      "mistake": "Not returning the memoized function",
-      "why_wrong": "memoize() returns undefined, calls fail",
-      "correct_approach": "Always return the wrapper function",
-      "code_wrong": "function memoize(fn) {\n  const cache = new Map();\n  function memoized() { ... }\n  // forgot return!\n}",
-      "code_correct": "function memoize(fn) {\n  const cache = new Map();\n  return function memoized() { ... }  // return it!\n}"
+      "mistake": "Declaring cache inside the returned function",
+      "why_wrong": "Cache gets reset on every call, defeating the purpose",
+      "correct_approach": "Declare cache in the closure scope of memoize",
+      "code_wrong": "return function(...args) {\n  const cache = new Map();  // Reset every call!\n  ...\n}",
+      "code_correct": "const cache = new Map();  // In closure scope\nreturn function(...args) { ... }"
     },
     {
-      "mistake": "Using fn(args) instead of fn.apply(this, args)",
-      "why_wrong": "Passes array as single argument, doesn't spread args",
-      "correct_approach": "Use apply() to spread args and preserve this",
-      "code_wrong": "const result = fn(args); // Passes [1, 2] as single arg",
-      "code_correct": "const result = fn.apply(this, args); // Passes 1, 2 as two args"
+      "mistake": "Not returning the result",
+      "why_wrong": "Function returns undefined instead of the cached/computed value",
+      "correct_approach": "Always return the result",
+      "code_wrong": "if (cache.has(key)) {\n  cache.get(key);  // Missing return!\n}",
+      "code_correct": "if (cache.has(key)) {\n  return cache.get(key);\n}"
     }
   ],
   "interview_tips": {
-    "opening": "This is a classic JavaScript pattern - memoization using closures. Let me clarify a few things before I start...",
+    "opening": "Thank you for this problem. Memoization is a powerful optimization pattern\u2014I've used it extensively with React's useMemo and in Redux selectors. Before I code, let me clarify a few things...",
     "clarifying_questions_to_ask": [
-      "Should the memoization be by value or reference for object arguments?",
-      "Do I need to handle async functions / Promises?",
-      "Should the cache have a size limit (LRU)?",
-      "Do I need to preserve the `this` context?",
-      "What about functions that throw errors - should we cache those?"
+      "What types of arguments should I handle? Mostly primitives, or also objects?",
+      "Should I worry about cache size limits or eviction?",
+      "Is this for synchronous functions only, or should I handle async/Promises?",
+      "Should identical objects with different references be treated as same key?",
+      "Do I need to handle functions that use `this`?"
     ],
     "what_to_mention_proactively": [
-      "I'll use a closure to maintain the cache between calls",
-      "I'll use JSON.stringify for type-safe key generation",
-      "I'll use a regular function (not arrow) to preserve `this` context",
-      "JSON.stringify has edge cases with undefined and circular refs - I'll note those"
+      "I'll use JSON.stringify for type-safe key generation\u2014it differentiates 1 from '1'",
+      "I'll use Map for the cache instead of Object for cleaner API",
+      "I'll preserve `this` context using fn.apply for method memoization",
+      "I know JSON.stringify has limitations with undefined and functions\u2014happy to discuss"
     ],
     "communication_during_coding": [
-      "Creating the Map in the closure scope so each memoized function has its own cache",
-      "Using JSON.stringify because it preserves type info - [1] becomes '[1]' but ['1'] becomes '[\"1\"]'",
-      "Using fn.apply(this, args) to spread arguments and preserve this context",
-      "Regular function, not arrow, because we need call-site this binding"
+      "Creating the cache in closure scope so it persists across calls...",
+      "Using rest parameters to capture all arguments as an array...",
+      "JSON.stringify gives us type-safe keys\u2014numbers and strings won't collide...",
+      "Using apply instead of spread to preserve the calling context..."
     ],
     "if_stuck": [
-      "Step back: What are the components? Cache + wrapper function + key generation",
-      "Draw it: Sketch the closure structure",
-      "Start simple: Get basic caching working, then add type safety"
+      "Think about what data structure can store key-value pairs with O(1) lookup",
+      "Consider how to create a unique key from multiple arguments of different types",
+      "Remember closures\u2014how can I make state persist across function calls?"
     ],
-    "time_management": "0-5min: Clarify requirements | 5-10min: Explain approach | 10-20min: Implement core | 20-25min: Test | 25-30min: Edge cases | 30-45min: Follow-ups"
+    "time_management": "0-5min: Clarify requirements and edge cases | 5-8min: Explain approach and get buy-in | 8-20min: Write the code | 20-25min: Test with examples | 25-30min: Discuss edge cases and extensions"
   },
   "pattern_recognition": {
-    "pattern_name": "Closure + Cache (Memoization Pattern)",
+    "pattern_name": "Closure-based Caching / Higher-Order Functions",
     "indicators": [
-      "Repeated expensive computations",
-      "Pure functions (same input \u2192 same output)",
-      "Need to optimize without changing function signature"
+      "Need to wrap a function with additional behavior",
+      "Need to maintain state across multiple function calls",
+      "Need to avoid recomputation of expensive operations",
+      "Decorator pattern in functional programming"
     ],
     "similar_problems": [
-      "LC 2623 - Memoize: Direct implementation",
-      "LC 2630 - Memoize II: Handles object arguments by reference",
-      "LC 2636 - Promise Pool: Similar closure pattern",
-      "Function.prototype.bind polyfill: Closure + this binding"
+      "LC 2623 - Memoize: Exact same problem",
+      "LC 2630 - Memoize II: Handles object references properly",
+      "LC 2629 - Function Composition: Similar higher-order function pattern",
+      "LC 2631 - Group By: Closure for state management",
+      "Debounce/Throttle: Same closure pattern with timing"
     ],
-    "template": "```javascript\nfunction createCachedWrapper(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = serialize(args);\n    if (cache.has(key)) return cache.get(key);\n    const result = fn.apply(this, args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```"
+    "template": "```javascript\nfunction wrapper(fn) {\n  // State in closure scope\n  const state = ...;\n  \n  // Return wrapped function\n  return function(...args) {\n    // Access/modify state\n    // Call original fn as needed\n    return fn.apply(this, args);\n  };\n}\n```"
   },
   "follow_up_preparation": {
-    "part_2_hint": "Part 2 adds **async memoization with callbacks**. Key changes:\n- Results aren't immediately available\n- Multiple callers might request same key before first completes\n- Need to queue pending callbacks, not re-execute",
-    "part_3_hint": "Part 3 is **Function.prototype.bind polyfill**:\n- Store bound `this` and partial args in closure\n- Handle both regular calls and `new` keyword\n- Preserve prototype chain",
-    "data_structure_evolution": "Part 1: Map<key, value> \u2192 Part 2: Map<key, {status, value, callbacks}> \u2192 Part 3: Different pattern entirely"
+    "part_2_hint": "Part 2 adds async support. Key insight: for async functions, you need to cache the Promise itself, not the resolved value. This prevents multiple in-flight requests for the same arguments. Also need to handle Promise rejection\u2014should failed Promises be cached?",
+    "part_3_hint": "Function.prototype.bind polyfill. Need to return a new function with preset `this` and partial arguments. Handle both regular calls and `new` (constructor calls). Use Function.prototype.apply internally.",
+    "part_4_hint": "Array.isArray polyfill. The trick is using Object.prototype.toString.call(arg) === '[object Array]'. Don't use instanceof\u2014it fails across iframes.",
+    "data_structure_evolution": "Part 1: Map for cache \u2192 Part 2: Same Map, but store Promises \u2192 Part 3: No cache, just closure for bound `this` and args \u2192 Part 4: No data structure, just type checking"
   },
   "communication_script": {
-    "opening_verbatim": "Thanks for this problem! Memoization is a fundamental pattern I use often in React and Redux. Before I code, let me clarify a few things and share my approach.",
-    "after_clarification": "Great, so to summarize: I need to implement a memoize function that caches results based on arguments, with different cache keys for different types like 1 vs '1'. I'll use a closure with a Map for the cache, and JSON.stringify for type-safe key generation. Sound good?",
+    "opening_verbatim": "Thank you for this problem. Memoization is a technique I use frequently\u2014React's useMemo and Redux selectors are built on the same concept. Before I start coding, I'd like to clarify a few things to make sure I understand the requirements correctly.",
+    "after_clarification": "Great, so to summarize: I need to implement a memoize function that caches results based on arguments, handles different types correctly, and works with any function. My approach will be to use a closure with a Map for the cache and JSON.stringify for type-safe keys. Does that sound like a good direction?",
     "while_coding": [
-      "Creating the cache as a Map in the closure scope...",
-      "Using a regular function, not arrow, to preserve this context...",
-      "JSON.stringify gives us type-safe keys - numbers stay unquoted, strings get quotes...",
-      "fn.apply(this, args) spreads the arguments and preserves this..."
+      "I'm declaring the cache in the closure scope so it persists across calls...",
+      "Using a regular function, not arrow, so I can preserve the 'this' context...",
+      "JSON.stringify gives me type-safe keys\u2014'[1]' vs '[\"1\"]' for number vs string...",
+      "Using apply to call the original function and forward 'this'..."
     ],
-    "after_coding": "Let me trace through this with the example. First call memoizedAdd(1,2): key is '[1,2]', cache miss, compute 3, store it. Second call same args: cache hit, return 3 instantly. Third call (2,3): different key '[2,3]', compute 5.",
-    "when_stuck_verbatim": "Let me step back. The key components are: cache storage, key generation, and the wrapper function. Let me focus on getting the cache lookup working first.",
-    "after_mistake": "Ah, I see the issue - I used an arrow function which doesn't preserve 'this'. Let me fix that by using a regular function declaration.",
-    "before_moving_on": "This handles Part 1. Time complexity is O(1) for cache hits, O(k) for key generation where k is args size. Space is O(n) for n unique argument combinations. Ready for Part 2?"
+    "after_coding": "Let me trace through an example to verify this works correctly. If I memoize an add function and call it with (1, 2), the key will be '[1,2]'. First call is a cache miss, so we compute 3 and store it. Second call with (1, 2) hits the cache and returns 3 immediately. A call with ('1', '2') produces key '[\"1\",\"2\"]' which is different, so it's a cache miss.",
+    "when_stuck_verbatim": "Let me step back and think about what I need here. The core problem is intercepting function calls and caching results. I need a way to create unique keys from arguments... JSON.stringify should work for that.",
+    "after_mistake": "Actually, I see an issue\u2014I used an arrow function but that won't preserve 'this' correctly. Let me change that to a regular function. There, now fn.apply(this, args) will work properly.",
+    "before_moving_on": "This handles the basic memoization case. Time complexity is O(k) for key generation plus O(1) for cache lookup. Space is O(n) for n unique argument combinations. The main limitation is JSON.stringify doesn't handle undefined or circular references perfectly, but for most use cases this works well. Ready for Part 2 when you are!"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Closure understanding**: Do they know how closures work?",
-      "**JavaScript this binding**: Do they understand arrow vs regular functions?",
-      "**Edge case awareness**: Do they mention type collisions, undefined handling?",
-      "**Code quality**: Clean, readable, well-named code",
-      "**Communication**: Can they explain their thinking?"
+      "Understanding of closures and lexical scope",
+      "Knowledge of JavaScript function context (this)",
+      "Ability to handle serialization edge cases",
+      "Code clarity and organization",
+      "Testing instinct\u2014do they verify their solution?"
     ],
     "bonus_points": [
-      "Mentioning JSON.stringify limitations (undefined, circular refs) unprompted",
-      "Discussing Map vs Object tradeoffs",
-      "Explaining why arrow functions break this",
-      "Proactively adding cache utilities (clear, size)",
-      "Mentioning real-world use cases (React useMemo, Redux selectors)"
+      "Mentioning JSON.stringify limitations unprompted",
+      "Explaining why Map is better than Object for cache",
+      "Discussing LRU cache for production use",
+      "Knowing about WeakMap for object argument caching",
+      "Connecting to React/Redux patterns they've used"
     ],
     "red_flags": [
-      "Using toString() for keys without realizing the type collision problem",
-      "Not understanding why closures are needed",
-      "Using arrow function when this matters",
-      "Unable to trace through an example",
-      "Not considering any edge cases"
+      "Using args.toString() and not recognizing type collision",
+      "Not understanding why 'this' preservation matters",
+      "Unable to explain how closures work",
+      "Writing code without explaining approach first",
+      "Not testing after implementation"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as a closure pattern, mention type safety concerns before being asked, write clean code on first pass, and can discuss real-world applications. They think about production concerns (memory limits, error handling) without over-engineering."
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as a closure + caching problem. They ask smart questions about edge cases (object arguments, async, cache eviction). They explain tradeoffs (JSON.stringify vs custom serializer). They write clean code on the first pass and test systematically. They connect it to real-world usage in React or other frameworks."
   },
   "time_milestones": {
-    "by_5_min": "Understand problem, ask about type handling, edge cases, this context",
-    "by_10_min": "Explain approach: closure + Map + JSON.stringify, get buy-in",
-    "by_15_min": "Core implementation done (basic memoize working)",
-    "by_20_min": "Testing with examples, fixing any bugs",
-    "by_25_min": "Edge cases discussed, complexity analyzed",
-    "by_30_min": "Part 1 complete, ready for follow-ups",
-    "warning_signs": "If you're still explaining approach at 15 min, speed up. If basic implementation isn't done by 20 min, simplify."
+    "by_5_min": "Understand the problem completely. Ask about argument types, cache limits, async support. Confirm key constraint: type differentiation (1 vs '1').",
+    "by_8_min": "Explain approach: closure for state, Map for cache, JSON.stringify for keys, apply for context. Get interviewer buy-in.",
+    "by_15_min": "Core implementation complete. Working memoize function that handles basic cases.",
+    "by_20_min": "Test with examples. Trace through memoizedAdd(1,2) twice, verify cache hit. Test type differentiation.",
+    "by_25_min": "Discuss edge cases, mention limitations, talk about production considerations (LRU, WeakMap).",
+    "by_30_min": "Part 1 complete. Ready for follow-up parts.",
+    "warning_signs": "If still clarifying at 8 min, you're behind. If still coding at 25 min, you won't have time for follow-ups. Simplify and move faster."
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Say: 'Actually, I see an issue - I used an arrow function but we need regular function for this binding. Let me fix that.' Interviewers expect bugs; they evaluate recovery.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember if Map uses .has() or .contains() - let me use .has() and we can verify.' Or: 'I'll use pseudocode here and look up the exact API.'",
-    "when_approach_is_wrong": "Say: 'Actually, toString() won't work because it loses type info. Let me reconsider - JSON.stringify would be better.'",
-    "when_completely_stuck": "Say: 'I'm stuck on the key generation. Could you give me a hint about how to handle type differentiation?' Asking focused questions is fine.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on the core logic and mention what I'd add: LRU eviction, error handling, cache utilities.'"
+    "when_you_make_a_bug": "Say: 'Actually, I see an issue here\u2014I used an arrow function but I need a regular function to preserve this. Let me fix that.' Make the fix, briefly explain why, and continue. Don't dwell on it.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact method name for checking if a Map has a key\u2014is it .has() or .contains()? Let me use .has() and we can verify.' Most interviewers won't penalize minor syntax issues.",
+    "when_approach_is_wrong": "Say: 'Wait, I realize args.toString() will cause type collisions\u2014'1,2' is same for [1,2] and ['1','2']. I need to use JSON.stringify instead.' Pivot quickly and cleanly.",
+    "when_completely_stuck": "Say: 'I'm stuck on generating unique keys from arguments. Could you give me a hint about what approach to use for serialization?' Asking for help shows self-awareness.",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me finish the core logic and explain what I'd add for edge cases. The key insight is using JSON.stringify for type-safe keys and fn.apply for context preservation.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "AI tools can help with boilerplate and syntax, but YOU must drive the approach.",
+    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them wisely\u2014they can speed you up or expose that you don't understand the code.",
     "what_to_do": [
-      "Let AI autocomplete obvious patterns (Map initialization, function signatures)",
-      "Use AI for test case generation",
-      "Let AI help with syntax you forgot (Map API methods)"
+      "Use AI for boilerplate like 'function memoize(fn) { const cache = new Map();'",
+      "Use for syntax you forgot: 'How do I check if Map has key?'",
+      "Let it autocomplete obvious patterns once you've set direction",
+      "Use for generating test cases after you've written the solution"
     ],
     "what_not_to_do": [
-      "Don't paste the problem and ask for solution",
-      "Don't accept suggestions without understanding them",
-      "Don't let AI drive your design decisions"
+      "Don't paste the entire problem and accept the first solution",
+      "Don't use AI suggestions you can't explain",
+      "Don't let AI write the key insight (JSON.stringify for types)\u2014YOU should know that"
     ],
-    "how_to_demonstrate_understanding": "If AI suggests something, explain WHY it works: 'Copilot suggested JSON.stringify - that's good because it preserves type information in the serialized key.'",
-    "expectation_adjustment": "With AI, you should complete parts faster. If Part 1 takes 30 min with AI, that's too slow."
+    "how_to_demonstrate_understanding": "If AI suggests JSON.stringify, explain WHY: 'JSON.stringify preserves types\u2014number 1 becomes '[1]' while string '1' becomes '[\"1\"]', so they don't collide.' The interviewer is evaluating YOUR knowledge.",
+    "expectation_adjustment": "With AI tools, you're expected to complete more parts faster. If you're slower with AI than without, don't use it."
   },
   "signal_points": {
     "wow_factors": [
-      "Immediately recognizing this as a closure pattern",
-      "Mentioning JSON.stringify limitations unprompted",
-      "Discussing Map vs Object tradeoffs",
-      "Explaining this binding with arrow vs regular functions",
-      "Mentioning real-world uses (React useMemo, lodash.memoize)"
+      "Immediately identifying JSON.stringify for type-safe keys",
+      "Explaining why Map > Object without being asked",
+      "Mentioning WeakMap for object argument caching",
+      "Connecting to React useMemo / Redux reselect",
+      "Proactively discussing what you'd add for production (LRU, TTL)"
     ],
     "subtle_signals_of_experience": [
-      "Using Map instead of plain Object",
-      "Naming the returned function (memoized) for stack traces",
-      "Considering error handling",
-      "Thinking about cache eviction for production",
-      "Writing tests as they code"
+      "Using 'cache.has(key)' instead of 'key in cache' or 'cache[key]'",
+      "Knowing to use fn.apply(this, args) for context",
+      "Mentioning that arrow functions don't have own 'this'",
+      "Asking about cache eviction strategy",
+      "Testing edge cases like empty args, null, undefined"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Coding silently for too long",
-      "Getting defensive about bugs",
-      "Not asking clarifying questions",
-      "Rushing without explaining"
+      "Coding silently for more than 30 seconds",
+      "Getting defensive when interviewer points out type collision issue",
+      "Not asking any clarifying questions",
+      "Rushing to code before explaining approach"
     ],
     "technical": [
-      "Using args.toString() (type collisions)",
-      "Using arrow function when this matters",
-      "Cache outside closure (shared state)",
-      "Not returning the memoized function"
+      "Using args.toString() or args.join() for key generation",
+      "Using arrow function for the wrapper",
+      "Declaring cache inside the returned function",
+      "Forgetting to return the cached/computed result"
     ],
     "communication": [
-      "Using jargon without explaining",
-      "Not tracing through examples",
-      "Not discussing complexity",
-      "Ignoring edge cases entirely"
+      "Using 'closure' without explaining what you mean",
+      "Not verifying the solution with an example",
+      "Unable to explain why types must be differentiated",
+      "Saying 'I think this works' without testing"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does memoize return a function?",
-      "Does the returned function call the original correctly?",
-      "Are cache keys type-safe? (1 \u2260 '1')",
-      "Is this context preserved?",
-      "Did I trace through an example?",
+      "Does cache persist across calls? (In closure scope, not inside returned function)",
+      "Do different types produce different keys? (JSON.stringify, not toString)",
+      "Is 'this' context preserved? (fn.apply, regular function not arrow)",
+      "Do I return the result in all code paths?",
+      "Did I trace through at least one example?",
       "Did I mention time/space complexity?"
     ],
     "quick_code_review": [
-      "Map created inside memoize (not outside)",
-      "Regular function (not arrow) for wrapper",
-      "fn.apply(this, args) for correct invocation",
-      "JSON.stringify for key generation",
-      "Return statement for the wrapper"
+      "Map for cache, not Object (cleaner API)",
+      "Regular function, not arrow (preserves this)",
+      "JSON.stringify for key (type-safe)",
+      "fn.apply(this, args) (forwards context)",
+      "Return statement in both cache hit and miss paths"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "**LRU cache eviction**: Prevent unbounded memory growth",
-      "**Cache size limits**: `options.maxSize`",
-      "**TTL expiration**: `options.ttl` for time-based invalidation",
-      "**Custom key generator**: `options.keyGenerator` for complex objects",
-      "**Error handling**: Decide whether to cache thrown errors",
-      "**Cache utilities**: `.clear()`, `.size`, `.has()` on returned function"
+      "LRU cache with max size to prevent memory leaks",
+      "TTL (time-to-live) for cache entries",
+      "Custom key generator option for complex objects",
+      "Cache statistics (hit rate, size)",
+      "Option to manually invalidate cache",
+      "WeakMap for object arguments if reference equality is desired"
     ],
-    "why_not_in_interview": "Keep interview code focused. Mention these verbally to show senior thinking: 'In production, I'd add LRU eviction and TTL.'",
-    "how_to_mention": "Say: 'This handles the core requirement. In production, I'd also add cache limits to prevent memory leaks, and possibly time-based expiration.'"
+    "why_not_in_interview": "Interview code should be focused and minimal. Adding LRU logic would take another 10 minutes and distract from the core problem.",
+    "how_to_mention": "Say: 'In production, I'd also add LRU eviction for memory management and maybe a TTL for freshness. But for this interview, I'll focus on the core memoization logic.'"
   },
-  "generated_at": "2026-01-18T21:47:08.465543",
+  "generated_at": "2026-01-19T04:03:13.543254",
   "_meta": {
     "problem_id": "javascript_polyfills_and_memoization",
     "part_number": null,

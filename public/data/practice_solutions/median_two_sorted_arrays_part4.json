@@ -4,45 +4,42 @@
   "builds_on": "Part 3",
   "difficulty": "hard",
   "problem_understanding": {
-    "what_changes": "We transition from **static arrays** where we compute the median once, to a **dynamic streaming scenario** where elements are continuously added to both arrays and we need efficient insert + query operations. This fundamentally changes the optimal data structure from sorted arrays to heaps or balanced BSTs.",
+    "what_changes": "Part 3 handled static K sorted arrays with a K-way merge. Part 4 requires **dynamic streaming updates** - elements are continuously added to two arrays, and we need efficient median queries. This fundamentally changes the approach from 'compute once' to 'maintain incrementally'.",
     "new_requirements": [
-      "addToFirst(x) - Add element to conceptual first array",
-      "addToSecond(x) - Add element to conceptual second array",
-      "getMedian() - Return current median efficiently after any number of insertions",
-      "Support arbitrary interleaving of add and query operations"
+      "addToFirst(x): Add element to first array with O(log n) time",
+      "addToSecond(x): Add element to second array with O(log n) time",
+      "getMedian(): Return current median in O(1) time",
+      "Maintain state across multiple operations"
     ],
     "new_constraints": [
-      "Insert must be sub-linear (ideally O(log n))",
-      "Median query should be O(1) or O(log n)",
-      "Must handle potentially millions of streaming insertions",
-      "Original binary search partition approach becomes O(n) per insert due to array shifting"
+      "O(log n) insertion time required - sorted array insertion won't work",
+      "O(1) median query time required",
+      "Must handle arbitrary interleaving of add/query operations"
     ],
-    "key_insight": "The **two-heaps pattern** is the classic solution for streaming median. By maintaining a max-heap for the smaller half and min-heap for the larger half, we can insert in O(log n) and query median in O(1). The crucial realization is that for streaming, we **don't need to maintain the physical separation** of nums1 and nums2 - only the combined median matters."
+    "key_insight": "The two-heaps pattern is the classic solution for streaming median. A max-heap holds the smaller half, a min-heap holds the larger half. The median is always at the top(s) of the heaps. This gives O(log n) insert and O(1) query - exactly what we need!"
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "O(log n) insertion",
-        "how_met": "Heap push/pop operations are O(log n)",
+        "how_met": "Heap push/pop operations are O(log n). At most 3 heap operations per insert.",
         "gotchas": [
-          "Forgetting to rebalance heaps",
-          "Using wrong heap type"
+          "Python heapq is min-heap only - negate values for max-heap"
         ]
       },
       {
         "requirement": "O(1) median query",
-        "how_met": "Median is always at the top of one or both heaps",
+        "how_met": "Median is always at heap tops - direct access O(1)",
         "gotchas": [
-          "Off-by-one in size comparison",
-          "Empty heap handling"
+          "Must handle empty heaps",
+          "Must check heap sizes for odd/even total"
         ]
       },
       {
-        "requirement": "Handle both even and odd total counts",
-        "how_met": "Check heap sizes: if equal, average tops; if unequal, take larger heap's top",
+        "requirement": "Maintain two logical arrays",
+        "how_met": "API preserves the two-array interface, but internally we combine into heaps since median doesn't depend on which array elements came from",
         "gotchas": [
-          "Integer division issues",
-          "Float conversion"
+          "If problem required tracking array membership, would need additional data structures"
         ]
       }
     ],
@@ -51,720 +48,470 @@
         "operation": "addToFirst",
         "target": "O(log n)",
         "achieved": "O(log n)",
-        "why": "Single heap insertion + potential rebalance = 2-3 heap operations"
+        "why": "At most 3 heap operations: 1 push + potential 2 for rebalance"
       },
       {
         "operation": "addToSecond",
         "target": "O(log n)",
         "achieved": "O(log n)",
-        "why": "Same as addToFirst - both funnel to same _add_num method"
+        "why": "Same as addToFirst"
       },
       {
         "operation": "getMedian",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Simply peek at heap tops, no traversal needed"
+        "why": "Direct heap top access, no traversal"
       }
     ],
     "non_goals": [
-      "Maintaining actual physical separation of nums1 and nums2",
-      "Supporting deletion of elements",
-      "Tracking which element came from which original array",
-      "Range queries or percentile queries beyond median"
+      "Tracking which array each element belongs to",
+      "Supporting element deletion (would need different data structure)",
+      "Querying percentiles other than median"
     ]
   },
   "assumptions": [
-    "Elements can be any integers (positive, negative, zero, duplicates allowed)",
-    "getMedian() will not be called on empty structure (or we throw exception)",
-    "We don't need to reconstruct original arrays or track element sources",
-    "No concurrent access - single-threaded operations",
-    "Ask interviewer: 'Do we need to maintain the actual array separation, or just the combined median?'"
+    "Elements are integers (matching Parts 1-3)",
+    "No element removal needed - only additions",
+    "Median queries can happen at any time (even with 0 elements - return 0.0)",
+    "The two arrays don't need to be reconstructed - only median matters"
   ],
   "tradeoffs": [
     {
-      "decision": "Two Heaps vs SortedList/TreeMap",
+      "decision": "Two Heaps vs Sorted Array + Binary Insert",
       "chosen": "Two Heaps",
-      "why": "O(1) median vs O(log n), simpler implementation, standard library support",
-      "alternative": "SortedList/TreeMap",
-      "when_to_switch": "If we need to maintain array separation, support deletions, or do range queries"
+      "why": "O(log n) insert vs O(n) insert. Query is O(1) vs O(1). Clear winner.",
+      "alternative": "Sorted Array",
+      "when_to_switch": "Never for this problem. Only if random access by index needed."
     },
     {
-      "decision": "Lose array identity vs Complex tracking",
-      "chosen": "Lose array identity",
-      "why": "Problem only asks for median value, not which array contributed",
-      "alternative": "Track with metadata",
-      "when_to_switch": "If business logic requires knowing element origins"
+      "decision": "Two Heaps vs Balanced BST",
+      "chosen": "Two Heaps",
+      "why": "Simpler implementation, O(1) median vs O(log n) for BST. Python/Java have built-in heaps.",
+      "alternative": "TreeMap with order statistics",
+      "when_to_switch": "If deletion support needed, or need to find arbitrary percentiles."
     },
     {
-      "decision": "Eager rebalancing vs Lazy rebalancing",
-      "chosen": "Eager rebalancing",
-      "why": "Keeps invariants simple, O(1) median always works",
-      "alternative": "Lazy with amortized bounds",
-      "when_to_switch": "If insert latency is more critical than median latency"
+      "decision": "Shared heap vs Separate tracking",
+      "chosen": "Shared heap",
+      "why": "Median of combined elements doesn't depend on which array they came from",
+      "alternative": "Track array membership",
+      "when_to_switch": "If problem requires separate statistics per array"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Public method signatures (addToFirst, addToSecond, getMedian)",
-      "Core invariant: max_heap.top <= min_heap.top"
+      "All Part 1-3 method signatures unchanged",
+      "Public streaming API: addToFirst, addToSecond, getMedian",
+      "Return types and parameter types"
     ],
     "what_to_change": [
-      "Internal heap storage replaced original array-based approach",
-      "No longer using binary search partition for queries"
+      "Added __init__ to initialize heap data structures",
+      "Added _max_heap and _min_heap instance variables",
+      "Added private _add_num helper method"
     ],
-    "interfaces_and_boundaries": "The class exposes the same logical interface (add to array1, add to array2, get median) but implementation is completely different. This is a **strategy pattern** opportunity if we need both static and streaming modes.",
+    "interfaces_and_boundaries": "Streaming methods are independent of static methods. Could be extracted to separate class if needed. Private _add_num encapsulates shared logic.",
     "invariants": [
-      "max_heap stores the smaller half (as negated values for max-heap behavior)",
-      "min_heap stores the larger half",
-      "|len(max_heap) - len(min_heap)| <= 1",
-      "max_heap[-max_heap[0]] <= min_heap[0] (if both non-empty)",
-      "Total elements = len(max_heap) + len(min_heap)"
+      "max_heap.top <= min_heap.top (left half \u2264 right half)",
+      "|len(max_heap) - len(min_heap)| <= 1 (balanced sizes)",
+      "max_heap.size >= min_heap.size (max_heap is equal or 1 larger)"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE (Part 3 - Static Arrays):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  nums1: [1, 3, 8, 9, 15]               \u2502\n\u2502  nums2: [7, 11, 18, 19, 21, 25]        \u2502\n\u2502                                         \u2502\n\u2502  Binary search partition:               \u2502\n\u2502  nums1: [1, 3, 8 | 9, 15]              \u2502\n\u2502  nums2: [7, 11   | 18, 19, 21, 25]     \u2502\n\u2502          left=8    right=9             \u2502\n\u2502                                         \u2502\n\u2502  Insert new element? \u2192 O(n) shift!     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nAFTER (Part 4 - Two Heaps):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                                         \u2502\n\u2502   Max Heap (Left Half)  Min Heap (Right)\u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502   \u2502   top: 8    \u2502  <=  \u2502   top: 9    \u2502  \u2502\n\u2502   \u2502   size: 5   \u2502      \u2502   size: 6   \u2502  \u2502\n\u2502   \u2502 [8,3,7,1,?] \u2502      \u2502 [9,11,15,?] \u2502  \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                         \u2502\n\u2502   Insert new element? \u2192 O(log n)!      \u2502\n\u2502   Get median? \u2192 O(1)!                  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\n                    INSERT FLOW\n                    ============\n    \n    New element: x\n           \u2502\n           \u25bc\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 Is x <= max_heap.top?\u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n           \u2502\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2510\n     \u2502YES        \u2502NO\n     \u25bc           \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502Push to \u2502  \u2502Push to \u2502\n  \u2502max_heap\u2502  \u2502min_heap\u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n     \u2502           \u2502\n     \u2514\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2518\n           \u25bc\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502     REBALANCE        \u2502\n    \u2502                      \u2502\n    \u2502 if |sizes| > 1:      \u2502\n    \u2502   move top element   \u2502\n    \u2502   from larger to     \u2502\n    \u2502   smaller heap       \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n           \u2502\n           \u25bc\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 INVARIANTS RESTORED  \u2502\n    \u2502 \u2022 Sizes differ by \u22641 \u2502\n    \u2502 \u2022 max.top \u2264 min.top  \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n    \n    \n                GET MEDIAN FLOW\n                ===============\n    \n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 len(max_heap) > len(min_heap)\u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n           \u2502\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2510\n     \u2502YES        \u2502NO (equal sizes)\n     \u25bc           \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 return \u2502  \u2502 return average of \u2502\n  \u2502 max.top\u2502  \u2502 max.top + min.top \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (Part 3): Static K-way merge\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Arrays given upfront \u2192 Compute median  \u2502\n\u2502  [1,5,9] [2,6,10] [3,7,11]              \u2502\n\u2502           \u2193                              \u2502\n\u2502     Min Heap extracts N/2+1             \u2502\n\u2502           \u2193                              \u2502\n\u2502      Return median                       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nAFTER (Part 4): Dynamic streaming\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Stream: add(1) \u2192 add(2) \u2192 median? \u2192... \u2502\n\u2502                                          \u2502\n\u2502   Max Heap         Min Heap              \u2502\n\u2502   (left half)      (right half)          \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510            \u2502\n\u2502   \u2502 top=2 \u2502   \u2264    \u2502 top=3 \u2502            \u2502\n\u2502   \u2502   1   \u2502        \u2502   5   \u2502            \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518            \u2502\n\u2502                                          \u2502\n\u2502   Median = (2+3)/2 = 2.5 \u2190 O(1)!        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "algorithm_flow": "```\nInsert Flow (addToFirst/addToSecond):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Step 1: Decide which heap                          \u2502\n\u2502                                                    \u2502\n\u2502   if max_heap empty OR x \u2264 max_heap.top:           \u2502\n\u2502       push to max_heap (smaller half)              \u2502\n\u2502   else:                                            \u2502\n\u2502       push to min_heap (larger half)               \u2502\n\u2502                                                    \u2502\n\u2502 Step 2: Rebalance (maintain size invariant)        \u2502\n\u2502                                                    \u2502\n\u2502   if max_heap.size > min_heap.size + 1:            \u2502\n\u2502       move max_heap.top \u2192 min_heap                 \u2502\n\u2502   elif min_heap.size > max_heap.size:              \u2502\n\u2502       move min_heap.top \u2192 max_heap                 \u2502\n\u2502                                                    \u2502\n\u2502 Result: |size diff| \u2264 1, max.top \u2264 min.top        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nGet Median Flow:\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 if max_heap.size > min_heap.size:                  \u2502\n\u2502     return max_heap.top        \u2190 Odd total         \u2502\n\u2502 else:                                              \u2502\n\u2502     return (max.top + min.top) / 2  \u2190 Even total   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
   },
   "approaches": [
     {
-      "name": "Naive Extension - Insert into Sorted Array",
-      "description": "Keep Part 3's sorted arrays. Use binary search to find insertion position, then shift elements to insert. Run median partition after each insert.",
-      "time_complexity": "O(n) per insert, O(log(min(m,n))) per query",
-      "space_complexity": "O(m + n) for arrays",
-      "why_not_optimal": "Array insertion requires shifting all elements after insertion point. For n insertions, total time is O(n\u00b2) which is unacceptable for streaming."
+      "name": "Naive Extension: Maintain Sorted Arrays",
+      "description": "Keep two sorted lists. On insert, use bisect.insort to maintain order. On median query, use Part 1's binary search partition.",
+      "time_complexity": "Insert: O(n), Query: O(log(min(m,n)))",
+      "space_complexity": "O(m + n)",
+      "why_not_optimal": "O(n) insertion is too slow for streaming. With 10^6 insertions, this becomes 10^12 operations."
     },
     {
-      "name": "Two Heaps (Optimal)",
-      "description": "Abandon array structure. Use max-heap for left half, min-heap for right half. Maintain invariant that max-heap top \u2264 min-heap top and sizes differ by at most 1.",
-      "time_complexity": "O(log n) per insert, O(1) per query",
-      "space_complexity": "O(n) total elements",
-      "key_insight": "We don't need sorted access to all elements - just the middle ones! Heaps give us O(1) access to extremes (which become the medians after partitioning)."
-    },
-    {
-      "name": "Alternative - SortedList with Order Statistics",
-      "description": "Use balanced BST (Python's sortedcontainers.SortedList) for each array. Maintain array separation. Find k-th element using binary search across both structures.",
-      "time_complexity": "O(log n) per insert, O(log n) per query",
-      "space_complexity": "O(m + n) with overhead",
-      "key_insight": "Useful if we MUST maintain array separation. SortedList supports O(log n) insertion and O(log n) random access by index."
+      "name": "Optimal: Two Heaps",
+      "description": "Max-heap for smaller half, min-heap for larger half. Insert goes to appropriate heap with rebalancing. Median is at heap top(s).",
+      "time_complexity": "Insert: O(log n), Query: O(1)",
+      "space_complexity": "O(n)",
+      "key_insight": "The median divides data into two halves. Heaps naturally give us the max of left half and min of right half in O(1)."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Two Heaps Solution for Streaming Median\n\n### Core Idea\nThe **two heaps pattern** divides elements into two halves:\n- **Max-heap (left)**: Contains the **smaller half** of elements\n- **Min-heap (right)**: Contains the **larger half** of elements\n\n### Why This Works\nThe median is always at the **boundary** between left and right halves:\n- If total count is **odd**: median is the top of the larger heap\n- If total count is **even**: median is the average of both tops\n\n### Key Invariants\n1. `max(left_half) \u2264 min(right_half)` - **Ordering invariant**\n2. `|len(left) - len(right)| \u2264 1` - **Balance invariant**\n\n### Insert Algorithm\n1. **Decide which heap** based on value vs current max-heap top\n2. **Push to appropriate heap** - O(log n)\n3. **Rebalance if needed** - Move top from larger to smaller heap\n\n### Why addToFirst and addToSecond Are Identical\nFor pure median computation, the source array **doesn't matter**! Both methods call the same internal `_add_num`. This is the key insight that enables the heap approach.\n\n### Python's Heap Quirk\nPython's `heapq` only supports **min-heap**. For max-heap behavior, we **negate values** when pushing/popping.",
+    "explanation_md": "## Two Heaps for Streaming Median\n\nThe **key insight** is that we only need:\n1. The **maximum** of the smaller half\n2. The **minimum** of the larger half\n\nA **max-heap** efficiently gives us the maximum of a set, and a **min-heap** gives us the minimum.\n\n### Algorithm\n\n**On Insert:**\n1. If element \u2264 max of left half \u2192 add to left (max-heap)\n2. Otherwise \u2192 add to right (min-heap)\n3. Rebalance so sizes differ by at most 1\n\n**On Query:**\n- **Odd total**: Return top of larger heap\n- **Even total**: Return average of both tops\n\n### Why It Works\n\nAfter rebalancing:\n- `max_heap.top` = largest element in smaller half = **left median candidate**\n- `min_heap.top` = smallest element in larger half = **right median candidate**\n\nThese are exactly what we need for the median!",
     "data_structures": [
       {
-        "structure": "max_heap (list)",
-        "purpose": "Store smaller half of elements (negated for max-heap behavior in Python)"
+        "structure": "Max Heap (via negated Min Heap)",
+        "purpose": "Store smaller half, provide max in O(1)"
       },
       {
-        "structure": "min_heap (list)",
-        "purpose": "Store larger half of elements"
-      },
-      {
-        "structure": "Count tracking",
-        "purpose": "Implicit via heap sizes - len(max_heap) + len(min_heap)"
+        "structure": "Min Heap",
+        "purpose": "Store larger half, provide min in O(1)"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Initialize empty max_heap (left half) and min_heap (right half)",
-      "Step 2: On insert, compare new value with max_heap top (if exists)",
-      "Step 3: If value \u2264 max_heap top, push to max_heap (negated)",
-      "Step 4: Else push to min_heap",
-      "Step 5: Rebalance: if max_heap has 2+ more than min_heap, move top to min_heap",
-      "Step 6: Rebalance: if min_heap has more than max_heap, move top to max_heap",
-      "Step 7: For getMedian: if sizes equal, return average of tops; else return larger heap's top"
+      "Step 1: Initialize two empty heaps (max_heap for left, min_heap for right)",
+      "Step 2: On add(x): if x \u2264 max_heap.top, push to max_heap; else push to min_heap",
+      "Step 3: Rebalance: if max_heap too large, move its top to min_heap; vice versa",
+      "Step 4: On getMedian: if odd total, return max_heap.top; if even, return average of tops"
     ]
   },
   "solution_python_lines": [
     "import heapq",
-    "from typing import List, Optional",
+    "from typing import List",
     "",
-    "",
-    "class StreamingMedianFinder:",
-    "    \"\"\"",
-    "    Streaming median finder using the classic two-heaps approach.",
-    "    ",
-    "    This solves the streaming median problem where elements are continuously",
-    "    added and we need efficient insert and query operations.",
-    "    ",
-    "    Key Insight: For streaming median, we don't need to maintain the actual",
-    "    separation of nums1 and nums2. Only the combined median matters.",
-    "    ",
-    "    Data Structures:",
-    "    - max_heap: stores the smaller half (values negated for max-heap behavior)",
-    "    - min_heap: stores the larger half",
-    "    ",
-    "    Invariants:",
-    "    1. All elements in max_heap \u2264 all elements in min_heap",
-    "    2. |len(max_heap) - len(min_heap)| \u2264 1",
-    "    3. max_heap always has equal or one more element than min_heap",
-    "    ",
-    "    Time Complexity:",
-    "    - Insert: O(log n)",
-    "    - GetMedian: O(1)",
-    "    ",
-    "    Space Complexity: O(n) for all elements",
-    "    \"\"\"",
-    "    ",
+    "class Solution:",
     "    def __init__(self):",
-    "        \"\"\"Initialize with empty heaps.\"\"\"",
-    "        self.max_heap: List[int] = []  # Left half (smaller elements, negated)",
-    "        self.min_heap: List[int] = []  # Right half (larger elements)",
+    "        \"\"\"Initialize heaps for streaming median.\"\"\"",
+    "        self._max_heap = []  # Left half (negated for max-heap behavior)",
+    "        self._min_heap = []  # Right half",
     "    ",
-    "    def _add_num(self, num: int) -> None:",
-    "        \"\"\"",
-    "        Internal method to add a number maintaining heap invariants.",
+    "    def findMedianSortedArrays(self, nums1: List[int], nums2: List[int]) -> float:",
+    "        \"\"\"Part 1: Median of two sorted arrays using binary search partitioning.\"\"\"",
+    "        if len(nums1) > len(nums2):",
+    "            nums1, nums2 = nums2, nums1",
     "        ",
-    "        Algorithm:",
-    "        1. Decide which heap based on value comparison",
-    "        2. Push to appropriate heap",
-    "        3. Rebalance if sizes differ by more than 1",
+    "        m, n = len(nums1), len(nums2)",
+    "        left, right = 0, m",
+    "        half = (m + n + 1) // 2",
     "        ",
-    "        Args:",
-    "            num: The number to insert",
-    "        \"\"\"",
-    "        # Step 1: Decide which heap to add to",
-    "        # If max_heap is empty OR num belongs in left half",
-    "        if not self.max_heap or num <= -self.max_heap[0]:",
-    "            heapq.heappush(self.max_heap, -num)  # Negate for max-heap",
-    "        else:",
-    "            heapq.heappush(self.min_heap, num)",
-    "        ",
-    "        # Step 2: Rebalance heaps",
-    "        self._rebalance()",
+    "        while left <= right:",
+    "            i = (left + right) // 2",
+    "            j = half - i",
+    "            ",
+    "            maxLeft1 = float('-inf') if i == 0 else nums1[i - 1]",
+    "            minRight1 = float('inf') if i == m else nums1[i]",
+    "            maxLeft2 = float('-inf') if j == 0 else nums2[j - 1]",
+    "            minRight2 = float('inf') if j == n else nums2[j]",
+    "            ",
+    "            if maxLeft1 <= minRight2 and maxLeft2 <= minRight1:",
+    "                if (m + n) % 2 == 1:",
+    "                    return float(max(maxLeft1, maxLeft2))",
+    "                else:",
+    "                    return (max(maxLeft1, maxLeft2) + min(minRight1, minRight2)) / 2",
+    "            elif maxLeft1 > minRight2:",
+    "                right = i - 1",
+    "            else:",
+    "                left = i + 1",
+    "        return 0.0",
     "    ",
-    "    def _rebalance(self) -> None:",
-    "        \"\"\"",
-    "        Ensure heap sizes differ by at most 1.",
-    "        We keep max_heap with equal or one more element.",
+    "    def findKthElement(self, nums1: List[int], nums2: List[int], k: int) -> int:",
+    "        \"\"\"Part 2: Find k-th smallest element using binary elimination.\"\"\"",
+    "        idx1, idx2 = 0, 0",
+    "        m, n = len(nums1), len(nums2)",
     "        ",
-    "        Cases:",
-    "        - max_heap too large: move its top to min_heap",
-    "        - min_heap too large: move its top to max_heap",
-    "        \"\"\"",
-    "        # Case 1: max_heap has more than 1 extra element",
-    "        if len(self.max_heap) > len(self.min_heap) + 1:",
-    "            # Move max from left half to right half",
-    "            val = -heapq.heappop(self.max_heap)  # Negate back to positive",
-    "            heapq.heappush(self.min_heap, val)",
-    "        ",
-    "        # Case 2: min_heap has more elements than max_heap",
-    "        elif len(self.min_heap) > len(self.max_heap):",
-    "            # Move min from right half to left half",
-    "            val = heapq.heappop(self.min_heap)",
-    "            heapq.heappush(self.max_heap, -val)  # Negate for max-heap",
-    "    ",
-    "    def add_to_first(self, x: int) -> None:",
-    "        \"\"\"",
-    "        Add element to first array (conceptually).",
-    "        ",
-    "        Note: For streaming median, the source array doesn't affect",
-    "        the median calculation, so this delegates to _add_num.",
-    "        ",
-    "        Args:",
-    "            x: Element to add",
-    "        \"\"\"",
-    "        self._add_num(x)",
-    "    ",
-    "    def add_to_second(self, x: int) -> None:",
-    "        \"\"\"",
-    "        Add element to second array (conceptually).",
-    "        ",
-    "        Note: For streaming median, the source array doesn't affect",
-    "        the median calculation, so this delegates to _add_num.",
-    "        ",
-    "        Args:",
-    "            x: Element to add",
-    "        \"\"\"",
-    "        self._add_num(x)",
-    "    ",
-    "    def get_median(self) -> float:",
-    "        \"\"\"",
-    "        Return current median of all inserted elements.",
-    "        ",
-    "        Logic:",
-    "        - If odd total: median is max_heap top (the middle element)",
-    "        - If even total: median is average of both heap tops",
-    "        ",
-    "        Returns:",
-    "            The median as a float",
-    "        ",
-    "        Raises:",
-    "            ValueError: If no elements have been added",
-    "        \"\"\"",
-    "        if not self.max_heap:",
-    "            raise ValueError(\"Cannot get median of empty collection\")",
-    "        ",
-    "        # Odd total count: max_heap has one more element",
-    "        if len(self.max_heap) > len(self.min_heap):",
-    "            return float(-self.max_heap[0])  # Negate back to positive",
-    "        ",
-    "        # Even total count: average of both tops",
-    "        return (-self.max_heap[0] + self.min_heap[0]) / 2.0",
-    "    ",
-    "    def __len__(self) -> int:",
-    "        \"\"\"Return total number of elements.\"\"\"",
-    "        return len(self.max_heap) + len(self.min_heap)",
-    "    ",
-    "    def __repr__(self) -> str:",
-    "        \"\"\"Debug representation showing heap states.\"\"\"",
-    "        left = sorted([-x for x in self.max_heap], reverse=True)",
-    "        right = sorted(self.min_heap)",
-    "        return f\"StreamingMedianFinder(left={left}, right={right})\"",
-    "",
-    "",
-    "# =============================================================================",
-    "# ALTERNATIVE: Maintaining Array Separation (if required)",
-    "# =============================================================================",
-    "",
-    "class StreamingMedianWithArraySeparation:",
-    "    \"\"\"",
-    "    Alternative implementation that maintains array separation.",
-    "    ",
-    "    Uses SortedList for O(log n) insertion while preserving which",
-    "    elements came from which array. Useful if business logic requires",
-    "    tracking element sources.",
-    "    ",
-    "    Requires: pip install sortedcontainers",
-    "    \"\"\"",
-    "    ",
-    "    def __init__(self):",
-    "        try:",
-    "            from sortedcontainers import SortedList",
-    "            self.nums1 = SortedList()",
-    "            self.nums2 = SortedList()",
-    "            self._has_sortedcontainers = True",
-    "        except ImportError:",
-    "            # Fallback to regular lists (O(n) insert)",
-    "            self.nums1 = []",
-    "            self.nums2 = []",
-    "            self._has_sortedcontainers = False",
-    "    ",
-    "    def add_to_first(self, x: int) -> None:",
-    "        \"\"\"Add to first array, maintaining sorted order.\"\"\"",
-    "        if self._has_sortedcontainers:",
-    "            self.nums1.add(x)",
-    "        else:",
-    "            import bisect",
-    "            bisect.insort(self.nums1, x)",
-    "    ",
-    "    def add_to_second(self, x: int) -> None:",
-    "        \"\"\"Add to second array, maintaining sorted order.\"\"\"",
-    "        if self._has_sortedcontainers:",
-    "            self.nums2.add(x)",
-    "        else:",
-    "            import bisect",
-    "            bisect.insort(self.nums2, x)",
-    "    ",
-    "    def get_median(self) -> float:",
-    "        \"\"\"",
-    "        Find median using binary search partition approach.",
-    "        This reuses the Part 3 logic but works on dynamic structures.",
-    "        \"\"\"",
-    "        m, n = len(self.nums1), len(self.nums2)",
-    "        if m + n == 0:",
-    "            raise ValueError(\"Cannot get median of empty arrays\")",
-    "        ",
-    "        total = m + n",
-    "        half = total // 2",
-    "        ",
-    "        # Use the kth element approach",
-    "        if total % 2 == 1:",
-    "            return float(self._find_kth(half))",
-    "        else:",
-    "            return (self._find_kth(half - 1) + self._find_kth(half)) / 2.0",
-    "    ",
-    "    def _find_kth(self, k: int) -> int:",
-    "        \"\"\"Find k-th smallest element (0-indexed) across both arrays.\"\"\"",
-    "        i, j = 0, 0",
     "        while True:",
-    "            if i >= len(self.nums1):",
-    "                return self.nums2[j + k]",
-    "            if j >= len(self.nums2):",
-    "                return self.nums1[i + k]",
-    "            if k == 0:",
-    "                return min(self.nums1[i], self.nums2[j])",
+    "            if idx1 == m:",
+    "                return nums2[idx2 + k - 1]",
+    "            if idx2 == n:",
+    "                return nums1[idx1 + k - 1]",
+    "            if k == 1:",
+    "                return min(nums1[idx1], nums2[idx2])",
     "            ",
-    "            # Binary search style elimination",
-    "            mid = (k - 1) // 2",
-    "            new_i = min(i + mid, len(self.nums1) - 1)",
-    "            new_j = min(j + mid, len(self.nums2) - 1)",
+    "            half = k // 2",
+    "            newIdx1 = min(idx1 + half, m) - 1",
+    "            newIdx2 = min(idx2 + half, n) - 1",
     "            ",
-    "            if self.nums1[new_i] <= self.nums2[new_j]:",
-    "                k -= (new_i - i + 1)",
-    "                i = new_i + 1",
+    "            if nums1[newIdx1] <= nums2[newIdx2]:",
+    "                k -= (newIdx1 - idx1 + 1)",
+    "                idx1 = newIdx1 + 1",
     "            else:",
-    "                k -= (new_j - j + 1)",
-    "                j = new_j + 1",
-    "",
-    "",
-    "# =============================================================================",
-    "# DEMO AND TESTING",
-    "# =============================================================================",
-    "",
-    "def demo_streaming_median():",
-    "    \"\"\"Demonstrate the streaming median finder.\"\"\"",
-    "    print(\"=\" * 60)",
-    "    print(\"STREAMING MEDIAN FINDER - Part 4 Demo\")",
-    "    print(\"=\" * 60)",
+    "                k -= (newIdx2 - idx2 + 1)",
+    "                idx2 = newIdx2 + 1",
     "    ",
-    "    # Example from problem",
-    "    print(\"\\n--- Example from Problem ---\")",
-    "    finder = StreamingMedianFinder()",
-    "    ",
-    "    operations = [",
-    "        (\"addToFirst\", 1),",
-    "        (\"addToSecond\", 2),",
-    "        (\"getMedian\", None),",
-    "        (\"addToFirst\", 3),",
-    "        (\"getMedian\", None),",
-    "    ]",
-    "    ",
-    "    expected = [None, None, 1.5, None, 2.0]",
-    "    ",
-    "    for i, (op, arg) in enumerate(operations):",
-    "        if op == \"addToFirst\":",
-    "            finder.add_to_first(arg)",
-    "            print(f\"  {op}({arg}) -> {finder}\")",
-    "        elif op == \"addToSecond\":",
-    "            finder.add_to_second(arg)",
-    "            print(f\"  {op}({arg}) -> {finder}\")",
+    "    def findMedianOfKArrays(self, arrays: List[List[int]]) -> float:",
+    "        \"\"\"Part 3: Median of K sorted arrays using K-way merge with min heap.\"\"\"",
+    "        arrays = [arr for arr in arrays if arr]",
+    "        if not arrays:",
+    "            return 0.0",
+    "        ",
+    "        total = sum(len(arr) for arr in arrays)",
+    "        if total == 0:",
+    "            return 0.0",
+    "        ",
+    "        heap = []",
+    "        for i, arr in enumerate(arrays):",
+    "            heapq.heappush(heap, (arr[0], i, 0))",
+    "        ",
+    "        prev, curr = 0, 0",
+    "        for _ in range(total // 2 + 1):",
+    "            prev = curr",
+    "            val, arr_idx, elem_idx = heapq.heappop(heap)",
+    "            curr = val",
+    "            if elem_idx + 1 < len(arrays[arr_idx]):",
+    "                next_val = arrays[arr_idx][elem_idx + 1]",
+    "                heapq.heappush(heap, (next_val, arr_idx, elem_idx + 1))",
+    "        ",
+    "        if total % 2 == 1:",
+    "            return float(curr)",
     "        else:",
-    "            result = finder.get_median()",
-    "            status = \"\u2713\" if result == expected[i] else \"\u2717\"",
-    "            print(f\"  {op}() = {result} {status} (expected: {expected[i]})\")",
+    "            return (prev + curr) / 2.0",
     "    ",
-    "    # More comprehensive test",
-    "    print(\"\\n--- Comprehensive Test ---\")",
-    "    finder2 = StreamingMedianFinder()",
+    "    # ==================== Part 4: Streaming Median ====================",
     "    ",
-    "    # Simulate stream",
-    "    stream = [",
-    "        (\"addToFirst\", 5),",
-    "        (\"addToSecond\", 10),",
-    "        (\"addToFirst\", 1),",
-    "        (\"getMedian\", 5.0),  # [1,5,10] -> 5",
-    "        (\"addToSecond\", 3),",
-    "        (\"getMedian\", 4.0),  # [1,3,5,10] -> (3+5)/2 = 4",
-    "        (\"addToFirst\", 7),",
-    "        (\"getMedian\", 5.0),  # [1,3,5,7,10] -> 5",
-    "        (\"addToSecond\", 8),",
-    "        (\"addToSecond\", 9),",
-    "        (\"getMedian\", 7.5),  # [1,3,5,7,8,9,10] with 7 elements, but we have 8",
-    "    ]",
+    "    def add_to_first(self, x: int) -> None:",
+    "        \"\"\"Part 4: Add element to first array (streaming).\"\"\"",
+    "        self._add_num(x)",
     "    ",
-    "    for item in stream:",
-    "        if len(item) == 2:",
-    "            op, val = item",
-    "            if op == \"addToFirst\":",
-    "                finder2.add_to_first(val)",
-    "            elif op == \"addToSecond\":",
-    "                finder2.add_to_second(val)",
-    "            else:",
-    "                result = finder2.get_median()",
-    "                status = \"\u2713\" if result == val else f\"\u2717 (got {result})\"",
-    "                print(f\"  getMedian() = {val} {status}\")",
-    "                print(f\"    State: {finder2}\")",
+    "    def add_to_second(self, x: int) -> None:",
+    "        \"\"\"Part 4: Add element to second array (streaming).\"\"\"",
+    "        self._add_num(x)",
     "    ",
-    "    # Performance demonstration",
-    "    print(\"\\n--- Performance Test ---\")",
-    "    import time",
-    "    ",
-    "    large_finder = StreamingMedianFinder()",
-    "    n = 100000",
-    "    ",
-    "    start = time.time()",
-    "    for i in range(n):",
-    "        if i % 2 == 0:",
-    "            large_finder.add_to_first(i)",
+    "    def _add_num(self, x: int) -> None:",
+    "        \"\"\"Add number to appropriate heap and rebalance.\"\"\"",
+    "        # Add to left half if empty or x belongs in smaller half",
+    "        if not self._max_heap or x <= -self._max_heap[0]:",
+    "            heapq.heappush(self._max_heap, -x)",
     "        else:",
-    "            large_finder.add_to_second(i)",
-    "    elapsed = time.time() - start",
+    "            heapq.heappush(self._min_heap, x)",
+    "        ",
+    "        # Rebalance: max_heap can have at most 1 more element",
+    "        if len(self._max_heap) > len(self._min_heap) + 1:",
+    "            val = -heapq.heappop(self._max_heap)",
+    "            heapq.heappush(self._min_heap, val)",
+    "        elif len(self._min_heap) > len(self._max_heap):",
+    "            val = heapq.heappop(self._min_heap)",
+    "            heapq.heappush(self._max_heap, -val)",
     "    ",
-    "    print(f\"  Inserted {n:,} elements in {elapsed:.3f}s\")",
-    "    print(f\"  Final median: {large_finder.get_median()}\")",
-    "    print(f\"  Total elements: {len(large_finder):,}\")",
+    "    def get_median(self) -> float:",
+    "        \"\"\"Part 4: Return current median of all streamed elements.\"\"\"",
+    "        if not self._max_heap:",
+    "            return 0.0",
+    "        ",
+    "        if len(self._max_heap) > len(self._min_heap):",
+    "            return float(-self._max_heap[0])",
+    "        else:",
+    "            return (-self._max_heap[0] + self._min_heap[0]) / 2.0",
     "",
     "",
-    "def test_edge_cases():",
-    "    \"\"\"Test edge cases.\"\"\"",
+    "if __name__ == '__main__':",
+    "    print(\"=\" * 60)",
+    "    print(\"PART 4: Streaming Median with Two Heaps\")",
+    "    print(\"=\" * 60)",
+    "    ",
+    "    # Test 1: Example from problem",
+    "    sol = Solution()",
+    "    print(\"\\nTest 1: Example from problem\")",
+    "    sol.add_to_first(1)",
+    "    print(f\"After add_to_first(1): heaps ready\")",
+    "    sol.add_to_second(2)",
+    "    print(f\"After add_to_second(2): heaps = left[-1], right[2]\")",
+    "    print(f\"get_median() = {sol.get_median()} (expected: 1.5)\")",
+    "    sol.add_to_first(3)",
+    "    print(f\"After add_to_first(3): rebalanced\")",
+    "    print(f\"get_median() = {sol.get_median()} (expected: 2.0)\")",
+    "    ",
+    "    # Test 2: Longer sequence",
+    "    sol2 = Solution()",
+    "    print(\"\\nTest 2: Longer sequence [5,15,1,3]\")",
+    "    for val in [5, 15, 1, 3]:",
+    "        sol2.add_to_first(val)",
+    "        print(f\"  After add({val}): median = {sol2.get_median()}\")",
+    "    print(\"Expected sequence: 5.0, 10.0, 5.0, 4.0\")",
+    "    ",
+    "    # Test 3: Edge case - single element",
+    "    sol3 = Solution()",
+    "    print(\"\\nTest 3: Single element\")",
+    "    sol3.add_to_second(42)",
+    "    print(f\"After adding 42: median = {sol3.get_median()} (expected: 42.0)\")",
+    "    ",
+    "    # Test 4: Empty case",
+    "    sol4 = Solution()",
+    "    print(\"\\nTest 4: Empty case\")",
+    "    print(f\"Empty median = {sol4.get_median()} (expected: 0.0)\")",
+    "    ",
+    "    # Verify Parts 1-3 still work",
     "    print(\"\\n\" + \"=\" * 60)",
-    "    print(\"EDGE CASES\")",
+    "    print(\"Verification: Parts 1-3 still work\")",
     "    print(\"=\" * 60)",
-    "    ",
-    "    # Single element",
-    "    print(\"\\n1. Single element:\")",
-    "    f = StreamingMedianFinder()",
-    "    f.add_to_first(42)",
-    "    print(f\"   add_to_first(42) -> median = {f.get_median()} (expected: 42.0) \u2713\")",
-    "    ",
-    "    # Two elements",
-    "    print(\"\\n2. Two elements:\")",
-    "    f = StreamingMedianFinder()",
-    "    f.add_to_first(1)",
-    "    f.add_to_second(2)",
-    "    print(f\"   [1], [2] -> median = {f.get_median()} (expected: 1.5) \u2713\")",
-    "    ",
-    "    # Negative numbers",
-    "    print(\"\\n3. Negative numbers:\")",
-    "    f = StreamingMedianFinder()",
-    "    for x in [-5, -3, -1, 0, 2]:",
-    "        f.add_to_first(x)",
-    "    print(f\"   [-5,-3,-1,0,2] -> median = {f.get_median()} (expected: -1.0) \u2713\")",
-    "    ",
-    "    # Duplicates",
-    "    print(\"\\n4. Duplicates:\")",
-    "    f = StreamingMedianFinder()",
-    "    for x in [5, 5, 5, 5, 5]:",
-    "        f.add_to_first(x)",
-    "    print(f\"   [5,5,5,5,5] -> median = {f.get_median()} (expected: 5.0) \u2713\")",
-    "    ",
-    "    # Empty structure",
-    "    print(\"\\n5. Empty structure:\")",
-    "    f = StreamingMedianFinder()",
-    "    try:",
-    "        f.get_median()",
-    "        print(\"   ERROR: Should have raised exception!\")",
-    "    except ValueError as e:",
-    "        print(f\"   Correctly raised ValueError: {e} \u2713\")",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    demo_streaming_median()",
-    "    test_edge_cases()"
+    "    sol5 = Solution()",
+    "    print(f\"Part 1 - Median of [1,3] and [2]: {sol5.findMedianSortedArrays([1,3], [2])}\")",
+    "    print(f\"Part 2 - 4th element of [1,3,5] and [2,4,6]: {sol5.findKthElement([1,3,5], [2,4,6], 4)}\")",
+    "    print(f\"Part 3 - Median of [[1,5,9],[2,6,10],[3,7,11]]: {sol5.findMedianOfKArrays([[1,5,9],[2,6,10],[3,7,11]])}\")"
   ],
   "solution_java_lines": [
     "import java.util.*;",
     "",
-    "/**",
-    " * Streaming Median Finder using Two Heaps approach.",
-    " * ",
-    " * This class efficiently maintains a running median as elements are",
-    " * continuously added. Uses a max-heap for the left half and min-heap",
-    " * for the right half.",
-    " * ",
-    " * Time Complexity:",
-    " *   - Insert: O(log n)",
-    " *   - GetMedian: O(1)",
-    " * ",
-    " * Space Complexity: O(n)",
-    " */",
-    "public class StreamingMedianFinder {",
+    "public class Solution {",
+    "    // Part 4: Streaming median data structures",
+    "    private PriorityQueue<Integer> maxHeap;  // Left half (smaller elements)",
+    "    private PriorityQueue<Integer> minHeap;  // Right half (larger elements)",
     "    ",
-    "    // Max-heap for smaller half (using negation or Collections.reverseOrder)",
-    "    private PriorityQueue<Integer> maxHeap;",
-    "    ",
-    "    // Min-heap for larger half",
-    "    private PriorityQueue<Integer> minHeap;",
-    "    ",
-    "    /**",
-    "     * Initialize the data structure.",
-    "     */",
-    "    public StreamingMedianFinder() {",
-    "        // Max-heap using reverse order comparator",
+    "    public Solution() {",
     "        maxHeap = new PriorityQueue<>(Collections.reverseOrder());",
-    "        // Min-heap (default)",
     "        minHeap = new PriorityQueue<>();",
     "    }",
     "    ",
-    "    /**",
-    "     * Internal method to add a number and maintain invariants.",
-    "     * ",
-    "     * @param num The number to add",
-    "     */",
-    "    private void addNum(int num) {",
-    "        // Step 1: Decide which heap to add to",
-    "        if (maxHeap.isEmpty() || num <= maxHeap.peek()) {",
-    "            maxHeap.offer(num);",
-    "        } else {",
-    "            minHeap.offer(num);",
+    "    /** Part 1: Median of two sorted arrays using binary search partitioning. */",
+    "    public double findMedianSortedArrays(int[] nums1, int[] nums2) {",
+    "        if (nums1.length > nums2.length) {",
+    "            int[] temp = nums1; nums1 = nums2; nums2 = temp;",
     "        }",
+    "        int m = nums1.length, n = nums2.length;",
+    "        int left = 0, right = m;",
+    "        int half = (m + n + 1) / 2;",
     "        ",
-    "        // Step 2: Rebalance heaps",
-    "        rebalance();",
+    "        while (left <= right) {",
+    "            int i = (left + right) / 2;",
+    "            int j = half - i;",
+    "            int maxLeft1 = (i == 0) ? Integer.MIN_VALUE : nums1[i - 1];",
+    "            int minRight1 = (i == m) ? Integer.MAX_VALUE : nums1[i];",
+    "            int maxLeft2 = (j == 0) ? Integer.MIN_VALUE : nums2[j - 1];",
+    "            int minRight2 = (j == n) ? Integer.MAX_VALUE : nums2[j];",
+    "            ",
+    "            if (maxLeft1 <= minRight2 && maxLeft2 <= minRight1) {",
+    "                if ((m + n) % 2 == 1) {",
+    "                    return Math.max(maxLeft1, maxLeft2);",
+    "                } else {",
+    "                    return (Math.max(maxLeft1, maxLeft2) + Math.min(minRight1, minRight2)) / 2.0;",
+    "                }",
+    "            } else if (maxLeft1 > minRight2) {",
+    "                right = i - 1;",
+    "            } else {",
+    "                left = i + 1;",
+    "            }",
+    "        }",
+    "        return 0.0;",
     "    }",
     "    ",
-    "    /**",
-    "     * Rebalance heaps to ensure size difference is at most 1.",
-    "     */",
-    "    private void rebalance() {",
-    "        // If maxHeap has more than 1 extra element",
-    "        if (maxHeap.size() > minHeap.size() + 1) {",
-    "            minHeap.offer(maxHeap.poll());",
-    "        }",
-    "        // If minHeap has more elements",
-    "        else if (minHeap.size() > maxHeap.size()) {",
-    "            maxHeap.offer(minHeap.poll());",
+    "    /** Part 2: Find k-th smallest element using binary elimination. */",
+    "    public int findKthElement(int[] nums1, int[] nums2, int k) {",
+    "        int idx1 = 0, idx2 = 0;",
+    "        int m = nums1.length, n = nums2.length;",
+    "        ",
+    "        while (true) {",
+    "            if (idx1 == m) return nums2[idx2 + k - 1];",
+    "            if (idx2 == n) return nums1[idx1 + k - 1];",
+    "            if (k == 1) return Math.min(nums1[idx1], nums2[idx2]);",
+    "            ",
+    "            int half = k / 2;",
+    "            int newIdx1 = Math.min(idx1 + half, m) - 1;",
+    "            int newIdx2 = Math.min(idx2 + half, n) - 1;",
+    "            ",
+    "            if (nums1[newIdx1] <= nums2[newIdx2]) {",
+    "                k -= (newIdx1 - idx1 + 1);",
+    "                idx1 = newIdx1 + 1;",
+    "            } else {",
+    "                k -= (newIdx2 - idx2 + 1);",
+    "                idx2 = newIdx2 + 1;",
+    "            }",
     "        }",
     "    }",
     "    ",
-    "    /**",
-    "     * Add element to first array (conceptually).",
-    "     * For streaming median, source doesn't matter.",
-    "     * ",
-    "     * @param x Element to add",
-    "     */",
+    "    /** Part 3: Median of K sorted arrays using K-way merge. */",
+    "    public double findMedianOfKArrays(int[][] arrays) {",
+    "        PriorityQueue<int[]> heap = new PriorityQueue<>((a, b) -> a[0] - b[0]);",
+    "        int total = 0;",
+    "        ",
+    "        for (int i = 0; i < arrays.length; i++) {",
+    "            if (arrays[i] != null && arrays[i].length > 0) {",
+    "                heap.offer(new int[]{arrays[i][0], i, 0});",
+    "                total += arrays[i].length;",
+    "            }",
+    "        }",
+    "        if (total == 0) return 0.0;",
+    "        ",
+    "        int prev = 0, curr = 0;",
+    "        for (int i = 0; i <= total / 2; i++) {",
+    "            prev = curr;",
+    "            int[] entry = heap.poll();",
+    "            curr = entry[0];",
+    "            int arrIdx = entry[1], elemIdx = entry[2];",
+    "            if (elemIdx + 1 < arrays[arrIdx].length) {",
+    "                heap.offer(new int[]{arrays[arrIdx][elemIdx + 1], arrIdx, elemIdx + 1});",
+    "            }",
+    "        }",
+    "        return (total % 2 == 1) ? (double) curr : (prev + curr) / 2.0;",
+    "    }",
+    "    ",
+    "    // ==================== Part 4: Streaming Median ====================",
+    "    ",
+    "    /** Part 4: Add element to first array (streaming). */",
     "    public void addToFirst(int x) {",
     "        addNum(x);",
     "    }",
     "    ",
-    "    /**",
-    "     * Add element to second array (conceptually).",
-    "     * For streaming median, source doesn't matter.",
-    "     * ",
-    "     * @param x Element to add",
-    "     */",
+    "    /** Part 4: Add element to second array (streaming). */",
     "    public void addToSecond(int x) {",
     "        addNum(x);",
     "    }",
     "    ",
-    "    /**",
-    "     * Get the current median of all elements.",
-    "     * ",
-    "     * @return The median as a double",
-    "     * @throws IllegalStateException if no elements exist",
-    "     */",
+    "    /** Internal: Add number to appropriate heap and rebalance. */",
+    "    private void addNum(int x) {",
+    "        // Add to left half if empty or x belongs in smaller half",
+    "        if (maxHeap.isEmpty() || x <= maxHeap.peek()) {",
+    "            maxHeap.offer(x);",
+    "        } else {",
+    "            minHeap.offer(x);",
+    "        }",
+    "        ",
+    "        // Rebalance: maxHeap can have at most 1 more element",
+    "        if (maxHeap.size() > minHeap.size() + 1) {",
+    "            minHeap.offer(maxHeap.poll());",
+    "        } else if (minHeap.size() > maxHeap.size()) {",
+    "            maxHeap.offer(minHeap.poll());",
+    "        }",
+    "    }",
+    "    ",
+    "    /** Part 4: Return current median of all streamed elements. */",
     "    public double getMedian() {",
-    "        if (maxHeap.isEmpty()) {",
-    "            throw new IllegalStateException(\"Cannot get median of empty collection\");",
-    "        }",
+    "        if (maxHeap.isEmpty()) return 0.0;",
     "        ",
-    "        // Odd total: maxHeap has one more",
     "        if (maxHeap.size() > minHeap.size()) {",
-    "            return maxHeap.peek();",
+    "            return (double) maxHeap.peek();",
+    "        } else {",
+    "            return (maxHeap.peek() + minHeap.peek()) / 2.0;",
     "        }",
-    "        ",
-    "        // Even total: average of both tops",
-    "        return (maxHeap.peek() + minHeap.peek()) / 2.0;",
     "    }",
-    "    ",
-    "    /**",
-    "     * Get total number of elements.",
-    "     * ",
-    "     * @return Total count",
-    "     */",
-    "    public int size() {",
-    "        return maxHeap.size() + minHeap.size();",
-    "    }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return String.format(\"StreamingMedianFinder(left=%s, right=%s)\",",
-    "                maxHeap, minHeap);",
-    "    }",
-    "    ",
-    "    // =========================================================================",
-    "    // DEMO AND TESTING",
-    "    // =========================================================================",
     "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"STREAMING MEDIAN FINDER - Part 4 Demo (Java)\");",
-    "        System.out.println(\"============================================================\");",
+    "        System.out.println(\"============ PART 4: Streaming Median ============\");",
     "        ",
-    "        // Example from problem",
-    "        System.out.println(\"\\n--- Example from Problem ---\");",
-    "        StreamingMedianFinder finder = new StreamingMedianFinder();",
+    "        // Test 1: Example from problem",
+    "        Solution sol = new Solution();",
+    "        System.out.println(\"\\nTest 1: Example from problem\");",
+    "        sol.addToFirst(1);",
+    "        sol.addToSecond(2);",
+    "        System.out.println(\"After [1],[2]: median = \" + sol.getMedian() + \" (expected: 1.5)\");",
+    "        sol.addToFirst(3);",
+    "        System.out.println(\"After [1,3],[2]: median = \" + sol.getMedian() + \" (expected: 2.0)\");",
     "        ",
-    "        finder.addToFirst(1);",
-    "        System.out.println(\"addToFirst(1) -> \" + finder);",
-    "        ",
-    "        finder.addToSecond(2);",
-    "        System.out.println(\"addToSecond(2) -> \" + finder);",
-    "        ",
-    "        System.out.println(\"getMedian() = \" + finder.getMedian() + \" (expected: 1.5)\");",
-    "        ",
-    "        finder.addToFirst(3);",
-    "        System.out.println(\"addToFirst(3) -> \" + finder);",
-    "        ",
-    "        System.out.println(\"getMedian() = \" + finder.getMedian() + \" (expected: 2.0)\");",
-    "        ",
-    "        // Performance test",
-    "        System.out.println(\"\\n--- Performance Test ---\");",
-    "        StreamingMedianFinder largeFinder = new StreamingMedianFinder();",
-    "        int n = 100000;",
-    "        ",
-    "        long start = System.currentTimeMillis();",
-    "        for (int i = 0; i < n; i++) {",
-    "            if (i % 2 == 0) {",
-    "                largeFinder.addToFirst(i);",
-    "            } else {",
-    "                largeFinder.addToSecond(i);",
-    "            }",
+    "        // Test 2: Longer sequence",
+    "        Solution sol2 = new Solution();",
+    "        System.out.println(\"\\nTest 2: Adding [5,15,1,3]\");",
+    "        for (int val : new int[]{5, 15, 1, 3}) {",
+    "            sol2.addToFirst(val);",
+    "            System.out.println(\"  After add(\" + val + \"): median = \" + sol2.getMedian());",
     "        }",
-    "        long elapsed = System.currentTimeMillis() - start;",
     "        ",
-    "        System.out.printf(\"Inserted %,d elements in %dms%n\", n, elapsed);",
-    "        System.out.println(\"Final median: \" + largeFinder.getMedian());",
-    "        System.out.println(\"Total elements: \" + largeFinder.size());",
-    "        ",
-    "        // Edge cases",
-    "        System.out.println(\"\\n--- Edge Cases ---\");",
-    "        ",
-    "        // Single element",
-    "        StreamingMedianFinder f1 = new StreamingMedianFinder();",
-    "        f1.addToFirst(42);",
-    "        System.out.println(\"Single element [42]: median = \" + f1.getMedian());",
-    "        ",
-    "        // Negative numbers",
-    "        StreamingMedianFinder f2 = new StreamingMedianFinder();",
-    "        for (int x : new int[]{-5, -3, -1, 0, 2}) {",
-    "            f2.addToFirst(x);",
-    "        }",
-    "        System.out.println(\"Negatives [-5,-3,-1,0,2]: median = \" + f2.getMedian());",
-    "        ",
-    "        // Duplicates",
-    "        StreamingMedianFinder f3 = new StreamingMedianFinder();",
-    "        for (int i = 0; i < 5; i++) {",
-    "            f3.addToFirst(5);",
-    "        }",
-    "        System.out.println(\"Duplicates [5,5,5,5,5]: median = \" + f3.getMedian());",
+    "        // Verify Parts 1-3 still work",
+    "        System.out.println(\"\\n============ Verification ============\");",
+    "        Solution sol3 = new Solution();",
+    "        System.out.println(\"Part 1: \" + sol3.findMedianSortedArrays(new int[]{1,3}, new int[]{2}));",
+    "        System.out.println(\"Part 2: \" + sol3.findKthElement(new int[]{1,3,5}, new int[]{2,4,6}, 4));",
+    "        System.out.println(\"Part 3: \" + sol3.findMedianOfKArrays(new int[][]{{1,5,9},{2,6,10},{3,7,11}}));",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-4",
-      "explanation": "Imports: heapq for heap operations, typing for type hints"
+      "lines": "1-7 (Python) / 1-10 (Java)",
+      "explanation": "Imports and class initialization. Added _max_heap and _min_heap for streaming median state."
     },
     {
-      "lines": "6-28",
-      "explanation": "Class docstring explaining the two-heaps approach, invariants, and complexity"
+      "lines": "95-97 (Python)",
+      "explanation": "add_to_first: Simply delegates to _add_num since array identity doesn't affect median."
     },
     {
-      "lines": "30-33",
-      "explanation": "Constructor initializes two empty heaps - max_heap (left) and min_heap (right)"
+      "lines": "99-101 (Python)",
+      "explanation": "add_to_second: Same delegation - both arrays flow into the same heap structure."
     },
     {
-      "lines": "35-53",
-      "explanation": "_add_num: Core insertion logic - decides which heap based on value, then rebalances"
+      "lines": "103-115 (Python)",
+      "explanation": "_add_num: Core insertion logic. First decides which heap based on value comparison, then rebalances to maintain size invariant."
     },
     {
-      "lines": "55-69",
-      "explanation": "_rebalance: Ensures heap sizes differ by at most 1 by moving elements between heaps"
-    },
-    {
-      "lines": "71-90",
-      "explanation": "add_to_first and add_to_second: Public API that delegates to _add_num (source doesn't matter for median)"
-    },
-    {
-      "lines": "92-113",
-      "explanation": "get_median: Returns top of larger heap (odd count) or average of both tops (even count)"
-    },
-    {
-      "lines": "115-125",
-      "explanation": "Utility methods: __len__ and __repr__ for debugging"
-    },
-    {
-      "lines": "128-185",
-      "explanation": "Alternative implementation using SortedList that maintains array separation (if required)"
-    },
-    {
-      "lines": "188-260",
-      "explanation": "Demo function showing usage and performance with timing"
-    },
-    {
-      "lines": "263-298",
-      "explanation": "Edge case tests: single element, two elements, negatives, duplicates, empty"
+      "lines": "117-123 (Python)",
+      "explanation": "get_median: O(1) lookup. Returns top of larger heap (odd) or average of tops (even)."
     }
   ],
   "complexity_analysis": {
@@ -772,341 +519,282 @@
       "new_methods": {
         "add_to_first": {
           "complexity": "O(log n)",
-          "explanation": "One heap push O(log n) + potential rebalance with 1-2 more push/pops O(log n)"
+          "explanation": "At most 3 heap operations: 1 push + up to 2 for rebalance"
         },
         "add_to_second": {
           "complexity": "O(log n)",
-          "explanation": "Same as add_to_first - both call _add_num"
+          "explanation": "Same as add_to_first"
         },
         "get_median": {
           "complexity": "O(1)",
-          "explanation": "Just peek at heap tops, no iteration"
-        },
-        "_rebalance": {
-          "complexity": "O(log n)",
-          "explanation": "At most one pop + one push = O(log n)"
+          "explanation": "Direct access to heap tops via peek()"
         }
       },
-      "overall_change": "Massive improvement for streaming: from O(n) per insert (array shift) to O(log n) per insert"
+      "overall_change": "Part 4 adds streaming with O(log n) insert and O(1) query. Parts 1-3 unchanged."
     },
     "space": {
-      "additional_space": "O(n) total",
-      "explanation": "Two heaps together store all n elements. Heap overhead is minimal compared to storing elements."
+      "additional_space": "O(n)",
+      "explanation": "Two heaps store all n streamed elements. No additional overhead beyond element storage."
     }
   },
   "dry_run": {
-    "example_input": "Operations: addToFirst(1), addToSecond(2), getMedian(), addToFirst(3), getMedian()",
+    "example_input": "addToFirst(1), addToSecond(2), getMedian(), addToFirst(3), getMedian()",
     "steps": [
       {
         "step": 1,
         "action": "addToFirst(1)",
-        "state": "max_heap=[-1], min_heap=[]",
-        "explanation": "First element goes to max_heap. Negated to -1 for max-heap behavior. No rebalance needed."
+        "state": "maxHeap=[-1], minHeap=[]",
+        "explanation": "First element goes to maxHeap (left half)"
       },
       {
         "step": 2,
         "action": "addToSecond(2)",
-        "state": "max_heap=[-1], min_heap=[2]",
-        "explanation": "2 > -(-1) = 1, so goes to min_heap. Sizes are equal, no rebalance needed."
+        "state": "maxHeap=[-1], minHeap=[2]",
+        "explanation": "2 > maxHeap.top(1), so goes to minHeap. Sizes equal, no rebalance."
       },
       {
         "step": 3,
         "action": "getMedian()",
-        "state": "max_heap=[-1], min_heap=[2]",
-        "explanation": "Sizes equal (1 == 1), so return average: (-(-1) + 2) / 2 = 1.5"
+        "state": "return (1+2)/2 = 1.5",
+        "explanation": "Equal sizes \u2192 average of tops: (1+2)/2 = 1.5"
       },
       {
         "step": 4,
         "action": "addToFirst(3)",
-        "state": "max_heap=[-1], min_heap=[2,3] \u2192 rebalance \u2192 max_heap=[-2,-1], min_heap=[3]",
-        "explanation": "3 > 1, so push to min_heap. Now min_heap has more (2 > 1), so rebalance: move 2 from min to max."
+        "state": "maxHeap=[-2,-1], minHeap=[3]",
+        "explanation": "3 > 1, goes to minHeap=[2,3]. minHeap larger, so move 2 to maxHeap."
       },
       {
         "step": 5,
         "action": "getMedian()",
-        "state": "max_heap=[-2,-1], min_heap=[3]",
-        "explanation": "max_heap size (2) > min_heap size (1), so return max_heap top: -(-2) = 2.0"
+        "state": "return 2.0",
+        "explanation": "maxHeap larger (2 vs 1) \u2192 return maxHeap.top = 2"
       }
     ],
-    "final_output": "[null, null, 1.5, null, 2.0]"
+    "final_output": "[null, null, 1.5, null, 2.0] \u2713"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Add single element, check median equals that element",
-      "Add [1, 2], check median is 1.5",
-      "Add [1, 2, 3], check median is 2.0"
+      "Single element should return that element",
+      "Two elements [1,3] should return 2.0"
     ],
     "likely_bugs": [
-      "Forgetting to negate when pushing/popping from max_heap in Python",
-      "Wrong comparison in deciding which heap (should be <= max_heap top, not <)",
-      "Off-by-one in rebalance condition (should be > not >=)",
-      "Not handling empty heap case in get_median",
-      "Integer division instead of float division for average"
+      "Python heapq is min-heap - forgetting to negate for max-heap",
+      "Off-by-one in size comparison for rebalancing",
+      "Empty heap check before accessing top"
     ],
     "recommended_logs_or_asserts": [
-      "assert len(self.max_heap) >= len(self.min_heap)",
-      "assert len(self.max_heap) - len(self.min_heap) <= 1",
-      "if both non-empty: assert -self.max_heap[0] <= self.min_heap[0]",
-      "Log heap states after each operation during debugging"
+      "assert len(self._max_heap) >= len(self._min_heap)",
+      "assert len(self._max_heap) - len(self._min_heap) <= 1",
+      "Log heap states after each add: f'max={[-x for x in _max_heap]}, min={_min_heap}'"
     ],
-    "how_to_localize": "1. Print heap states after each operation. 2. Verify invariants hold. 3. If invariant violated, trace back to last correct state. 4. Check the operation that broke invariant."
+    "how_to_localize": "1. Print heap states after each add. 2. Verify rebalance condition triggered correctly. 3. Check negation on maxHeap values."
   },
   "edge_cases": [
     {
+      "case": "Empty heaps",
+      "handling": "Return 0.0 from get_median()",
+      "gotcha": "Must check before accessing heap[0]"
+    },
+    {
       "case": "Single element",
-      "handling": "Goes to max_heap, median is that element",
-      "gotcha": "Don't try to average with empty min_heap"
+      "handling": "maxHeap has 1, minHeap empty \u2192 return maxHeap.top",
+      "gotcha": "Size comparison handles this"
     },
     {
-      "case": "Two elements",
-      "handling": "One in each heap, median is average",
-      "gotcha": "Ensure float division, not integer"
+      "case": "All same values",
+      "handling": "Works correctly - heap maintains order",
+      "gotcha": "None"
     },
     {
-      "case": "Empty structure",
-      "handling": "Raise ValueError/IllegalStateException",
-      "gotcha": "Check before accessing heap tops"
-    },
-    {
-      "case": "All elements equal",
-      "handling": "Works normally, median is that value",
-      "gotcha": "None - this just works"
-    },
-    {
-      "case": "Negative numbers",
-      "handling": "Works with negation - double negative makes positive",
-      "gotcha": "Verify negation logic handles negatives correctly"
-    },
-    {
-      "case": "Very large/small values",
-      "handling": "Standard heap operations, no overflow issues in Python",
-      "gotcha": "In Java, be aware of integer overflow in sum for average"
+      "case": "Alternating large/small",
+      "handling": "Rebalancing keeps heaps equal or +1",
+      "gotcha": "Test [100,1,99,2,98,3]"
     }
   ],
   "test_cases": [
     {
-      "name": "Problem Example",
-      "input": "[addToFirst(1), addToSecond(2), getMedian(), addToFirst(3), getMedian()]",
-      "expected": "[null, null, 1.5, null, 2.0]",
-      "explanation": "After [1],[2]: elements are 1,2 -> median 1.5. After [1,3],[2]: elements 1,2,3 -> median 2.0"
+      "name": "Problem example",
+      "input": "add(1), add(2), median(), add(3), median()",
+      "expected": "[1.5, 2.0]",
+      "explanation": "Two elements: avg=1.5. Three elements sorted [1,2,3]: median=2"
     },
     {
-      "name": "Odd count",
-      "input": "addToFirst(5), addToFirst(1), addToFirst(9), getMedian()",
-      "expected": "5.0",
-      "explanation": "Three elements [1,5,9], middle is 5"
+      "name": "Odd sequence",
+      "input": "add(5), add(15), add(1), add(3), add(7)",
+      "expected": "5.0, 10.0, 5.0, 4.0, 5.0",
+      "explanation": "Sequence: [5]\u21925, [5,15]\u219210, [1,5,15]\u21925, [1,3,5,15]\u21924, [1,3,5,7,15]\u21925"
     },
     {
-      "name": "Even count",
-      "input": "addToFirst(1), addToSecond(2), addToFirst(3), addToSecond(4), getMedian()",
-      "expected": "2.5",
-      "explanation": "Four elements [1,2,3,4], median is (2+3)/2 = 2.5"
-    },
-    {
-      "name": "Descending inserts",
-      "input": "addToFirst(5), addToFirst(4), addToFirst(3), addToFirst(2), addToFirst(1), getMedian()",
-      "expected": "3.0",
-      "explanation": "Elements [1,2,3,4,5] in sorted order, median is 3"
-    },
-    {
-      "name": "Large scale",
-      "input": "Add 0 to 999 alternating between arrays",
-      "expected": "499.5",
-      "explanation": "1000 elements 0-999, median is (499+500)/2 = 499.5"
+      "name": "Decreasing sequence",
+      "input": "add(5), add(4), add(3), add(2), add(1)",
+      "expected": "5.0, 4.5, 4.0, 3.5, 3.0",
+      "explanation": "Values go to maxHeap first, rebalancing moves some to minHeap"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Forgetting to negate for max-heap in Python",
-      "why_wrong": "Python's heapq is min-heap only. Without negation, you get min of left half, not max.",
-      "correct_approach": "Negate when pushing: heappush(heap, -val). Negate when reading: -heap[0]",
-      "code_example_wrong": "heapq.heappush(self.max_heap, num)  # WRONG",
-      "code_example_correct": "heapq.heappush(self.max_heap, -num)  # CORRECT"
+      "mistake": "Using min-heap for left half in Python",
+      "why_wrong": "Python heapq is min-heap. Left half needs max, requiring negation.",
+      "correct_approach": "Store negated values: heappush(maxHeap, -x), access as -maxHeap[0]",
+      "code_example_wrong": "heapq.heappush(self.left, x)  # Wrong: gives min, not max",
+      "code_example_correct": "heapq.heappush(self.left, -x)  # Correct: negation gives max behavior"
     },
     {
       "mistake": "Wrong rebalance condition",
-      "why_wrong": "Using >= instead of > means we rebalance when sizes are equal, causing infinite loop",
-      "correct_approach": "Only rebalance when difference exceeds 1",
-      "code_example_wrong": "if len(self.max_heap) >= len(self.min_heap) + 1:  # WRONG",
-      "code_example_correct": "if len(self.max_heap) > len(self.min_heap) + 1:  # CORRECT"
+      "why_wrong": "Allowing max_heap to be 2+ larger causes wrong median",
+      "correct_approach": "Ensure |size difference| \u2264 1 after every insert",
+      "code_example_wrong": "if len(maxHeap) > len(minHeap) + 2:  # Off by one!",
+      "code_example_correct": "if len(maxHeap) > len(minHeap) + 1:"
     },
     {
-      "mistake": "Integer division for median average",
-      "why_wrong": "In Python 2 or Java, (a + b) / 2 might give integer result",
-      "correct_approach": "Explicitly use float division",
-      "code_example_wrong": "return (top1 + top2) / 2  # WRONG in some languages",
-      "code_example_correct": "return (top1 + top2) / 2.0  # CORRECT"
-    },
-    {
-      "mistake": "Not handling empty case",
-      "why_wrong": "Accessing heap[0] on empty heap throws exception without helpful message",
-      "correct_approach": "Check emptiness first and throw descriptive error",
-      "code_example_wrong": "return -self.max_heap[0]  # WRONG - crashes if empty",
-      "code_example_correct": "if not self.max_heap: raise ValueError('Empty')  # CORRECT"
+      "mistake": "Not handling empty heap in get_median",
+      "why_wrong": "Accessing heap[0] on empty heap raises IndexError",
+      "correct_approach": "Check if heap is empty first, return 0.0",
+      "code_example_wrong": "return -self._max_heap[0]  # Crashes if empty",
+      "code_example_correct": "if not self._max_heap: return 0.0"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by acknowledging that the static binary search approach doesn't work well for streaming due to O(n) insertion cost. Then introduce the two-heaps pattern as the classic solution for streaming median, explaining the invariants clearly before coding.",
+    "how_to_present": "Start by explaining the two-heaps pattern: 'For streaming median, the classic approach is to maintain two heaps - a max-heap for the smaller half and a min-heap for the larger half. This gives us O(log n) insert and O(1) median query.'",
     "what_to_mention": [
-      "The key insight that we don't need array separation for median",
-      "Why two heaps: O(1) access to middle elements",
-      "The invariants that make it work",
-      "Trade-off: lose O(log(min(m,n))) static median for O(log n) insert + O(1) query",
-      "Python's max-heap workaround with negation"
+      "Why two heaps: 'The median divides data into halves. Heaps give us the boundary elements in O(1).'",
+      "The rebalance invariant: 'After each insert, sizes differ by at most 1.'",
+      "Python gotcha: 'Python heapq is min-heap only, so I negate values for the max-heap.'"
     ],
-    "time_allocation": "2 min: explain why static approach fails. 3 min: explain two-heaps approach. 5 min: implement. 2 min: trace through example.",
+    "time_allocation": "3 min: explain approach. 5 min: implement. 2 min: test with example.",
     "if_stuck": [
-      "Think about what information you need for median - just the middle elements",
-      "Heaps give O(1) access to extreme elements",
-      "What if you had all smaller elements in one structure, larger in another?",
-      "The median would be at the boundary of these two halves"
+      "Think about what information you need for median: the middle element(s)",
+      "What data structure gives the max or min efficiently?",
+      "How do you maintain 'halves' dynamically?"
     ]
   },
-  "connection_to_next_part": "Part 5 might involve: (1) Supporting deletion - requires lazy deletion or indexed heaps, (2) Sliding window median - combine heaps with hash map for delayed removal, (3) Multiple streams merging - extend to k streams with priority queue of heaps, (4) Distributed median - discuss how to parallelize across machines.",
+  "connection_to_next_part": "If Part 5 adds element deletion, we'd need to upgrade from heaps to a balanced BST (like TreeMap) or use lazy deletion with a secondary heap tracking deleted elements.",
   "communication_script": {
-    "transition_from_previous": "Great, so the binary search partition from Parts 1-3 works well for static arrays. But for Part 4 with streaming updates, that approach has a problem: inserting into a sorted array is O(n) due to shifting elements. Let me explain a better approach for streaming...",
-    "explaining_changes": "The key insight is that for streaming median, we don't need to maintain the physical array structure - we just need efficient access to the middle elements. The two-heaps pattern gives us exactly that: a max-heap for the smaller half and min-heap for the larger half.",
+    "transition_from_previous": "Great, Part 3 handles K static arrays. Part 4 is fundamentally different - we need to handle streaming insertions. Let me explain the approach...",
+    "explaining_changes": "The key change is that we can't recompute from scratch on each query. I'll use the two-heaps pattern - a max-heap for the smaller half and min-heap for the larger half. This gives O(log n) insert and O(1) query.",
     "while_extending_code": [
-      "I'm replacing the array-based storage with two heaps...",
-      "The max_heap stores the left half - I'm using negation for max-heap in Python...",
-      "The _rebalance method ensures our invariant that sizes differ by at most 1...",
-      "Now get_median is O(1) - just peek at the tops..."
+      "I'm adding two heaps as instance variables in __init__...",
+      "The add methods both delegate to a common _add_num helper...",
+      "The rebalance logic ensures sizes stay within 1 of each other..."
     ],
-    "after_completing": "This streaming solution has O(log n) insert and O(1) median query. The trade-off is we lose the ability to know which element came from which array, but for pure median computation, that's acceptable. Ready for the next extension?"
+    "after_completing": "This handles Part 4. addToFirst and addToSecond are O(log n) via heap operations. getMedian is O(1) by accessing heap tops. Shall I trace through an example?"
   },
   "time_milestones": {
-    "time_budget": "10-12 minutes for this part",
-    "by_2_min": "Recognized that static approach doesn't work for streaming, identified two-heaps as the solution",
-    "by_5_min": "Explained the approach including invariants, started coding",
-    "by_8_min": "Core implementation done (add_num, rebalance, get_median)",
-    "by_12_min": "Traced through example, discussed edge cases, ready for questions",
-    "warning_signs": "If still explaining at 5 min, move to coding. If stuck on implementation at 8 min, ask for hints on specific part."
+    "time_budget": "8-12 minutes for this part",
+    "by_2_min": "Recognize two-heaps pattern. Explain: 'Max-heap for left, min-heap for right, rebalance after each insert.'",
+    "by_5_min": "Have add_num and rebalancing logic written. Start on get_median.",
+    "by_10_min": "Complete implementation. Trace through the example to verify.",
+    "warning_signs": "If still thinking about data structure choice at 4 min, just pick two-heaps and go."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "This part is actually a clean break - we're using completely different data structures. If Part 3 had bugs, that's okay, this is independent.",
-    "if_new_requirement_unclear": "Ask: 'For the streaming case, do we need to maintain which element came from which array, or just the combined median?'",
-    "if_running_behind": "Focus on getting _add_num and get_median working. Skip rebalance edge cases if needed, but mention 'I know I need to handle the rebalance carefully'."
+    "if_part_builds_wrong": "Part 4 is independent of Parts 1-3 implementation. The streaming methods don't use the static methods.",
+    "if_new_requirement_unclear": "Ask: 'For the streaming part, do I need to track which array each element came from, or just compute the combined median?'",
+    "if_running_behind": "Implement add and get_median first. Skip edge cases initially but mention them: 'I'd handle empty heap case here in production.'"
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately recognizing the two-heaps pattern without hints",
-      "Explaining why the static approach fails (O(n) insertion)",
-      "Proactively discussing the trade-off of losing array separation",
-      "Mentioning Java's Collections.reverseOrder() or Python's negation trick",
-      "Discussing how this could extend to sliding window (leetcode 480)"
+      "Immediately recognizing the two-heaps pattern",
+      "Explaining WHY it works: 'Heaps give boundary elements of each half'",
+      "Mentioning the invariants proactively",
+      "Discussing trade-offs: 'If we needed deletion, I'd use TreeMap instead'"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Two Heaps / Running Median",
+    "pattern": "Two Heaps (Streaming Median)",
     "indicators": [
-      "Need to find median dynamically as data arrives",
-      "Insert operations must be efficient (sub-linear)",
-      "Query for middle element(s) needed",
-      "Can't afford to sort on every query"
+      "Need to find median dynamically as data streams in",
+      "O(1) or O(log n) query requirement",
+      "No random access needed, just the middle value(s)"
     ],
     "similar_problems": [
-      "LC 295 - Find Median from Data Stream (identical)",
-      "LC 480 - Sliding Window Median (adds window constraint)",
-      "LC 502 - IPO (uses two heaps for greedy selection)",
-      "LC 871 - Minimum Number of Refueling Stops (similar pattern)"
+      "LC 295 - Find Median from Data Stream",
+      "LC 480 - Sliding Window Median",
+      "LC 703 - Kth Largest Element in a Stream"
     ],
-    "template": "```python\nclass MedianFinder:\n    def __init__(self):\n        self.lo = []  # max-heap (negated)\n        self.hi = []  # min-heap\n    \n    def add(self, num):\n        heappush(self.lo, -num)\n        heappush(self.hi, -heappop(self.lo))\n        if len(self.hi) > len(self.lo):\n            heappush(self.lo, -heappop(self.hi))\n    \n    def median(self):\n        if len(self.lo) > len(self.hi):\n            return -self.lo[0]\n        return (-self.lo[0] + self.hi[0]) / 2\n```"
+    "template": "```python\\n# Two Heaps Template\\nmax_heap = []  # Left half (negate for max)\\nmin_heap = []  # Right half\\n\\ndef add(x):\\n    if not max_heap or x <= -max_heap[0]:\\n        heappush(max_heap, -x)\\n    else:\\n        heappush(min_heap, x)\\n    # Rebalance...\\n\\ndef median():\\n    if len(max_heap) > len(min_heap):\\n        return -max_heap[0]\\n    return (-max_heap[0] + min_heap[0]) / 2\\n```"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'streaming' and 'continuous insertions', I immediately think about data structures that support O(log n) or better insert.",
-      "why": "Arrays have O(n) insert due to shifting. We need trees, heaps, or skip lists."
+      "thought": "When I see 'streaming' + 'median', I immediately think two-heaps",
+      "why": "It's the canonical pattern for this exact problem"
     },
     {
       "step": 2,
-      "thought": "The median is about the middle element(s), which is about the boundary between smaller and larger halves.",
-      "why": "This naturally suggests partitioning the data into two groups."
+      "thought": "The O(log n) insert and O(1) query requirements confirm two-heaps",
+      "why": "Sorted array insert is O(n), BST median is O(log n) - heaps are optimal"
     },
     {
       "step": 3,
-      "thought": "If I have all smaller elements in a max-heap and larger elements in a min-heap, the tops give me the median boundary.",
-      "why": "Heap tops are O(1) to access, and heap insert is O(log n). Perfect match!"
-    },
-    {
-      "step": 4,
-      "thought": "The invariant to maintain: balanced sizes and correct ordering between heaps.",
-      "why": "This ensures median can always be computed from tops in O(1)."
+      "thought": "The two 'arrays' don't matter for implementation",
+      "why": "Median is a global property - we combine into one structure"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Can you recognize when a different data structure is needed?",
-      "Do you know the classic two-heaps pattern?",
-      "Can you implement heap operations correctly (especially Python's negation trick)?",
-      "Do you maintain invariants properly?"
+      "Do you recognize the two-heaps pattern immediately?",
+      "Can you explain the invariants clearly?",
+      "Do you handle Python's min-heap-only limitation?"
     ],
     "bonus_points": [
-      "Discussing the trade-off of losing array identity",
-      "Mentioning alternative approaches (SortedList) if array separation is needed",
-      "Connecting to related problems (sliding window median)",
-      "Clean code with helper methods (_add_num, _rebalance)"
+      "Mentioning LC 295 as the classic problem",
+      "Discussing what changes for sliding window median",
+      "Proactively mentioning deletion would need TreeMap"
     ],
     "red_flags": [
-      "Trying to force the binary search partition approach onto streaming",
-      "Not knowing about heaps or the two-heaps pattern",
-      "Forgetting the max-heap workaround in Python",
-      "Not handling the rebalance step"
+      "Trying to maintain sorted arrays with bisect.insort",
+      "Not understanding why two heaps work",
+      "Forgetting to rebalance after insertion"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Let AI help with heap syntax if unfamiliar",
-      "Use AI to generate test cases",
-      "Let AI help with docstrings after implementation"
+      "Use AI to remember heapq syntax if needed",
+      "Let it help with the rebalance condition"
     ],
     "what_not_to_do": [
-      "Don't let AI choose the data structure - you should explain why heaps",
-      "Don't accept AI's rebalance logic without verifying the conditions",
-      "Understand the negation trick before accepting code"
+      "Don't let AI suggest sorted array approach",
+      "Make sure you understand the negation trick for max-heap"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without explaining why static approach doesn't work",
-      "Not asking if array separation is required"
+      "Staying silent while implementing",
+      "Not explaining the two-heaps pattern"
     ],
     "technical": [
-      "Using arrays with O(n) insertion",
-      "Incorrect heap operations (forgetting negation)",
-      "Wrong rebalance conditions"
+      "Using sorted list with O(n) insert",
+      "Wrong rebalance logic"
     ],
     "communication": [
-      "Not explaining the invariants clearly",
-      "Not tracing through an example to verify"
+      "Not mentioning the O(1) query benefit",
+      "Forgetting to trace an example"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Insert is O(log n) - verified heap operations only",
-      "Median is O(1) - only heap peeks, no iteration",
-      "Rebalance maintains size invariant",
-      "Ordering invariant maintained (max_heap top <= min_heap top)",
-      "Traced through the example: [1],[2] -> 1.5, then add 3 -> 2.0"
+      "Is add O(log n)? Yes - at most 3 heap ops",
+      "Is get_median O(1)? Yes - direct heap top access",
+      "Did I handle empty heap case?",
+      "Did I trace the problem example?"
     ],
     "quick_code_review": [
-      "Negation applied consistently for max_heap",
-      "Float division for median average",
-      "Empty case handled with exception",
-      "Type hints on all methods"
+      "Negation used correctly for max_heap in Python",
+      "Rebalance condition: max_heap can be 0 or 1 larger",
+      "Type hints on new methods"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Thread-safety with locks for concurrent access",
-      "Metrics: track insert latency, total elements, median value over time",
-      "Persistence: ability to serialize/deserialize state",
-      "Memory limits: eviction policy if too many elements"
+      "Thread safety with locks around heap operations",
+      "Metrics for insert latency",
+      "Batch insert support for efficiency"
     ],
-    "why_not_in_interview": "Focus on core algorithm correctness. These are mentioned verbally but not implemented.",
-    "how_to_mention": "Say: 'In production, I'd add thread-safety here since multiple threads might be inserting from different streams. I'd also add metrics to track insert latency.'"
+    "why_not_in_interview": "Focus on core algorithm; heaps are already efficient enough",
+    "how_to_mention": "Say: 'In production, I'd add thread-safety if this is accessed concurrently.'"
   },
-  "generated_at": "2026-01-18T18:41:54.967698",
+  "generated_at": "2026-01-19T05:05:50.434524",
   "_meta": {
     "problem_id": "median_two_sorted_arrays",
     "part_number": 4,

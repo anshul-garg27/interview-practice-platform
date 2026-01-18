@@ -4,922 +4,770 @@
   "builds_on": "Part 2",
   "difficulty": "medium",
   "problem_understanding": {
-    "what_changes": "This part shifts from memoization to implementing a fundamental JavaScript polyfill. Unlike memoization which caches function results, bind() creates a new function with a permanently bound `this` context and optional pre-filled arguments. The key challenge is handling both normal function calls AND constructor calls (with `new`) correctly.",
+    "what_changes": "Part 3 shifts from memoization to implementing a JavaScript polyfill for Function.prototype.bind. This is a fundamental JavaScript concept that tests understanding of 'this' binding, closures, partial application, and constructor behavior. Unlike Parts 1-2 which were language-agnostic caching patterns, this is JavaScript-specific.",
     "new_requirements": [
-      "Bind `this` context to a specified value for all future calls",
-      "Support partial application - pre-fill initial arguments",
-      "Handle constructor invocation where bound `this` is ignored",
-      "Preserve prototype chain for constructor behavior"
+      "Bind 'this' context to a specified value",
+      "Support partial application (pre-fill some arguments)",
+      "Handle 'new' keyword correctly (ignore thisArg when used as constructor)",
+      "Maintain proper prototype chain for instanceof checks"
     ],
     "new_constraints": [
-      "Must work with any function type",
-      "Must correctly detect constructor vs normal call",
-      "Bound function must be usable with `new` keyword",
-      "Arguments must merge correctly: boundArgs + callTimeArgs"
+      "Must work on Function.prototype (extend all functions)",
+      "Must detect constructor calls vs regular calls",
+      "Bound functions must inherit original function's prototype"
     ],
-    "key_insight": "The crucial insight is detecting when bound function is called as a constructor using `this instanceof boundFunction` or `new.target`. In constructor mode, we ignore the bound `thisArg` and use the newly created object as `this` instead."
+    "key_insight": "The critical insight is detecting whether the bound function is called with 'new' using 'this instanceof boundFn'. When used as a constructor, JavaScript ignores the bound 'this' and uses the newly created object instead. This is why we must conditionally choose the context."
   },
   "requirements_coverage": {
     "checklist": [
       {
         "requirement": "Bind this context",
-        "how_met": "Store thisArg in closure, apply it via Function.prototype.apply()",
+        "how_met": "Store thisArg in closure, pass to apply() when called",
         "gotchas": [
-          "Forgetting that null/undefined thisArg is valid and should not be coerced"
+          "Arrow functions don't have their own 'this'"
         ]
       },
       {
         "requirement": "Partial application",
-        "how_met": "Store boundArgs in closure, concatenate with call-time args: [...boundArgs, ...args]",
+        "how_met": "Store boundArgs in closure, concatenate with newArgs on each call",
         "gotchas": [
-          "Order matters - bound args come FIRST, then call-time args"
+          "Arguments order: bound args come BEFORE new args"
         ]
       },
       {
-        "requirement": "Constructor behavior",
-        "how_met": "Check if invoked with `new` using instanceof or new.target, use `this` instead of thisArg",
+        "requirement": "Handle new keyword",
+        "how_met": "Use 'this instanceof boundFn' to detect constructor call, use 'this' instead of thisArg",
         "gotchas": [
-          "Must set up prototype chain correctly, otherwise instanceof checks fail"
+          "Must set up prototype chain for instanceof to work"
         ]
       }
     ],
     "complexity_targets": [
       {
-        "operation": "myBind()",
+        "operation": "myBind",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Just creates closure and returns function"
+        "why": "Just creates closure, no iteration"
       },
       {
-        "operation": "boundFn()",
+        "operation": "boundFn call",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Constant time apply with merged args"
-      },
-      {
-        "operation": "new boundFn()",
-        "target": "O(1)",
-        "achieved": "O(1)",
-        "why": "Same as normal call, just different this binding"
+        "why": "Spread/concat args and apply() are constant-time for fixed arg counts"
       }
     ],
     "non_goals": [
-      "Preserving function name and length properties",
-      "Handling exotic objects as thisArg",
-      "Symbol.hasInstance customization"
+      "Supporting bind on non-functions",
+      "ES6 new.target (older polyfill style)"
     ]
   },
   "assumptions": [
-    "The original function is a valid callable (not an arrow function when expecting constructor behavior)",
-    "We're implementing a polyfill, not a complete spec-compliant replacement",
-    "ES5+ environment is available (for Object.create)",
-    "Interviewer wants the core algorithm, not all edge cases from the spec"
+    "myBind is called on a valid function (we add a type check for safety)",
+    "Arguments are valid JavaScript values",
+    "We use instanceof for constructor detection (works in 99% of cases)",
+    "We don't need to handle Symbol.hasInstance customization"
   ],
   "tradeoffs": [
     {
-      "decision": "instanceof vs new.target for constructor detection",
-      "chosen": "instanceof with new.target fallback discussion",
-      "why": "instanceof works in older environments; new.target is more accurate but ES6+",
-      "alternative": "new.target only",
-      "when_to_switch": "If targeting ES6+ environments exclusively"
+      "decision": "instanceof vs new.target",
+      "chosen": "instanceof",
+      "why": "Works in ES5 environments, broader compatibility",
+      "alternative": "new.target",
+      "when_to_switch": "If only targeting ES6+ environments"
     },
     {
-      "decision": "Object.create vs Intermediate function for prototype",
+      "decision": "Object.create vs direct prototype assignment",
       "chosen": "Object.create",
-      "why": "Cleaner, doesn't invoke constructor, modern browsers support it",
-      "alternative": "Empty intermediate function (F.prototype = originalFn.prototype; return new F())",
-      "when_to_switch": "If supporting very old browsers without Object.create"
+      "why": "Prevents modifications to original prototype",
+      "alternative": "boundFn.prototype = originalFn.prototype",
+      "when_to_switch": "Never - direct assignment is a bug"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
       "Function.prototype.myBind signature",
-      "Argument order: thisArg first, then boundArgs",
-      "Return type: always a function"
+      "Constructor detection logic"
     ],
     "what_to_change": [
-      "Prototype handling can be enhanced",
-      "Can add length/name property preservation"
+      "Could add length property matching",
+      "Could add name property"
     ],
-    "interfaces_and_boundaries": "The bound function is a clean interface - it's just a function. Adding features like call/apply polyfills would be separate implementations following similar patterns.",
+    "interfaces_and_boundaries": "myBind is self-contained on Function.prototype, doesn't interact with memoization code",
     "invariants": [
-      "boundFn.apply(ctx, args) ignores ctx and uses thisArg",
-      "new boundFn() ignores thisArg and creates new instance",
-      "Arguments always merge as: [...boundArgs, ...callTimeArgs]"
+      "Bound function always preserves partial args order",
+      "Constructor call always ignores thisArg",
+      "Prototype chain enables instanceof checks"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\nBEFORE bind():\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  function greet(greeting, name) {               \u2502\n\u2502      return `${greeting}, ${name}!`;            \u2502\n\u2502  }                                              \u2502\n\u2502  greet('Hello', 'World');  // 'Hello, World!'  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nAFTER myBind(null, 'Hello'):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  sayHello = greet.myBind(null, 'Hello');        \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502  Closure contains:                        \u2502  \u2502\n\u2502  \u2502    originalFn: greet                      \u2502  \u2502\n\u2502  \u2502    thisArg: null                          \u2502  \u2502\n\u2502  \u2502    boundArgs: ['Hello']                   \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                                 \u2502\n\u2502  sayHello('World');                             \u2502\n\u2502  \u2192 greet.apply(null, ['Hello', 'World'])        \u2502\n\u2502  \u2192 'Hello, World!'                              \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "algorithm_flow": "```\nmyBind(thisArg, ...boundArgs) Algorithm:\n\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502 1. Save originalFn = this \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                \u2502\n                \u25bc\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502 2. Create boundFunction   \u2502\n   \u2502    (closure captures:     \u2502\n   \u2502     originalFn, thisArg,  \u2502\n   \u2502     boundArgs)            \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                \u2502\n                \u25bc\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502 3. Set up prototype:      \u2502\n   \u2502    boundFn.prototype =    \u2502\n   \u2502    Object.create(         \u2502\n   \u2502      originalFn.prototype \u2502\n   \u2502    )                      \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                \u2502\n                \u25bc\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502 4. Return boundFunction   \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nWhen boundFunction is called:\n                \u2502\n        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n        \u2502               \u2502\n   Normal Call     new Call\n        \u2502               \u2502\n        \u25bc               \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 Use      \u2502    \u2502 Ignore   \u2502\n  \u2502 thisArg  \u2502    \u2502 thisArg  \u2502\n  \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2518\n       \u2502               \u2502\n       \u25bc               \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 Merge args:              \u2502\n  \u2502 [...boundArgs, ...args]  \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n               \u2502\n               \u25bc\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 originalFn.apply(        \u2502\n  \u2502   context,               \u2502\n  \u2502   mergedArgs             \u2502\n  \u2502 )                        \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE: function greet(greeting, name) { return `${greeting}, ${name}!`; }\n\nAFTER bind(null, 'Hello'):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Bound Function (closure)                   \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502  originalFn = greet                   \u2502  \u2502\n\u2502  \u2502  thisArg = null                       \u2502  \u2502\n\u2502  \u2502  boundArgs = ['Hello']                \u2502  \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502                                             \u2502\n\u2502  Call: boundFn('World')                     \u2502\n\u2502    \u2192 greet.apply(null, ['Hello', 'World']) \u2502\n\u2502    \u2192 'Hello, World!'                        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "algorithm_flow": "```\nmyBind(thisArg, ...boundArgs):\n  1. Save originalFn = this (the function being bound)\n  2. Create boundFn = function(...newArgs)\n     a. Check: is this instanceof boundFn?\n        YES \u2192 context = this (constructor call)\n        NO  \u2192 context = thisArg (normal call)\n     b. Combine: allArgs = [...boundArgs, ...newArgs]\n     c. Return: originalFn.apply(context, allArgs)\n  3. Set boundFn.prototype = Object.create(originalFn.prototype)\n  4. Return boundFn\n```"
   },
   "approaches": [
     {
-      "name": "Naive Approach - Just Store and Apply",
-      "description": "Simply store thisArg and args, apply them on every call without considering constructor case",
+      "name": "Naive - No constructor handling",
+      "description": "Simply use apply with thisArg every time",
       "time_complexity": "O(1)",
-      "space_complexity": "O(n) where n is boundArgs length",
-      "why_not_optimal": "Fails completely when bound function is used with `new` keyword - the bound thisArg is incorrectly used instead of the new instance"
+      "space_complexity": "O(1)",
+      "why_not_optimal": "Breaks when bound function used with 'new' - creates object with wrong prototype and thisArg overwrites new instance"
     },
     {
-      "name": "Optimal Approach - Constructor-Aware Binding",
-      "description": "Store thisArg and args, but detect constructor invocation and adjust `this` accordingly. Set up proper prototype chain.",
+      "name": "Optimal - Full bind polyfill",
+      "description": "Detect constructor calls with instanceof, set up prototype chain",
       "time_complexity": "O(1)",
-      "space_complexity": "O(n) where n is boundArgs length",
-      "key_insight": "Use `this instanceof boundFunction` or `new.target` to detect constructor calls. When detected, use the newly created `this` instead of bound thisArg."
+      "space_complexity": "O(1)",
+      "key_insight": "Use 'this instanceof boundFn' to detect constructor invocation, conditionally choose context"
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## Optimal Solution: Constructor-Aware Function Binding\n\n### Core Concept\n\nThe native `bind()` method does three things:\n1. **Fixes `this` context** - The bound function always uses the specified `thisArg`\n2. **Partial Application** - Pre-fills arguments that are always passed first\n3. **Constructor Awareness** - When used with `new`, ignores bound `this` and works like the original constructor\n\n### Key Implementation Details\n\n**1. Closure Storage**\n```javascript\nconst originalFn = this;\nconst storedThisArg = thisArg;\nconst storedBoundArgs = boundArgs;\n```\n\n**2. Constructor Detection**\nWhen a function is called with `new`:\n- A new object is created\n- That object becomes `this` inside the function\n- The object's prototype is set to `Constructor.prototype`\n\nWe detect this by checking if `this` is an instance of our bound function:\n```javascript\nif (this instanceof boundFunction) {\n    // Constructor call - use this, not thisArg\n}\n```\n\n**3. Prototype Chain Setup**\nFor `new boundFn()` to work correctly, we must set up the prototype chain:\n```javascript\nboundFunction.prototype = Object.create(originalFn.prototype);\n```\nThis ensures:\n- `new boundFn() instanceof originalFn` returns `true`\n- Methods from `originalFn.prototype` are accessible\n\n**4. Argument Merging**\nBound arguments always come first:\n```javascript\noriginalFn.apply(context, [...boundArgs, ...args]);\n```",
+    "explanation_md": "The **bind polyfill** creates a closure capturing three things: the **original function**, the **this context**, and any **pre-bound arguments**.\n\nWhen the bound function is called:\n1. **Detect constructor call**: `this instanceof boundFn` is true if called with `new`\n2. **Choose context**: Use `this` (new instance) for constructors, `thisArg` otherwise\n3. **Merge arguments**: Concatenate `boundArgs` with `newArgs`\n4. **Invoke**: Use `apply()` to call original function\n\n**Critical**: We must set `boundFn.prototype = Object.create(originalFn.prototype)` so that instances created with `new boundFn()` pass the `instanceof` check for both `boundFn` and the original constructor.",
     "data_structures": [
       {
         "structure": "Closure",
-        "purpose": "Store originalFn, thisArg, and boundArgs for later use"
+        "purpose": "Store originalFn, thisArg, boundArgs privately"
       },
       {
-        "structure": "Array",
-        "purpose": "Merge boundArgs with call-time args"
+        "structure": "Prototype chain",
+        "purpose": "Enable proper instanceof behavior for constructors"
       }
     ],
     "algorithm_steps": [
-      "Step 1: Validate that `this` is a function (throw TypeError if not)",
-      "Step 2: Store reference to original function in closure",
-      "Step 3: Create bound function that captures originalFn, thisArg, boundArgs",
-      "Step 4: Inside bound function, detect if called as constructor using instanceof",
-      "Step 5: Merge boundArgs with call-time args: [...boundArgs, ...args]",
-      "Step 6: Apply original function with appropriate context (this or thisArg)",
-      "Step 7: Set up prototype chain: boundFn.prototype = Object.create(originalFn.prototype)",
-      "Step 8: Return the bound function"
+      "Step 1: Capture originalFn (this), thisArg, and boundArgs in closure",
+      "Step 2: Create boundFn that detects if called with 'new' using instanceof",
+      "Step 3: Choose context based on constructor detection",
+      "Step 4: Merge boundArgs with newArgs using spread operator",
+      "Step 5: Call originalFn.apply(context, allArgs)",
+      "Step 6: Set up prototype chain: boundFn.prototype = Object.create(originalFn.prototype)",
+      "Step 7: Return boundFn"
     ]
   },
   "solution_python_lines": [
-    "// =================================================================",
-    "// Part 3: Function.prototype.bind Polyfill",
-    "// =================================================================",
+    "\"\"\"",
+    "Part 3: Bind Polyfill - Python Conceptual Equivalent",
     "",
+    "Note: Python doesn't have 'this' binding like JavaScript.",
+    "This demonstrates closures and partial application concepts.",
+    "The JavaScript implementation is the canonical solution.",
+    "\"\"\"",
+    "from functools import wraps, partial",
+    "from typing import Callable, Any, Tuple",
+    "",
+    "",
+    "# ============ Part 1 & 2: Previous implementations unchanged ============",
+    "# (memoize and memoize_async from previous parts remain here)",
+    "",
+    "",
+    "# ============ Part 3: Bind Polyfill Concept ============",
+    "def my_bind(fn: Callable, this_arg: Any, *bound_args) -> Callable:",
+    "    \"\"\"",
+    "    Python equivalent of JavaScript's Function.prototype.bind.",
+    "    ",
+    "    Since Python uses explicit 'self' rather than implicit 'this',",
+    "    we pass this_arg as the first argument to fn.",
+    "    \"\"\"",
+    "    @wraps(fn)",
+    "    def bound(*new_args):",
+    "        # Combine bound args with new args (partial application)",
+    "        all_args = bound_args + new_args",
+    "        return fn(this_arg, *all_args)",
+    "    ",
+    "    return bound",
+    "",
+    "",
+    "class MethodBinder:",
+    "    \"\"\"",
+    "    Class-based binder that simulates constructor behavior.",
+    "    Demonstrates the closure and 'this' binding concepts.",
+    "    \"\"\"",
+    "    ",
+    "    def __init__(self, fn: Callable, this_arg: Any, *bound_args):",
+    "        self.fn = fn",
+    "        self.this_arg = this_arg",
+    "        self.bound_args = bound_args",
+    "    ",
+    "    def __call__(self, *new_args):",
+    "        \"\"\"Regular call - uses bound this_arg.\"\"\"",
+    "        all_args = self.bound_args + new_args",
+    "        return self.fn(self.this_arg, *all_args)",
+    "    ",
+    "    def construct(self, *new_args):",
+    "        \"\"\"",
+    "        Simulates 'new' behavior - ignores this_arg.",
+    "        In JavaScript, 'new boundFn()' ignores the bound this.",
+    "        \"\"\"",
+    "        all_args = self.bound_args + new_args",
+    "        # Create new instance, ignore this_arg",
+    "        return self.fn(None, *all_args)",
+    "",
+    "",
+    "# ============ JavaScript Implementation (canonical solution) ============",
+    "JAVASCRIPT_SOLUTION = '''",
     "/**",
-    " * Custom implementation of Function.prototype.bind",
-    " * ",
-    " * Features:",
-    " * 1. Binds 'this' context to specified value",
-    " * 2. Supports partial application (pre-filled arguments)",
-    " * 3. Works correctly with 'new' keyword (constructor behavior)",
-    " * ",
-    " * @param {any} thisArg - Value to use as 'this' when calling bound function",
-    " * @param {...any} boundArgs - Arguments to prepend to bound function calls",
-    " * @returns {Function} - New bound function",
+    " * Part 3: Function.prototype.bind Polyfill",
     " */",
     "Function.prototype.myBind = function(thisArg, ...boundArgs) {",
-    "    // Validate: bind must be called on a function",
-    "    if (typeof this !== 'function') {",
-    "        throw new TypeError(",
-    "            'Function.prototype.myBind - ' +",
-    "            'what is trying to be bound is not callable'",
-    "        );",
-    "    }",
-    "    ",
-    "    // Store reference to the original function",
-    "    const originalFn = this;",
-    "    ",
-    "    // Create the bound function",
-    "    // Using regular function (not arrow) so it has its own 'this'",
-    "    const boundFunction = function(...args) {",
-    "        // Combine pre-bound args with call-time args",
-    "        const allArgs = [...boundArgs, ...args];",
-    "        ",
-    "        // Detect if being called as a constructor (with 'new' keyword)",
-    "        // When called with 'new', 'this' is an instance of boundFunction",
-    "        const isConstructorCall = this instanceof boundFunction;",
-    "        ",
-    "        // Choose the correct 'this' context:",
-    "        // - Constructor call: use 'this' (the new instance)",
-    "        // - Normal call: use the bound thisArg",
-    "        const context = isConstructorCall ? this : thisArg;",
-    "        ",
-    "        // Call the original function with the correct context and args",
-    "        return originalFn.apply(context, allArgs);",
-    "    };",
-    "    ",
-    "    // Set up prototype chain for constructor behavior",
-    "    // This ensures: new boundFn() instanceof originalFn === true",
-    "    if (originalFn.prototype) {",
-    "        // Use Object.create to avoid calling the constructor",
-    "        boundFunction.prototype = Object.create(originalFn.prototype);",
-    "    }",
-    "    ",
-    "    return boundFunction;",
-    "};",
-    "",
-    "// =================================================================",
-    "// Alternative: Using new.target (ES6+)",
-    "// =================================================================",
-    "",
-    "Function.prototype.myBindES6 = function(thisArg, ...boundArgs) {",
     "    if (typeof this !== 'function') {",
     "        throw new TypeError('myBind must be called on a function');",
     "    }",
     "    ",
     "    const originalFn = this;",
     "    ",
-    "    const boundFunction = function(...args) {",
-    "        const allArgs = [...boundArgs, ...args];",
-    "        ",
-    "        // new.target is more reliable than instanceof",
-    "        // It's set when function is called with 'new'",
-    "        if (new.target) {",
-    "            // Constructor call - use 'this' (new instance)",
-    "            return originalFn.apply(this, allArgs);",
-    "        } else {",
-    "            // Normal call - use bound thisArg",
-    "            return originalFn.apply(thisArg, allArgs);",
-    "        }",
+    "    const boundFn = function(...newArgs) {",
+    "        // Detect constructor call with 'new'",
+    "        const isConstructor = this instanceof boundFn;",
+    "        const context = isConstructor ? this : thisArg;",
+    "        return originalFn.apply(context, [...boundArgs, ...newArgs]);",
     "    };",
     "    ",
+    "    // Set up prototype for proper instanceof behavior",
     "    if (originalFn.prototype) {",
-    "        boundFunction.prototype = Object.create(originalFn.prototype);",
+    "        boundFn.prototype = Object.create(originalFn.prototype);",
     "    }",
     "    ",
-    "    return boundFunction;",
+    "    return boundFn;",
     "};",
+    "'''",
     "",
-    "// =================================================================",
-    "// TypeScript Version (for reference)",
-    "// =================================================================",
     "",
-    "/*",
-    "interface Function {",
-    "    myBind<T>(this: Function, thisArg: T, ...boundArgs: any[]): (...args: any[]) => any;",
-    "}",
-    "",
-    "Function.prototype.myBind = function<T>(",
-    "    this: Function,",
-    "    thisArg: T,",
-    "    ...boundArgs: unknown[]",
-    "): (...args: unknown[]) => unknown {",
-    "    const originalFn = this;",
+    "if __name__ == '__main__':",
+    "    print('=' * 60)",
+    "    print('BIND POLYFILL CONCEPT (Python)')",
+    "    print('=' * 60)",
+    "    print('\\nNote: See JAVASCRIPT_SOLUTION for canonical implementation')",
     "    ",
-    "    const boundFunction = function(this: unknown, ...args: unknown[]): unknown {",
-    "        const allArgs = [...boundArgs, ...args];",
-    "        const isConstructor = new.target !== undefined;",
-    "        return originalFn.apply(",
-    "            isConstructor ? this : thisArg,",
-    "            allArgs",
-    "        );",
-    "    };",
+    "    # Test 1: Basic this binding concept",
+    "    print('\\n[Test 1] Basic binding:')",
     "    ",
-    "    if (originalFn.prototype) {",
-    "        boundFunction.prototype = Object.create(originalFn.prototype);",
-    "    }",
+    "    class User:",
+    "        def __init__(self, x):",
+    "            self.x = x",
     "    ",
-    "    return boundFunction;",
-    "};",
-    "*/",
-    "",
-    "// =================================================================",
-    "// Demo and Tests",
-    "// =================================================================",
-    "",
-    "function runTests() {",
-    "    console.log('\\n' + '='.repeat(60));",
-    "    console.log('Function.prototype.myBind Polyfill Tests');",
-    "    console.log('='.repeat(60) + '\\n');",
+    "    def get_x(self_obj):",
+    "        return self_obj.x",
     "    ",
-    "    // Test 1: Basic this binding",
-    "    console.log('Test 1: Basic this binding');",
-    "    console.log('-'.repeat(40));",
+    "    obj = User(42)",
+    "    bound_get_x = my_bind(get_x, obj)",
+    "    print(f'  Result: {bound_get_x()}')  # 42",
     "    ",
-    "    const obj = { value: 42 };",
-    "    function getValue() {",
-    "        return this.value;",
-    "    }",
+    "    # Test 2: Partial application",
+    "    print('\\n[Test 2] Partial application:')",
     "    ",
-    "    const boundGetValue = getValue.myBind(obj);",
-    "    console.log('Original: getValue() with this = obj');",
-    "    console.log('Expected: 42');",
-    "    console.log('Result:  ', boundGetValue());",
-    "    console.log('Pass:', boundGetValue() === 42);",
+    "    def greet(_, greeting, name):",
+    "        return f'{greeting}, {name}!'",
     "    ",
-    "    // Test 2: Partial application",
-    "    console.log('\\nTest 2: Partial application');",
-    "    console.log('-'.repeat(40));",
+    "    say_hello = my_bind(greet, None, 'Hello')",
+    "    print(f'  Result: {say_hello(\"World\")}')  # Hello, World!",
     "    ",
-    "    function greet(greeting, punctuation, name) {",
-    "        return `${greeting}${punctuation} ${name}`;",
-    "    }",
+    "    # Test 3: Class-based binder with construct",
+    "    print('\\n[Test 3] Constructor simulation:')",
     "    ",
-    "    const sayHello = greet.myBind(null, 'Hello', '!');",
-    "    console.log('greet.myBind(null, \"Hello\", \"!\")');",
-    "    console.log('sayHello(\"World\") = ', sayHello('World'));",
-    "    console.log('Expected: Hello! World');",
-    "    console.log('Pass:', sayHello('World') === 'Hello! World');",
+    "    def create_person(_, name, age):",
+    "        return {'name': name, 'age': age}",
     "    ",
-    "    // Test 3: Constructor behavior",
-    "    console.log('\\nTest 3: Constructor behavior (new keyword)');",
-    "    console.log('-'.repeat(40));",
+    "    binder = MethodBinder(create_person, {'ignored': True}, 'John')",
+    "    person = binder.construct(25)  # Simulates 'new BoundPerson(25)'",
+    "    print(f'  Person: {person}')  # {'name': 'John', 'age': 25}",
     "    ",
-    "    function Person(name, age) {",
-    "        this.name = name;",
-    "        this.age = age;",
-    "    }",
-    "    Person.prototype.greet = function() {",
-    "        return `Hi, I'm ${this.name}`;",
-    "    };",
+    "    # Test 4: Using functools.partial (Python's built-in)",
+    "    print('\\n[Test 4] functools.partial (Python native):')",
     "    ",
-    "    // Bind with a thisArg that should be IGNORED when using 'new'",
-    "    const BoundPerson = Person.myBind({ ignored: true }, 'John');",
-    "    const person = new BoundPerson(30);",
+    "    def add(a, b, c):",
+    "        return a + b + c",
     "    ",
-    "    console.log('const BoundPerson = Person.myBind({ ignored: true }, \"John\")');",
-    "    console.log('const person = new BoundPerson(30)');",
-    "    console.log('person.name:', person.name, '(expected: John)');",
-    "    console.log('person.age:', person.age, '(expected: 30)');",
-    "    console.log('person.greet():', person.greet());",
-    "    console.log('person instanceof Person:', person instanceof Person);",
-    "    console.log('Pass:', person.name === 'John' && person.age === 30);",
+    "    add_five = partial(add, 5)",
+    "    print(f'  add_five(3, 2) = {add_five(3, 2)}')  # 10",
     "    ",
-    "    // Test 4: Multiple levels of binding",
-    "    console.log('\\nTest 4: Multiple levels of binding');",
-    "    console.log('-'.repeat(40));",
-    "    ",
-    "    function add(a, b, c) {",
-    "        return a + b + c;",
-    "    }",
-    "    ",
-    "    const add5 = add.myBind(null, 5);",
-    "    const add5and10 = add5.myBind(null, 10);",
-    "    const result = add5and10(15);",
-    "    ",
-    "    console.log('add.myBind(null, 5).myBind(null, 10)(15)');",
-    "    console.log('Result:', result, '(expected: 30)');",
-    "    console.log('Pass:', result === 30);",
-    "    ",
-    "    // Test 5: Preserving this with methods",
-    "    console.log('\\nTest 5: Method binding');",
-    "    console.log('-'.repeat(40));",
-    "    ",
-    "    const calculator = {",
-    "        multiplier: 10,",
-    "        multiply: function(x) {",
-    "            return this.multiplier * x;",
-    "        }",
-    "    };",
-    "    ",
-    "    const multiply = calculator.multiply;",
-    "    // Without binding, 'this' would be undefined/global",
-    "    const boundMultiply = multiply.myBind(calculator);",
-    "    ",
-    "    console.log('boundMultiply(5):', boundMultiply(5), '(expected: 50)');",
-    "    console.log('Pass:', boundMultiply(5) === 50);",
-    "    ",
-    "    // Test 6: null/undefined thisArg",
-    "    console.log('\\nTest 6: null/undefined thisArg');",
-    "    console.log('-'.repeat(40));",
-    "    ",
-    "    function showThis() {",
-    "        return this;",
-    "    }",
-    "    ",
-    "    const boundToNull = showThis.myBind(null);",
-    "    const boundToUndefined = showThis.myBind(undefined);",
-    "    ",
-    "    console.log('Bound to null, called in non-strict:', boundToNull());",
-    "    console.log('Bound to undefined, called:', boundToUndefined());",
-    "    console.log('(In strict mode, these would be null/undefined)');",
-    "    ",
-    "    // Test 7: Error handling",
-    "    console.log('\\nTest 7: Error handling');",
-    "    console.log('-'.repeat(40));",
-    "    ",
-    "    try {",
-    "        const notAFunction = { foo: 'bar' };",
-    "        Function.prototype.myBind.call(notAFunction, null);",
-    "        console.log('FAIL: Should have thrown TypeError');",
-    "    } catch (e) {",
-    "        console.log('Correctly threw TypeError:', e.message);",
-    "        console.log('Pass: true');",
-    "    }",
-    "    ",
-    "    console.log('\\n' + '='.repeat(60));",
-    "    console.log('All tests completed!');",
-    "    console.log('='.repeat(60));",
-    "}",
-    "",
-    "// Run the tests",
-    "runTests();"
+    "    print('\\n' + '=' * 60)",
+    "    print('JavaScript canonical solution:')",
+    "    print(JAVASCRIPT_SOLUTION)",
+    "    print('=' * 60)"
   ],
   "solution_java_lines": [
-    "// JavaScript is the primary language for this problem.",
-    "// Below is a demonstration of how bind() concepts translate to Java.",
-    "",
-    "import java.util.function.*;",
     "import java.util.*;",
+    "import java.util.function.*;",
     "",
     "/**",
-    " * Java doesn't have prototypes or this-binding like JavaScript,",
-    " * but we can demonstrate the partial application pattern.",
+    " * Part 3: Bind Polyfill - Java Conceptual Equivalent",
+    " * ",
+    " * Java doesn't have 'this' binding like JavaScript.",
+    " * This demonstrates closures and partial application using lambdas.",
+    " * The JavaScript implementation is the canonical solution.",
     " */",
-    "public class BindPolyfillConcepts {",
+    "public class BindPolyfill {",
     "    ",
-    "    /**",
-    "     * Demonstrates partial application in Java",
-    "     * Similar to JavaScript's bind() for argument pre-filling",
-    "     */",
-    "    public static class PartialApply {",
-    "        ",
-    "        // Partial application: fix first argument",
-    "        public static <T, U, R> Function<U, R> partial(",
-    "                BiFunction<T, U, R> func, T firstArg) {",
-    "            return secondArg -> func.apply(firstArg, secondArg);",
-    "        }",
-    "        ",
-    "        // Triple partial: fix two arguments",
-    "        public static <T, U, V, R> Function<V, R> partialTwo(",
-    "                TriFunction<T, U, V, R> func, T first, U second) {",
-    "            return third -> func.apply(first, second, third);",
-    "        }",
-    "    }",
+    "    // ============ Part 1 & 2: Previous implementations unchanged ============",
+    "    // (Memoize class from previous parts remains here)",
     "    ",
+    "    // ============ Part 3: Bind Polyfill Concept ============",
+    "    ",
+    "    /** Variable-args function interface */",
     "    @FunctionalInterface",
-    "    public interface TriFunction<T, U, V, R> {",
-    "        R apply(T t, U u, V v);",
+    "    public interface VarArgsFunction<R> {",
+    "        R apply(Object... args);",
+    "    }",
+    "    ",
+    "    /** Method with explicit 'this' parameter */",
+    "    @FunctionalInterface",
+    "    public interface BoundMethod<T, R> {",
+    "        R apply(T thisArg, Object... args);",
     "    }",
     "    ",
     "    /**",
-    "     * Demonstrates context binding concept in Java",
-    "     * Java uses explicit object references instead of 'this' binding",
+    "     * Creates bound function with partial application.",
+    "     * Simulates JavaScript's bind() for argument pre-filling.",
     "     */",
-    "    public static class ContextBinder<T> {",
-    "        private final T context;",
+    "    public static <R> VarArgsFunction<R> bind(",
+    "            VarArgsFunction<R> fn,",
+    "            Object... boundArgs) {",
     "        ",
-    "        public ContextBinder(T context) {",
-    "            this.context = context;",
-    "        }",
-    "        ",
-    "        public <R> Supplier<R> bind(Function<T, R> method) {",
-    "            return () -> method.apply(context);",
-    "        }",
-    "        ",
-    "        public <A, R> Function<A, R> bindWithArg(",
-    "                BiFunction<T, A, R> method) {",
-    "            return arg -> method.apply(context, arg);",
-    "        }",
+    "        return (Object... newArgs) -> {",
+    "            // Merge bound args with new args",
+    "            Object[] allArgs = new Object[boundArgs.length + newArgs.length];",
+    "            System.arraycopy(boundArgs, 0, allArgs, 0, boundArgs.length);",
+    "            System.arraycopy(newArgs, 0, allArgs, boundArgs.length, newArgs.length);",
+    "            return fn.apply(allArgs);",
+    "        };",
     "    }",
     "    ",
-    "    // Demo class with methods",
-    "    public static class Calculator {",
-    "        private int multiplier;",
+    "    /**",
+    "     * Binds 'this' context and partial args.",
+    "     * Simulates JavaScript's bind() for methods.",
+    "     */",
+    "    public static <T, R> VarArgsFunction<R> bindThis(",
+    "            BoundMethod<T, R> fn,",
+    "            T thisArg,",
+    "            Object... boundArgs) {",
     "        ",
-    "        public Calculator(int multiplier) {",
-    "            this.multiplier = multiplier;",
-    "        }",
-    "        ",
-    "        public int multiply(int x) {",
-    "            return multiplier * x;",
-    "        }",
-    "        ",
-    "        public int getMultiplier() {",
-    "            return multiplier;",
-    "        }",
+    "        return (Object... newArgs) -> {",
+    "            Object[] allArgs = new Object[boundArgs.length + newArgs.length];",
+    "            System.arraycopy(boundArgs, 0, allArgs, 0, boundArgs.length);",
+    "            System.arraycopy(newArgs, 0, allArgs, boundArgs.length, newArgs.length);",
+    "            return fn.apply(thisArg, allArgs);",
+    "        };",
     "    }",
+    "    ",
+    "    // JavaScript canonical solution as documentation",
+    "    public static final String JAVASCRIPT_SOLUTION = \"\"\"",
+    "        Function.prototype.myBind = function(thisArg, ...boundArgs) {",
+    "            if (typeof this !== 'function') {",
+    "                throw new TypeError('myBind must be called on a function');",
+    "            }",
+    "            const originalFn = this;",
+    "            ",
+    "            const boundFn = function(...newArgs) {",
+    "                const isConstructor = this instanceof boundFn;",
+    "                const context = isConstructor ? this : thisArg;",
+    "                return originalFn.apply(context, [...boundArgs, ...newArgs]);",
+    "            };",
+    "            ",
+    "            if (originalFn.prototype) {",
+    "                boundFn.prototype = Object.create(originalFn.prototype);",
+    "            }",
+    "            return boundFn;",
+    "        };",
+    "        \"\"\";",
     "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"=\".repeat(50));",
-    "        System.out.println(\"Java Bind Concepts Demonstration\");",
-    "        System.out.println(\"=\".repeat(50));",
+    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"BIND POLYFILL CONCEPT (Java)\");",
+    "        System.out.println(\"=\".repeat(60));",
+    "        System.out.println(\"\\nNote: See JAVASCRIPT_SOLUTION for canonical implementation\");",
     "        ",
-    "        // Partial Application Demo",
-    "        System.out.println(\"\\n1. Partial Application:\");",
-    "        System.out.println(\"-\".repeat(30));",
+    "        // Test 1: Partial application",
+    "        System.out.println(\"\\n[Test 1] Partial application:\");",
     "        ",
-    "        BiFunction<String, String, String> greet = ",
-    "            (greeting, name) -> greeting + \", \" + name + \"!\";",
+    "        VarArgsFunction<String> greet = (Object[] a) ->",
+    "            a[0] + \", \" + a[1] + \"!\";",
     "        ",
-    "        Function<String, String> sayHello = ",
-    "            PartialApply.partial(greet, \"Hello\");",
+    "        VarArgsFunction<String> sayHello = bind(greet, \"Hello\");",
+    "        System.out.println(\"  sayHello('World'): \" + sayHello.apply(\"World\"));",
     "        ",
-    "        System.out.println(\"sayHello('World') = \" + sayHello.apply(\"World\"));",
-    "        System.out.println(\"sayHello('Java') = \" + sayHello.apply(\"Java\"));",
+    "        // Test 2: Simulating 'this' binding",
+    "        System.out.println(\"\\n[Test 2] 'This' binding simulation:\");",
     "        ",
-    "        // Context Binding Demo",
-    "        System.out.println(\"\\n2. Context Binding:\");",
-    "        System.out.println(\"-\".repeat(30));",
+    "        BoundMethod<Map<String, Integer>, Integer> getX =",
+    "            (thisArg, a) -> thisArg.get(\"x\");",
     "        ",
-    "        Calculator calc = new Calculator(10);",
-    "        ContextBinder<Calculator> binder = new ContextBinder<>(calc);",
+    "        Map<String, Integer> obj = new HashMap<>();",
+    "        obj.put(\"x\", 42);",
     "        ",
-    "        Supplier<Integer> getMultiplier = ",
-    "            binder.bind(Calculator::getMultiplier);",
-    "        Function<Integer, Integer> boundMultiply = ",
-    "            binder.bindWithArg(Calculator::multiply);",
+    "        VarArgsFunction<Integer> boundGetX = bindThis(getX, obj);",
+    "        System.out.println(\"  boundGetX(): \" + boundGetX.apply());",
     "        ",
-    "        System.out.println(\"Bound getMultiplier() = \" + getMultiplier.get());",
-    "        System.out.println(\"Bound multiply(5) = \" + boundMultiply.apply(5));",
+    "        // Test 3: Combined - this + partial application",
+    "        System.out.println(\"\\n[Test 3] Combined binding:\");",
     "        ",
-    "        // Chained Partial Application",
-    "        System.out.println(\"\\n3. Chained Partial Application:\");",
-    "        System.out.println(\"-\".repeat(30));",
+    "        BoundMethod<Map<String, String>, String> formatUser =",
+    "            (thisArg, a) -> thisArg.get(\"prefix\") + \": \" + a[0] + \" (\" + a[1] + \")\";",
     "        ",
-    "        TriFunction<Integer, Integer, Integer, Integer> add3 = ",
-    "            (a, b, c) -> a + b + c;",
+    "        Map<String, String> user = new HashMap<>();",
+    "        user.put(\"prefix\", \"User\");",
     "        ",
-    "        Function<Integer, Integer> add5and10 = ",
-    "            PartialApply.partialTwo(add3, 5, 10);",
+    "        VarArgsFunction<String> formatAdmin = bindThis(formatUser, user, \"Admin\");",
+    "        System.out.println(\"  formatAdmin('Manager'): \" + formatAdmin.apply(\"Manager\"));",
     "        ",
-    "        System.out.println(\"add3(5, 10, 15) = \" + add5and10.apply(15));",
+    "        // Test 4: Native Java method references",
+    "        System.out.println(\"\\n[Test 4] Java native method reference:\");",
+    "        Function<String, String> toUpper = String::toUpperCase;",
+    "        System.out.println(\"  toUpper.apply('hello'): \" + toUpper.apply(\"hello\"));",
     "        ",
-    "        System.out.println(\"\\n\" + \"=\".repeat(50));",
-    "        System.out.println(\"Key difference: Java uses explicit references\");",
-    "        System.out.println(\"instead of JavaScript's 'this' binding.\");",
-    "        System.out.println(\"=\".repeat(50));",
+    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
+    "        System.out.println(\"JavaScript canonical solution:\");",
+    "        System.out.println(JAVASCRIPT_SOLUTION);",
+    "        System.out.println(\"=\".repeat(60));",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-16",
-      "explanation": "JSDoc documentation explaining the myBind function's purpose, parameters, and return value. Good interview practice to document your polyfill."
+      "lines": "1-8",
+      "explanation": "Function type check and setup - ensure myBind is called on a function"
     },
     {
-      "lines": "17-22",
-      "explanation": "Input validation - check if bind is called on an actual function. Native bind throws TypeError for non-functions."
+      "lines": "10-12",
+      "explanation": "Capture originalFn, thisArg, boundArgs in closure - the core of bind"
     },
     {
-      "lines": "24-25",
-      "explanation": "Capture reference to the original function. Using closure to store this reference for later use."
+      "lines": "14-18",
+      "explanation": "Constructor detection using 'this instanceof boundFn' - the key insight"
     },
     {
-      "lines": "27-43",
-      "explanation": "Core bound function implementation. Merges boundArgs with call-time args. Uses instanceof to detect constructor calls and chooses appropriate `this` context."
+      "lines": "19-20",
+      "explanation": "Merge boundArgs with newArgs for partial application"
     },
     {
-      "lines": "45-49",
-      "explanation": "Prototype chain setup. Creates new prototype object linked to original function's prototype. Essential for `new boundFn() instanceof OriginalFn` to work."
-    },
-    {
-      "lines": "51-73",
-      "explanation": "Alternative ES6 implementation using new.target instead of instanceof. More reliable for edge cases but requires ES6+ environment."
-    },
-    {
-      "lines": "95-200",
-      "explanation": "Comprehensive test suite covering: basic binding, partial application, constructor behavior, multiple bindings, method extraction, null thisArg, and error handling."
+      "lines": "22-25",
+      "explanation": "Set up prototype chain so instanceof works correctly with constructors"
     }
   ],
   "complexity_analysis": {
     "time": {
       "new_methods": {
-        "myBind()": {
+        "myBind": {
           "complexity": "O(1)",
-          "explanation": "Creates closure and returns function - constant time operations"
+          "explanation": "Creates closure with constant-time operations"
         },
-        "boundFn()": {
-          "complexity": "O(n)",
-          "explanation": "Where n is total arguments (boundArgs + args). Array spread is O(n)"
+        "boundFn_call": {
+          "complexity": "O(1)",
+          "explanation": "Spread args + apply are O(n) for n args, but n is typically small/constant"
         },
-        "new boundFn()": {
-          "complexity": "O(n)",
-          "explanation": "Same as normal call, plus object creation overhead"
+        "boundFn_construct": {
+          "complexity": "O(1)",
+          "explanation": "Same as regular call, just different context"
         }
       },
-      "overall_change": "All operations are effectively O(1) for typical use. Array spread is technically O(n) but n is usually small (function arguments)."
+      "overall_change": "No change to memoization complexity. myBind is independent O(1) operation."
     },
     "space": {
-      "additional_space": "O(n)",
-      "explanation": "Each bind creates closure storing originalFn reference, thisArg, and boundArgs array. When bound function is called, new array is created for merged arguments."
+      "additional_space": "O(boundArgs.length)",
+      "explanation": "Each bound function stores reference to original fn, thisArg, and boundArgs array. No growing data structures."
     }
   },
   "dry_run": {
-    "example_input": "function greet(greeting, name) { return greeting + ', ' + name; }\nconst sayHello = greet.myBind(null, 'Hello');\nsayHello('World');",
+    "example_input": "const greet = function(a, b) { return `${a}, ${b}!`; }; const sayHi = greet.myBind(null, 'Hi'); sayHi('World');",
     "steps": [
       {
         "step": 1,
-        "action": "greet.myBind(null, 'Hello') is called",
-        "state": "originalFn = greet, thisArg = null, boundArgs = ['Hello']",
-        "explanation": "Closure captures original function and bound arguments"
+        "action": "myBind called",
+        "state": "originalFn=greet, thisArg=null, boundArgs=['Hi']",
+        "explanation": "Capture values in closure"
       },
       {
         "step": 2,
-        "action": "boundFunction is created",
-        "state": "boundFunction has closure with {originalFn, thisArg: null, boundArgs: ['Hello']}",
-        "explanation": "New function is created that closes over the stored values"
+        "action": "boundFn created",
+        "state": "boundFn stored with closure variables",
+        "explanation": "Returns the bound function"
       },
       {
         "step": 3,
-        "action": "boundFunction.prototype = Object.create(greet.prototype)",
-        "state": "Prototype chain established",
-        "explanation": "Enables constructor behavior if needed"
+        "action": "sayHi('World') called",
+        "state": "newArgs=['World']",
+        "explanation": "boundFn invoked with new args"
       },
       {
         "step": 4,
-        "action": "boundFunction is returned and assigned to sayHello",
-        "state": "sayHello = boundFunction",
-        "explanation": "The bound function is now available for use"
+        "action": "Constructor check",
+        "state": "this instanceof boundFn = false",
+        "explanation": "Regular call, not constructor"
       },
       {
         "step": 5,
-        "action": "sayHello('World') is called",
-        "state": "args = ['World'], this = undefined (normal call, not constructor)",
-        "explanation": "boundFunction is invoked with one argument"
+        "action": "Choose context",
+        "state": "context = null (thisArg)",
+        "explanation": "Use bound thisArg for normal call"
       },
       {
         "step": 6,
-        "action": "Check: this instanceof boundFunction?",
-        "state": "false (not a constructor call)",
-        "explanation": "this is undefined/window, not an instance of boundFunction"
+        "action": "Merge args",
+        "state": "allArgs = ['Hi', 'World']",
+        "explanation": "Concatenate boundArgs + newArgs"
       },
       {
         "step": 7,
-        "action": "Merge args: [...boundArgs, ...args]",
-        "state": "allArgs = ['Hello', 'World']",
-        "explanation": "Bound args come first, then call-time args"
+        "action": "Call original",
+        "state": "greet.apply(null, ['Hi', 'World'])",
+        "explanation": "Execute with merged args"
       },
       {
         "step": 8,
-        "action": "greet.apply(null, ['Hello', 'World'])",
-        "state": "Returns 'Hello, World'",
-        "explanation": "Original function called with merged arguments"
+        "action": "Return result",
+        "state": "'Hi, World!'",
+        "explanation": "Template literal evaluated"
       }
     ],
-    "final_output": "'Hello, World'"
+    "final_output": "'Hi, World!'"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "Simple this binding: function f() { return this.x; }; f.myBind({x: 1})() === 1",
-      "Partial application: ((a,b) => a+b).myBind(null, 5)(3) === 8"
+      "Simple bind with no partial args",
+      "Partial application with one arg"
     ],
     "likely_bugs": [
-      "Using arrow function for boundFunction (loses its own 'this')",
-      "Forgetting to set up prototype chain (constructor fails)",
-      "Wrong argument order when merging (should be boundArgs first)",
-      "Using call instead of apply (need array spread)"
+      "Forgetting to set up prototype chain",
+      "Not detecting constructor calls",
+      "Wrong arg order in merge"
     ],
     "recommended_logs_or_asserts": [
-      "console.log('isConstructor:', this instanceof boundFunction)",
-      "console.log('allArgs:', allArgs)",
-      "console.log('context used:', isConstructorCall ? 'this' : 'thisArg')"
+      "console.log('isConstructor:', this instanceof boundFn)",
+      "console.log('context:', context)",
+      "console.log('allArgs:', allArgs)"
     ],
-    "how_to_localize": "1. First test basic this binding without partial application. 2. Then add partial args. 3. Then test constructor case. 4. Isolate which feature fails first."
+    "how_to_localize": "1. Check if bind returns a function. 2. Check if basic call works. 3. Check partial application. 4. Check constructor behavior. 5. Check instanceof result."
   },
   "edge_cases": [
     {
-      "case": "null or undefined thisArg",
-      "handling": "Pass through as-is. In non-strict mode, will become globalThis. In strict mode, stays null/undefined.",
-      "gotcha": "Don't try to 'fix' null/undefined - native bind preserves them"
-    },
-    {
-      "case": "Binding an already bound function",
-      "handling": "Works correctly - creates new bound function with additional bound args prepended",
-      "gotcha": "Original thisArg is not overwritten, first binding wins for thisArg"
-    },
-    {
-      "case": "Arrow function as original",
-      "handling": "Works but thisArg is ignored (arrow functions have lexical this)",
-      "gotcha": "Arrow functions can't be constructors, so new boundArrowFn() will throw"
-    },
-    {
       "case": "No arguments to bind",
-      "handling": "Just binds thisArg, no partial application. boundArgs is empty array.",
-      "gotcha": "Still needs to create closure and set up prototype"
+      "handling": "thisArg becomes undefined, boundArgs is empty array",
+      "gotcha": "Should still work, just no binding"
     },
     {
-      "case": "Calling bound function with call/apply",
-      "handling": "The thisArg passed to call/apply is IGNORED, bound thisArg is used",
-      "gotcha": "This is correct behavior - bind takes precedence"
+      "case": "null/undefined thisArg",
+      "handling": "In non-strict mode, 'this' becomes global object; in strict mode stays null",
+      "gotcha": "Native bind has this behavior"
     },
     {
-      "case": "Function without prototype property",
-      "handling": "Skip prototype setup if originalFn.prototype is undefined",
-      "gotcha": "Arrow functions and bound functions don't have prototype"
+      "case": "Chained binds",
+      "handling": "First thisArg 'wins' - subsequent binds can only add more partial args",
+      "gotcha": "Can't override already-bound this"
+    },
+    {
+      "case": "Arrow functions",
+      "handling": "Arrow functions don't have their own 'this', bind has no effect on context",
+      "gotcha": "Still works for partial application"
+    },
+    {
+      "case": "No prototype on original",
+      "handling": "Skip prototype setup (arrow functions, built-ins)",
+      "gotcha": "Check originalFn.prototype exists"
     }
   ],
   "test_cases": [
     {
       "name": "Basic this binding",
-      "input": "const obj = { val: 10 }; function getVal() { return this.val; } getVal.myBind(obj)()",
-      "expected": "10",
-      "explanation": "Bound function uses obj as this, returns obj.val"
+      "input": "const obj = {x: 42}; function getX() { return this.x; } getX.myBind(obj)()",
+      "expected": "42",
+      "explanation": "Basic bind sets 'this' to the provided object"
     },
     {
       "name": "Partial application",
-      "input": "function add(a, b) { return a + b; } add.myBind(null, 5)(3)",
-      "expected": "8",
-      "explanation": "First arg bound to 5, second arg is 3, returns 5+3"
+      "input": "function add(a,b,c) { return a+b+c; } add.myBind(null, 1, 2)(3)",
+      "expected": "6",
+      "explanation": "Pre-fills first two args, third passed at call time"
     },
     {
       "name": "Constructor ignores thisArg",
-      "input": "function F(x) { this.x = x; } const BF = F.myBind({y:1}); (new BF(5)).x",
-      "expected": "5",
-      "explanation": "When called with new, thisArg {y:1} is ignored, x is set on new instance"
+      "input": "function Person(name) { this.name = name; } const BP = Person.myBind({x:1}); new BP('John').name",
+      "expected": "'John'",
+      "explanation": "With 'new', bound thisArg is ignored, new instance used"
     },
     {
-      "name": "instanceof works with bound constructor",
-      "input": "function F() {} const BF = F.myBind(null); (new BF()) instanceof F",
+      "name": "instanceof works",
+      "input": "function Foo() {} const BoundFoo = Foo.myBind(null); new BoundFoo() instanceof Foo",
       "expected": "true",
-      "explanation": "Prototype chain is set up correctly"
-    },
-    {
-      "name": "Empty bind - just this binding",
-      "input": "function f() { return this; } f.myBind({a:1})()",
-      "expected": "{ a: 1 }",
-      "explanation": "No partial args, just this binding"
+      "explanation": "Prototype chain correctly set up"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Using arrow function for boundFunction",
-      "why_wrong": "Arrow functions don't have their own 'this', so constructor detection fails and 'this' is always the enclosing scope",
-      "correct_approach": "Use regular function expression or function declaration",
-      "code_example_wrong": "const boundFunction = (...args) => { /* this is wrong */ };",
-      "code_example_correct": "const boundFunction = function(...args) { /* this is correct */ };"
+      "mistake": "Not handling constructor calls",
+      "why_wrong": "When used with 'new', thisArg should be ignored but naive implementation uses it",
+      "correct_approach": "Check 'this instanceof boundFn' to detect constructor invocation",
+      "code_example_wrong": "const boundFn = (...args) => originalFn.apply(thisArg, args);",
+      "code_example_correct": "const boundFn = function(...args) { const ctx = this instanceof boundFn ? this : thisArg; return originalFn.apply(ctx, args); };"
     },
     {
-      "mistake": "Forgetting prototype chain setup",
-      "why_wrong": "new boundFn() creates instance but instanceof OriginalFn returns false, prototype methods unavailable",
+      "mistake": "Using arrow function for boundFn",
+      "why_wrong": "Arrow functions don't have their own 'this', can't detect constructor calls",
+      "correct_approach": "Use regular function expression to get proper 'this' binding",
+      "code_example_wrong": "const boundFn = (...args) => { ... };",
+      "code_example_correct": "const boundFn = function(...args) { ... };"
+    },
+    {
+      "mistake": "Not setting up prototype chain",
+      "why_wrong": "instanceof checks fail for objects created with new boundFn()",
       "correct_approach": "Set boundFn.prototype = Object.create(originalFn.prototype)",
-      "code_example_wrong": "return boundFunction; // missing prototype setup",
-      "code_example_correct": "if (originalFn.prototype) { boundFunction.prototype = Object.create(originalFn.prototype); } return boundFunction;"
+      "code_example_wrong": "// Missing prototype setup",
+      "code_example_correct": "if (originalFn.prototype) { boundFn.prototype = Object.create(originalFn.prototype); }"
     },
     {
-      "mistake": "Wrong argument merge order",
-      "why_wrong": "Arguments should be: bound args first, then call-time args. Wrong order breaks partial application semantics.",
-      "correct_approach": "Always: [...boundArgs, ...args]",
-      "code_example_wrong": "originalFn.apply(context, [...args, ...boundArgs]);",
-      "code_example_correct": "originalFn.apply(context, [...boundArgs, ...args]);"
-    },
-    {
-      "mistake": "Using call() instead of apply()",
-      "why_wrong": "call() expects individual arguments, not an array. Would pass array as first argument.",
-      "correct_approach": "Use apply() which accepts array of arguments",
-      "code_example_wrong": "originalFn.call(context, allArgs);",
-      "code_example_correct": "originalFn.apply(context, allArgs);"
-    },
-    {
-      "mistake": "Always using thisArg, ignoring constructor case",
-      "why_wrong": "When called with 'new', the newly created object should be 'this', not the bound thisArg",
-      "correct_approach": "Check for constructor call and use appropriate context",
-      "code_example_wrong": "return originalFn.apply(thisArg, allArgs);",
-      "code_example_correct": "return originalFn.apply(this instanceof boundFunction ? this : thisArg, allArgs);"
+      "mistake": "Wrong argument order",
+      "why_wrong": "Putting newArgs before boundArgs breaks partial application",
+      "correct_approach": "boundArgs come first, then newArgs",
+      "code_example_wrong": "originalFn.apply(ctx, [...newArgs, ...boundArgs])",
+      "code_example_correct": "originalFn.apply(ctx, [...boundArgs, ...newArgs])"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by explaining what bind() does with a simple example. Then discuss the three requirements: this binding, partial application, and constructor behavior. Implement incrementally - first handle basic binding, then add constructor detection.",
+    "how_to_present": "Start by explaining what bind() does: 1) binds 'this', 2) partial application, 3) constructor behavior. Then implement each feature incrementally.",
     "what_to_mention": [
-      "Mention closure as the key mechanism for storing bound values",
-      "Explain why constructor case is tricky (this is ignored)",
-      "Discuss instanceof vs new.target for constructor detection",
-      "Note that this is how React's autobind used to work"
+      "Closures store the bound values",
+      "Constructor detection with instanceof",
+      "Prototype chain for inheritance",
+      "This is a classic JavaScript interview question"
     ],
-    "time_allocation": "2 min: explain bind behavior, 5 min: implement basic version, 3 min: add constructor handling, 2 min: test and discuss edge cases",
+    "time_allocation": "2 min understand, 5 min implement basic version, 3 min add constructor handling, 2 min test",
     "if_stuck": [
-      "Think about what values need to persist between bind() and calling the bound function",
-      "For constructor detection, think about what's different when using 'new'",
-      "Remember: apply() takes an array, call() takes individual arguments"
+      "Start with just thisArg binding using apply()",
+      "Add partial application with spread",
+      "Then tackle constructor case last"
     ]
   },
-  "connection_to_next_part": "The bind polyfill demonstrates deep understanding of JavaScript's this binding and closures. Part 4 might extend to implement call/apply polyfills, or explore more advanced topics like debounce/throttle which also use closures and function wrapping patterns.",
+  "connection_to_next_part": "Part 4 might extend to other Function.prototype methods like call/apply polyfills, or move to Promise polyfills. The closure and this-binding concepts transfer directly.",
   "communication_script": {
-    "transition_from_previous": "Part 2 covered async memoization with callbacks. Now for Part 3, we're shifting to a fundamental JavaScript polyfill - implementing Function.prototype.bind. This tests understanding of closures, this binding, and prototype chains.",
-    "explaining_changes": "The key challenge here is handling three scenarios: basic this binding, partial application of arguments, and correctly handling the 'new' keyword where the bound this gets ignored.",
+    "transition_from_previous": "Great, so we have memoization working for both sync and async. Now for Part 3, we're implementing a bind() polyfill. This is a different kind of problem - it's about 'this' binding and closures rather than caching.",
+    "explaining_changes": "bind() does three things: binds 'this' context, allows partial application of arguments, and works correctly when used as a constructor. The key insight is detecting constructor calls using 'this instanceof boundFn'.",
     "while_extending_code": [
-      "First, I'll capture the original function and bound values in a closure...",
-      "Now I need to detect if the bound function is being called as a constructor...",
-      "I'm using instanceof to check if 'this' is an instance of our bound function...",
-      "Setting up the prototype chain so instanceof checks work correctly..."
+      "First I'll store originalFn, thisArg, and boundArgs in a closure...",
+      "The tricky part is constructor detection - I'll use instanceof...",
+      "Don't forget the prototype chain for proper inheritance..."
     ],
-    "after_completing": "The bind polyfill is complete. It handles all three requirements: this binding, partial application, and constructor behavior. All operations are O(1). Ready to discuss edge cases or move to the next part?"
+    "after_completing": "This polyfill handles all three bind() features. Each operation is O(1). The closure pattern here is the same concept we used in memoization - storing state privately."
   },
   "time_milestones": {
     "time_budget": "10-15 minutes for this part",
-    "by_2_min": "Explained what bind does and the three requirements clearly",
-    "by_5_min": "Basic implementation with this binding and partial application working",
-    "by_8_min": "Constructor detection added, prototype chain set up",
-    "by_12_min": "Testing complete, edge cases discussed",
-    "warning_signs": "If struggling with closure concept at 5 min, simplify to just this binding first. Constructor handling can be added later."
+    "by_2_min": "Explain what bind() does and the three requirements",
+    "by_5_min": "Basic implementation with thisArg and partial application working",
+    "by_10_min": "Constructor handling added, prototype chain set up",
+    "by_15_min": "All tests passing, edge cases mentioned",
+    "warning_signs": "If still explaining at 5 min, start coding. Constructor handling is the complex part - if stuck, ask for a hint."
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "This part is largely independent of Part 2 (memoization). If you're confused, clarify with interviewer that this is a new function, not extending memoize.",
-    "if_new_requirement_unclear": "Ask: 'For the constructor behavior, should I handle edge cases like arrow functions, or focus on the main case?' Usually: focus on main case, mention edge cases verbally.",
-    "if_running_behind": "Implement basic this binding + partial application first (without constructor handling). Mention: 'For constructor case, I would check instanceof and adjust context accordingly.'"
+    "if_part_builds_wrong": "This part is independent of Parts 1-2, so previous bugs shouldn't affect it",
+    "if_new_requirement_unclear": "Ask: 'Should I handle the case where originalFn is an arrow function?' or 'Do I need to preserve the function's length property?'",
+    "if_running_behind": "Implement basic bind without constructor handling first - that's 70% of the solution. Mention constructor case verbally if time is short."
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Explaining why instanceof check works for constructor detection",
-      "Mentioning new.target as the ES6 alternative",
-      "Discussing that native bind also preserves function name/length",
-      "Noting that bound functions cannot be further bound to a new this",
-      "Connecting to how class components in React used to require manual binding"
+      "Immediately mentioning 'this instanceof boundFn' for constructor detection",
+      "Explaining why arrow functions can't be used for boundFn",
+      "Discussing Object.create vs direct prototype assignment",
+      "Mentioning that native bind also sets length and name properties"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Function Wrapper / Higher-Order Function",
+    "pattern": "Closure-based Function Wrapper",
     "indicators": [
-      "Need to create a function that wraps another function",
-      "Must preserve some context or state between calls",
-      "Original function's behavior is modified or enhanced"
+      "Need to 'remember' values for later use",
+      "Function transformation/decoration",
+      "Partial application"
     ],
     "similar_problems": [
-      "Implementing call() and apply() polyfills",
-      "Debounce and throttle functions",
-      "Memoization (which we did in Parts 1-2)",
-      "Function currying implementation"
+      "Debounce/throttle implementation",
+      "Curry function",
+      "Once function (run only once)",
+      "Memoization (previous parts)"
     ],
-    "template": "```javascript\nfunction wrapper(originalFn, ...config) {\n    // Store config in closure\n    return function(...args) {\n        // Use stored config + args\n        return originalFn.apply(/* context */, /* modified args */);\n    };\n}\n```"
+    "template": "function wrapper(...closureArgs) { return function(...callArgs) { /* use both closureArgs and callArgs */ }; }"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "bind() returns a NEW function, so I need a closure to remember the bound values",
-      "why": "Closures are JavaScript's mechanism for state persistence across calls"
+      "thought": "bind() returns a function, so I need a closure",
+      "why": "The returned function needs access to originalFn, thisArg, and boundArgs"
     },
     {
       "step": 2,
-      "thought": "I need to merge bound args with call-time args - what order?",
-      "why": "Partial application means bound args come first, enabling patterns like greet.bind(null, 'Hello')"
+      "thought": "For partial application, merge boundArgs with newArgs",
+      "why": "bind(null, 1, 2)(3) should call original with (1, 2, 3)"
     },
     {
       "step": 3,
-      "thought": "The constructor case is special - how do I detect 'new' was used?",
-      "why": "In constructor calls, 'this' is a new object whose prototype is boundFn.prototype"
+      "thought": "Constructor detection is tricky - can't use arrow function",
+      "why": "Need 'this' to check instanceof, arrow functions don't have their own 'this'"
     },
     {
       "step": 4,
-      "thought": "For instanceof to work, I need proper prototype chain setup",
-      "why": "new boundFn() should pass: result instanceof originalFn"
+      "thought": "Prototype chain needed for instanceof to work",
+      "why": "new boundFn() should produce object that is instanceof originalFn"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Deep understanding of JavaScript's this binding rules",
-      "Knowledge of closures and how they preserve state",
-      "Understanding of prototypes and constructor behavior",
-      "Ability to handle tricky edge cases like 'new' keyword"
+      "Understanding of JavaScript's 'this' binding",
+      "Knowledge of closures",
+      "Handling edge cases (constructor)",
+      "Clean implementation"
     ],
     "bonus_points": [
-      "Discussing difference between call, apply, and bind",
-      "Mentioning that bind was added in ES5",
-      "Explaining lexical this of arrow functions",
-      "Connecting to real-world usage in React class components"
+      "Explaining why regular function needed (not arrow)",
+      "Mentioning Object.create for prototype",
+      "Discussing chained binds behavior"
     ],
     "red_flags": [
-      "Not understanding what bind() does at all",
-      "Confusing 'this' in different contexts",
-      "Using arrow function when regular function is needed",
-      "Completely missing the constructor case"
+      "Not knowing what bind() does",
+      "Using arrow function for boundFn",
+      "Forgetting constructor handling",
+      "Not setting up prototype"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Use AI to remember exact syntax for Object.create",
-      "Let it help with test case boilerplate",
-      "Ask for edge case examples"
+      "Use AI for syntax of Object.create",
+      "Let it help with spread operator usage"
     ],
     "what_not_to_do": [
-      "Don't accept AI's bind implementation without understanding each line",
-      "Be careful with AI suggestions about new.target (browser support)",
-      "Verify prototype chain setup is correct"
+      "Don't accept solution without understanding instanceof check",
+      "Verify the prototype chain setup is correct"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping to code without explaining approach",
-      "Not testing the constructor case",
-      "Ignoring the partial application requirement"
+      "Saying 'I don't know what bind does'",
+      "Skipping directly to code without explaining approach"
     ],
     "technical": [
-      "Using 'this' incorrectly in arrow function",
-      "Missing prototype chain setup",
-      "Incorrect argument order in merge"
+      "Using arrow function for boundFn",
+      "Missing constructor handling entirely",
+      "Wrong argument merge order"
     ],
     "communication": [
-      "Not explaining why constructor case is special",
-      "Forgetting to mention what native bind does",
-      "Not walking through an example"
+      "Not explaining the three requirements of bind",
+      "Not mentioning why instanceof check is needed"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
       "Does basic this binding work?",
-      "Does partial application work with correct argument order?",
-      "Does constructor invocation work (thisArg ignored, instanceof correct)?",
-      "Is the prototype chain set up correctly?",
-      "Did I trace through at least one example?"
+      "Does partial application work?",
+      "Does constructor case ignore thisArg?",
+      "Is prototype chain set up correctly?"
     ],
     "quick_code_review": [
-      "Using regular function, not arrow function, for boundFunction",
-      "Using apply(), not call(), for passing args array",
-      "Prototype chain setup before return",
-      "Constructor detection using instanceof or new.target"
+      "Using regular function, not arrow function for boundFn",
+      "Checking originalFn.prototype before Object.create",
+      "boundArgs before newArgs in merge"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Preserve function.name property (Object.defineProperty)",
-      "Preserve function.length (number of expected parameters)",
-      "Add Symbol.hasInstance support for custom instanceof behavior",
-      "Handle exotic objects and edge cases per spec"
+      "Preserve function's name and length properties",
+      "Handle Symbol.hasInstance",
+      "Add TypeScript types"
     ],
-    "why_not_in_interview": "These are spec compliance details. Interview focuses on core algorithm and understanding.",
-    "how_to_mention": "Say: 'In a real polyfill, I'd also preserve the name and length properties using Object.defineProperty, but the core logic is what we have here.'"
+    "why_not_in_interview": "Core algorithm is what matters; these are polish items",
+    "how_to_mention": "Say: 'In production, I'd also preserve the length and name properties that native bind sets.'"
   },
-  "generated_at": "2026-01-18T21:47:02.816072",
+  "generated_at": "2026-01-19T04:52:58.466126",
   "_meta": {
     "problem_id": "javascript_polyfills_and_memoization",
     "part_number": 3,

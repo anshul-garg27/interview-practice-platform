@@ -4,48 +4,40 @@
   "builds_on": "Part 3",
   "difficulty": "easy",
   "problem_understanding": {
-    "what_changes": "Part 4 shifts from function manipulation (bind) to type checking. We implement Array.isArray, a utility function that reliably determines if a value is an array. Unlike typeof or instanceof, this must work across JavaScript realms (iframes) and handle all edge cases.",
+    "what_changes": "Part 4 adds a utility function for type checking that's independent of the previous memoization and bind implementations. This is a standalone polyfill that demonstrates understanding of JavaScript's type system quirks and the reliable Object.prototype.toString technique.",
     "new_requirements": [
-      "Return true only for actual Array instances",
-      "Handle null/undefined without throwing",
-      "Work across iframe boundaries (cross-realm)",
-      "Not be fooled by array-like objects"
+      "Implement isArray() that returns true only for actual arrays",
+      "Handle null, undefined, and array-like objects correctly",
+      "Use the Object.prototype.toString technique for cross-realm safety"
     ],
     "new_constraints": [
-      "O(1) time complexity",
-      "Must use reliable detection method",
-      "Cannot rely on instanceof or constructor checks"
+      "Must work across iframes (instanceof fails)",
+      "Must not be fooled by array-like objects ({length: 0})",
+      "Must handle null/undefined without throwing"
     ],
-    "key_insight": "Object.prototype.toString.call(value) returns an internal [[Class]] tag that uniquely identifies arrays as '[object Array]', regardless of where the array was created."
+    "key_insight": "Object.prototype.toString.call(value) returns '[object Array]' for arrays - this internal [[Class]] tag cannot be forged and works across JavaScript realms."
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Detect arrays correctly",
-        "how_met": "Use Object.prototype.toString.call() which returns '[object Array]' for arrays",
+        "requirement": "Return true for actual arrays",
+        "how_met": "Object.prototype.toString.call returns '[object Array]' only for true arrays",
         "gotchas": [
-          "Don't forget the .call() - toString() alone returns different result"
+          "Don't use typeof which returns 'object' for arrays"
+        ]
+      },
+      {
+        "requirement": "Return false for array-like objects",
+        "how_met": "toString returns '[object Object]' for plain objects regardless of length property",
+        "gotchas": [
+          "NodeList, arguments object, strings have length but aren't arrays"
         ]
       },
       {
         "requirement": "Handle null/undefined safely",
-        "how_met": "Object.prototype.toString.call(null) returns '[object Null]', not throwing",
+        "how_met": "toString.call(null) returns '[object Null]', not '[object Array]'",
         "gotchas": [
-          "Some approaches like obj.constructor would throw on null"
-        ]
-      },
-      {
-        "requirement": "Work across realms/iframes",
-        "how_met": "toString approach uses internal [[Class]] slot, not constructor reference",
-        "gotchas": [
-          "instanceof fails because each iframe has its own Array constructor"
-        ]
-      },
-      {
-        "requirement": "Reject array-like objects",
-        "how_met": "Array-likes return '[object Object]' or '[object String]', not '[object Array]'",
-        "gotchas": [
-          "Objects with length property are NOT arrays"
+          "typeof null === 'object' is a JavaScript quirk"
         ]
       }
     ],
@@ -54,358 +46,328 @@
         "operation": "isArray",
         "target": "O(1)",
         "achieved": "O(1)",
-        "why": "Single internal [[Class]] lookup and string comparison"
+        "why": "Single method call and string comparison"
       }
     ],
     "non_goals": [
-      "Detecting TypedArrays (Uint8Array, etc.)",
-      "Checking if something is 'array-like'",
-      "Deep array inspection"
+      "Type narrowing for TypeScript (bonus)",
+      "Supporting subclasses of Array differently"
     ]
   },
   "assumptions": [
-    "Object.prototype.toString is not overridden (standard assumption for polyfills)",
-    "We're implementing as a standalone function, not modifying Array prototype",
-    "The environment may or may not have native Array.isArray"
+    "We're implementing the ES5+ Array.isArray behavior",
+    "Cross-realm arrays should return true (main use case for this polyfill)",
+    "We don't need to handle proxied arrays specially"
   ],
   "tradeoffs": [
     {
-      "decision": "Object.prototype.toString vs instanceof",
-      "chosen": "Object.prototype.toString",
-      "why": "Works across realms/iframes where instanceof fails",
+      "decision": "toString vs instanceof",
+      "chosen": "Object.prototype.toString.call()",
+      "why": "Works across iframes/realms where instanceof fails",
       "alternative": "instanceof Array",
-      "when_to_switch": "Never for production polyfill; instanceof only if single-realm guaranteed"
+      "when_to_switch": "Never for polyfill; instanceof is simpler but broken for cross-realm"
     },
     {
-      "decision": "Direct string comparison vs regex",
-      "chosen": "Direct string comparison",
-      "why": "Faster and simpler; exact match needed anyway",
-      "alternative": "/^\\[object Array\\]$/.test(...)",
-      "when_to_switch": "Never - no benefit to regex here"
+      "decision": "Constructor check vs toString",
+      "chosen": "toString",
+      "why": "Constructor can be overwritten",
+      "alternative": "arr.constructor === Array",
+      "when_to_switch": "Never; constructor can be modified"
     }
   ],
   "extensibility_notes": {
     "what_to_keep_stable": [
-      "Function signature: isArray(obj) -> boolean",
-      "Return type always boolean"
+      "Function signature isArray(obj)",
+      "Return type boolean"
     ],
     "what_to_change": [
-      "Could add isTypedArray, isArrayLike as separate utilities"
+      "This is a simple standalone function, unlikely to need extension"
     ],
-    "interfaces_and_boundaries": "This is a pure utility function - can be combined with other type-checking utilities into a type-check module",
+    "interfaces_and_boundaries": "isArray is a pure function with no side effects, can be used anywhere",
     "invariants": [
       "Always returns boolean",
-      "Never throws for any input",
-      "Consistent with native Array.isArray behavior"
+      "Never throws for any input"
     ]
   },
   "visual_explanation": {
-    "before_after": "```\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551           WHY OTHER APPROACHES FAIL                                \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                                    \u2551\n\u2551  typeof [1,2,3]    \u2192 'object'     \u274c Same as {}                   \u2551\n\u2551  typeof null       \u2192 'object'     \u274c JavaScript quirk             \u2551\n\u2551                                                                    \u2551\n\u2551  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500    \u2551\n\u2551                                                                    \u2551\n\u2551  arr instanceof Array     \u2192 true  \u2713 Works in same realm           \u2551\n\u2551  iframeArr instanceof Array \u2192 false \u274c Different Array constructor \u2551\n\u2551                                                                    \u2551\n\u2551  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500    \u2551\n\u2551                                                                    \u2551\n\u2551  arr.constructor === Array \u2192 true  \u26a0\ufe0f Can be overwritten          \u2551\n\u2551  const fake = {}; fake.constructor = Array; \u2192 bypassed!           \u2551\n\u2551                                                                    \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551           THE RELIABLE SOLUTION                                    \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                                    \u2551\n\u2551  Object.prototype.toString.call(value)                            \u2551\n\u2551                                                                    \u2551\n\u2551  [1,2,3]      \u2192 '[object Array]'   \u2713                              \u2551\n\u2551  {}           \u2192 '[object Object]'  \u2713                              \u2551\n\u2551  null         \u2192 '[object Null]'    \u2713                              \u2551\n\u2551  'string'     \u2192 '[object String]'  \u2713                              \u2551\n\u2551  {length: 0}  \u2192 '[object Object]'  \u2713 Array-like correctly rejected\u2551\n\u2551  new Array()  \u2192 '[object Array]'   \u2713                              \u2551\n\u2551  iframeArr    \u2192 '[object Array]'   \u2713 Works across realms!        \u2551\n\u2551                                                                    \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d\n```",
-    "algorithm_flow": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    isArray(value)                           \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                      \u2502\n                      \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502    Object.prototype.toString.call(value)                    \u2502\n\u2502                                                             \u2502\n\u2502    This accesses the internal [[Class]] property            \u2502\n\u2502    of the value and returns it as a string                  \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                      \u2502\n                      \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502    Result === '[object Array]' ?                            \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n          \u2502 YES                               \u2502 NO\n          \u25bc                                   \u25bc\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502 return true \u2502                   \u2502 return false\u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```"
+    "before_after": "```\nBEFORE (typeof check - BROKEN):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 typeof []     \u2192 'object' \u274c   \u2502\n\u2502 typeof {}     \u2192 'object'      \u2502\n\u2502 typeof null   \u2192 'object'      \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nAll return 'object'! Can't distinguish.\n\nAFTER (toString check - CORRECT):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 toString.call([])   \u2192 '[object Array]' \u2713  \u2502\n\u2502 toString.call({})   \u2192 '[object Object]'   \u2502\n\u2502 toString.call(null) \u2192 '[object Null]'     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nEach type has unique string!\n```",
+    "algorithm_flow": "```\nisArray(value):\n  1. Call Object.prototype.toString with value as 'this'\n  2. Get internal [[Class]] tag as string\n  3. Compare with '[object Array]'\n  4. Return true/false\n\nExample:\n  isArray([1,2,3])\n  \u2514\u2500> toString.call([1,2,3])\n      \u2514\u2500> '[object Array]'\n          \u2514\u2500> === '[object Array]' \u2192 true\n\n  isArray({length: 0})\n  \u2514\u2500> toString.call({length:0})\n      \u2514\u2500> '[object Object]'\n          \u2514\u2500> === '[object Array]' \u2192 false\n```"
   },
   "approaches": [
     {
-      "name": "typeof Approach",
-      "description": "Check if typeof value === 'object' && Array.isArray",
+      "name": "typeof Check (Broken)",
+      "description": "Check if typeof value === 'object' && typeof value.length === 'number'",
       "time_complexity": "O(1)",
       "space_complexity": "O(1)",
-      "why_not_optimal": "typeof returns 'object' for arrays, objects, AND null - cannot distinguish arrays"
+      "why_not_optimal": "Returns true for strings, NodeList, arguments, and array-like objects. Also fails for null."
     },
     {
-      "name": "instanceof Approach",
+      "name": "instanceof Check (Partially Broken)",
       "description": "Check value instanceof Array",
       "time_complexity": "O(1)",
       "space_complexity": "O(1)",
-      "why_not_optimal": "Fails across iframes/realms because each realm has its own Array constructor"
+      "why_not_optimal": "Fails across iframes - each iframe has its own Array constructor."
     },
     {
-      "name": "Constructor Check",
-      "description": "Check value.constructor === Array",
+      "name": "Object.prototype.toString (Optimal)",
+      "description": "Use Object.prototype.toString.call(value) === '[object Array]'",
       "time_complexity": "O(1)",
       "space_complexity": "O(1)",
-      "why_not_optimal": "constructor property can be overwritten; also fails across realms"
-    },
-    {
-      "name": "Optimal: Object.prototype.toString",
-      "description": "Use Object.prototype.toString.call(value) to get internal [[Class]] tag",
-      "time_complexity": "O(1)",
-      "space_complexity": "O(1)",
-      "key_insight": "The internal [[Class]] tag cannot be spoofed and works across realms"
+      "key_insight": "The internal [[Class]] tag is reliable, cannot be forged, and works across realms."
     }
   ],
   "optimal_solution": {
-    "explanation_md": "## The Definitive Array.isArray Implementation\\n\\n### Why Object.prototype.toString Works\\n\\nEvery JavaScript value has an internal **[[Class]]** property that identifies its type. When you call `Object.prototype.toString.call(value)`, it returns this internal tag in the format `'[object Type]'`.\\n\\n**Key advantages:**\\n1. **Cross-realm safe**: The [[Class]] tag is intrinsic to the value, not dependent on constructor references\\n2. **Immutable**: Cannot be spoofed by setting properties on the object\\n3. **Null-safe**: Returns '[object Null]' for null, '[object Undefined]' for undefined\\n\\n### The Implementation\\n\\n```javascript\\nfunction isArray(obj) {\\n  return Object.prototype.toString.call(obj) === '[object Array]';\\n}\\n```\\n\\n### Why We Use .call()\\n\\n**Critical detail**: We must use `.call(obj)` because:\\n- `toString()` alone would use `this` context (usually Window/global)\\n- `obj.toString()` uses the object's own toString (usually overridden)\\n- `Object.prototype.toString.call(obj)` forces using the original method with obj as `this`",
-    "data_structures": [
-      {
-        "structure": "String literal",
-        "purpose": "Compare against '[object Array]' tag"
-      }
-    ],
+    "explanation_md": "The **Object.prototype.toString** method returns a string like `'[object Type]'` where Type is the internal `[[Class]]` of the value. For arrays, this is always `'[object Array]'`.\n\n**Why this works:**\n1. The `[[Class]]` internal slot is set when the object is created\n2. It cannot be changed or spoofed\n3. It's the same regardless of which realm created the array\n\n**Key Point:** We must use `.call(value)` to set the `this` context, otherwise toString would be called on the prototype object itself.",
+    "data_structures": [],
     "algorithm_steps": [
-      "Step 1: Call Object.prototype.toString with the value as `this` context",
-      "Step 2: Compare the returned string with '[object Array]'",
-      "Step 3: Return true if equal, false otherwise"
+      "Step 1: Call Object.prototype.toString.call(value) to get the type string",
+      "Step 2: Compare result with '[object Array]'",
+      "Step 3: Return true if match, false otherwise"
     ]
   },
   "solution_python_lines": [
     "\"\"\"",
-    "Array.isArray Polyfill Implementation",
+    "Part 4: Array.isArray Polyfill - Python Conceptual Equivalent",
     "",
-    "This module demonstrates the Array.isArray polyfill concept",
-    "translated to Python for educational purposes.",
-    "",
-    "In Python, we use isinstance(obj, list) but this shows",
-    "the JavaScript concept.",
+    "Note: Python doesn't have cross-realm issues like JavaScript.",
+    "The JavaScript implementation is the canonical solution.",
     "\"\"\"",
-    "from typing import Any",
+    "from functools import wraps, partial",
+    "from typing import Callable, Any, Tuple",
     "",
     "",
+    "# ============ Part 1 & 2: Previous implementations (unchanged) ============",
+    "# (memoize and memoize_async from previous parts remain here)",
+    "",
+    "",
+    "# ============ Part 3: Bind Polyfill Concept (unchanged) ============",
+    "def my_bind(fn: Callable, this_arg: Any, *bound_args) -> Callable:",
+    "    \"\"\"Python equivalent of JavaScript's Function.prototype.bind.\"\"\"",
+    "    @wraps(fn)",
+    "    def bound(*new_args):",
+    "        all_args = bound_args + new_args",
+    "        return fn(this_arg, *all_args)",
+    "    return bound",
+    "",
+    "",
+    "class MethodBinder:",
+    "    \"\"\"Class-based binder simulating constructor behavior.\"\"\"",
+    "    ",
+    "    def __init__(self, fn: Callable, this_arg: Any, *bound_args):",
+    "        self.fn = fn",
+    "        self.this_arg = this_arg",
+    "        self.bound_args = bound_args",
+    "    ",
+    "    def __call__(self, *new_args):",
+    "        all_args = self.bound_args + new_args",
+    "        return self.fn(self.this_arg, *all_args)",
+    "    ",
+    "    def construct(self, *new_args):",
+    "        all_args = self.bound_args + new_args",
+    "        return self.fn(None, *all_args)",
+    "",
+    "",
+    "# ============ Part 4: Array.isArray Polyfill ============",
     "def is_array(obj: Any) -> bool:",
     "    \"\"\"",
-    "    Check if a value is an array (list in Python).",
+    "    Check if obj is an array (list in Python).",
     "    ",
-    "    In JavaScript, this would be implemented as:",
-    "    Object.prototype.toString.call(obj) === '[object Array]'",
-    "    ",
-    "    Args:",
-    "        obj: Any value to check",
-    "        ",
-    "    Returns:",
-    "        True if obj is a list/array, False otherwise",
+    "    Python equivalent of JavaScript's Array.isArray().",
+    "    Uses isinstance() since Python doesn't have cross-realm issues.",
     "    \"\"\"",
     "    return isinstance(obj, list)",
     "",
     "",
-    "def is_array_js_style(obj: Any) -> bool:",
-    "    \"\"\"",
-    "    Mimics JavaScript's Object.prototype.toString approach.",
-    "    ",
-    "    Uses Python's type().__name__ to get the type string,",
-    "    similar to how JS uses [[Class]] internal property.",
-    "    \"\"\"",
-    "    type_string = type(obj).__name__",
-    "    return type_string == 'list'",
+    "# JavaScript canonical solution",
+    "JAVASCRIPT_IS_ARRAY = '''",
+    "/**",
+    " * Part 4: Array.isArray Polyfill",
+    " * ",
+    " * Why different approaches fail:",
+    " * - typeof: returns 'object' for arrays, objects, and null",
+    " * - instanceof: fails across iframes (different Array constructors)",
+    " * - constructor check: can be overwritten",
+    " * ",
+    " * Object.prototype.toString returns internal [[Class]] tag",
+    " * that cannot be forged and works across realms.",
+    " */",
+    "function isArray(value) {",
+    "    return Object.prototype.toString.call(value) === '[object Array]';",
+    "}",
+    "",
+    "// Alternative: Attach to Array if not present",
+    "if (!Array.isArray) {",
+    "    Array.isArray = function(value) {",
+    "        return Object.prototype.toString.call(value) === '[object Array]';",
+    "    };",
+    "}",
+    "'''",
     "",
     "",
-    "# ============================================================",
-    "# DEMONSTRATION",
-    "# ============================================================",
-    "",
-    "def main():",
-    "    print(\"=\" * 60)",
-    "    print(\"ARRAY.ISARRAY POLYFILL DEMONSTRATION\")",
-    "    print(\"=\" * 60)",
-    "    print()",
+    "if __name__ == '__main__':",
+    "    print('=' * 60)",
+    "    print('ARRAY.ISARRAY POLYFILL (Python Equivalent)')",
+    "    print('=' * 60)",
     "    ",
-    "    # Test cases matching JavaScript examples",
-    "    test_cases = [",
-    "        ([], \"[]\"),",
-    "        ([1, 2, 3], \"[1, 2, 3]\"),",
-    "        ({}, \"{}\"),",
-    "        ({'length': 0}, \"{'length': 0} (array-like)\"),",
-    "        (None, \"None (null)\"),",
-    "        (\"array\", \"'array' (string)\"),",
-    "        (123, \"123 (number)\"),",
-    "        (True, \"True (boolean)\"),",
-    "        (lambda x: x, \"lambda (function)\"),",
-    "    ]",
+    "    # Test 1: Actual arrays",
+    "    print('\\n[Test 1] Actual arrays:')",
+    "    print(f'  is_array([])         = {is_array([])}')",
+    "    print(f'  is_array([1, 2, 3])  = {is_array([1, 2, 3])}')",
+    "    print(f'  is_array(list())     = {is_array(list())}')",
     "    ",
-    "    print(\"Testing isArray polyfill:\")",
-    "    print(\"-\" * 50)",
+    "    # Test 2: Array-like objects (should be False)",
+    "    print('\\n[Test 2] Array-like objects:')",
+    "    print(f'  is_array(\"array\")        = {is_array(\"array\")}')",
+    "    print(f'  is_array({{\"length\": 0}}) = {is_array({\"length\": 0})}')",
+    "    print(f'  is_array((1, 2, 3))      = {is_array((1, 2, 3))}')",
     "    ",
-    "    for value, description in test_cases:",
-    "        result = is_array(value)",
-    "        status = \"ARRAY\" if result else \"NOT ARRAY\"",
-    "        print(f\"  isArray({description:30}) -> {result:5} [{status}]\")",
+    "    # Test 3: Edge cases",
+    "    print('\\n[Test 3] Edge cases:')",
+    "    print(f'  is_array(None)      = {is_array(None)}')",
+    "    print(f'  is_array(42)        = {is_array(42)}')",
+    "    print(f'  is_array({{}})        = {is_array({})}')",
     "    ",
-    "    print()",
-    "    print(\"=\" * 60)",
-    "    print(\"KEY INSIGHT: Why Object.prototype.toString.call() works\")",
-    "    print(\"=\" * 60)",
-    "    print()",
-    "    print(\"  In JavaScript:\")",
-    "    print(\"  - typeof [] returns 'object' (not helpful)\")",
-    "    print(\"  - instanceof fails across iframes\")",
-    "    print(\"  - constructor can be spoofed\")",
-    "    print()",
-    "    print(\"  Object.prototype.toString.call() returns:\")",
+    "    # Test 4: Demonstrating why typeof fails in JS",
+    "    print('\\n[Test 4] Why typeof fails in JavaScript:')",
+    "    print('  typeof []     -> \"object\"  (not useful!)')",
+    "    print('  typeof {}     -> \"object\"')",
+    "    print('  typeof null   -> \"object\"')",
+    "    print('\\n  But Object.prototype.toString.call():')",
+    "    print('  toString([])     -> \"[object Array]\"   \u2713')",
+    "    print('  toString({})     -> \"[object Object]\"')",
+    "    print('  toString(null)   -> \"[object Null]\"')",
     "    ",
-    "    js_examples = [",
-    "        (\"[]\", \"[object Array]\"),",
-    "        (\"{}\", \"[object Object]\"),",
-    "        (\"null\", \"[object Null]\"),",
-    "        (\"undefined\", \"[object Undefined]\"),",
-    "        (\"'string'\", \"[object String]\"),",
-    "        (\"42\", \"[object Number]\"),",
-    "        (\"function(){}\", \"[object Function]\"),",
-    "    ]",
-    "    ",
-    "    for value, result in js_examples:",
-    "        print(f\"    {value:20} -> {result}\")",
-    "    ",
-    "    print()",
-    "    print(\"=\" * 60)",
-    "    print(\"CROSS-REALM PROBLEM EXPLANATION\")",
-    "    print(\"=\" * 60)",
-    "    print()",
-    "    print(\"  Main Window:     iframe.contentWindow:\")",
-    "    print(\"  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\")",
-    "    print(\"  \u2502 Array       \u2502  \u2502 Array       \u2502  <- Different constructors!\")",
-    "    print(\"  \u2502 (constructor\u2502  \u2502 (constructor\u2502\")",
-    "    print(\"  \u2502  reference) \u2502  \u2502  reference) \u2502\")",
-    "    print(\"  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\")",
-    "    print()",
-    "    print(\"  iframeArr instanceof window.Array  \u2192 false  \u274c\")",
-    "    print(\"  Object.prototype.toString.call()   \u2192 true   \u2713\")",
-    "    print()",
-    "",
-    "",
-    "if __name__ == \"__main__\":",
-    "    main()"
+    "    print('\\n' + '=' * 60)",
+    "    print('JavaScript canonical solution:')",
+    "    print(JAVASCRIPT_IS_ARRAY)",
+    "    print('=' * 60)"
   ],
   "solution_java_lines": [
     "import java.util.*;",
+    "import java.util.function.*;",
     "",
     "/**",
-    " * Array.isArray Polyfill Implementation in Java",
+    " * Part 4: Array.isArray Polyfill - Java Conceptual Equivalent",
     " * ",
-    " * Demonstrates the concept of the JavaScript Array.isArray polyfill.",
-    " * In Java, we use instanceof or Class.isArray() for similar functionality.",
+    " * Java has proper array types, so instanceof works fine.",
+    " * The JavaScript implementation is the canonical solution.",
     " */",
     "public class ArrayIsArrayPolyfill {",
     "    ",
+    "    // ============ Part 3: Bind Polyfill (unchanged) ============",
+    "    @FunctionalInterface",
+    "    public interface VarArgsFunction<R> {",
+    "        R apply(Object... args);",
+    "    }",
+    "    ",
+    "    @FunctionalInterface",
+    "    public interface BoundMethod<T, R> {",
+    "        R apply(T thisArg, Object... args);",
+    "    }",
+    "    ",
+    "    public static <R> VarArgsFunction<R> bind(",
+    "            VarArgsFunction<R> fn, Object... boundArgs) {",
+    "        return (Object... newArgs) -> {",
+    "            Object[] allArgs = new Object[boundArgs.length + newArgs.length];",
+    "            System.arraycopy(boundArgs, 0, allArgs, 0, boundArgs.length);",
+    "            System.arraycopy(newArgs, 0, allArgs, boundArgs.length, newArgs.length);",
+    "            return fn.apply(allArgs);",
+    "        };",
+    "    }",
+    "    ",
+    "    // ============ Part 4: Array.isArray Polyfill ============",
+    "    ",
     "    /**",
-    "     * Check if an object is an array.",
+    "     * Check if obj is an array.",
+    "     * Java equivalent of JavaScript's Array.isArray().",
     "     * ",
-    "     * In JavaScript: Object.prototype.toString.call(obj) === '[object Array]'",
-    "     * In Java: We use Class.isArray() method",
-    "     * ",
-    "     * @param obj The value to check",
-    "     * @return true if obj is an array, false otherwise",
+    "     * In Java, Class.isArray() reliably detects array types.",
+    "     * Works for Object[], int[], String[], etc.",
     "     */",
     "    public static boolean isArray(Object obj) {",
-    "        if (obj == null) {",
-    "            return false;",
-    "        }",
-    "        return obj.getClass().isArray();",
+    "        return obj != null && obj.getClass().isArray();",
     "    }",
     "    ",
     "    /**",
-    "     * Alternative: Check if object is a List (closer to JS array behavior)",
+    "     * Check if obj is specifically an Object array (not primitive).",
+    "     * Closer to JavaScript arrays which are always Object arrays.",
     "     */",
-    "    public static boolean isListOrArray(Object obj) {",
-    "        if (obj == null) {",
-    "            return false;",
-    "        }",
-    "        return obj.getClass().isArray() || obj instanceof List;",
+    "    public static boolean isObjectArray(Object obj) {",
+    "        return obj instanceof Object[];",
     "    }",
     "    ",
-    "    /**",
-    "     * Get type string similar to JavaScript's Object.prototype.toString",
-    "     */",
-    "    public static String getTypeString(Object obj) {",
-    "        if (obj == null) {",
-    "            return \"[object Null]\";",
+    "    // JavaScript canonical solution",
+    "    public static final String JAVASCRIPT_SOLUTION = \"\"\"",
+    "        /**",
+    "         * Part 4: Array.isArray Polyfill",
+    "         */",
+    "        function isArray(value) {",
+    "            return Object.prototype.toString.call(value) === '[object Array]';",
     "        }",
     "        ",
-    "        Class<?> clazz = obj.getClass();",
-    "        ",
-    "        if (clazz.isArray()) {",
-    "            return \"[object Array]\";",
-    "        } else if (obj instanceof String) {",
-    "            return \"[object String]\";",
-    "        } else if (obj instanceof Number) {",
-    "            return \"[object Number]\";",
-    "        } else if (obj instanceof Boolean) {",
-    "            return \"[object Boolean]\";",
-    "        } else if (obj instanceof Map) {",
-    "            return \"[object Object]\";",
-    "        } else if (obj instanceof List) {",
-    "            return \"[object Array]\";",
+    "        // Attach to Array if not present",
+    "        if (!Array.isArray) {",
+    "            Array.isArray = function(value) {",
+    "                return Object.prototype.toString.call(value) === '[object Array]';",
+    "            };",
     "        }",
-    "        return \"[object Object]\";",
-    "    }",
-    "    ",
-    "    // ============================================================",
-    "    // DEMONSTRATION",
-    "    // ============================================================",
+    "        \"\"\";",
     "    ",
     "    public static void main(String[] args) {",
     "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"ARRAY.ISARRAY POLYFILL DEMONSTRATION (Java)\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println();",
-    "        ",
-    "        // Test cases",
-    "        Object[] testCases = {",
-    "            new int[]{1, 2, 3},",
-    "            new String[]{\"a\", \"b\"},",
-    "            new Object[0],",
-    "            new ArrayList<>(Arrays.asList(1, 2, 3)),",
-    "            new HashMap<String, Integer>(),",
-    "            \"string\",",
-    "            42,",
-    "            null,",
-    "            true",
-    "        };",
-    "        ",
-    "        String[] descriptions = {",
-    "            \"int[]{1,2,3}\",",
-    "            \"String[]{\\\"a\\\",\\\"b\\\"}\",",
-    "            \"new Object[0]\",",
-    "            \"ArrayList\",",
-    "            \"HashMap (object-like)\",",
-    "            \"\\\"string\\\"\",",
-    "            \"42 (Integer)\",",
-    "            \"null\",",
-    "            \"true (Boolean)\"",
-    "        };",
-    "        ",
-    "        System.out.println(\"Testing isArray polyfill:\");",
-    "        System.out.println(\"-\".repeat(50));",
-    "        ",
-    "        for (int i = 0; i < testCases.length; i++) {",
-    "            boolean result = isArray(testCases[i]);",
-    "            String status = result ? \"ARRAY\" : \"NOT ARRAY\";",
-    "            System.out.printf(\"  isArray(%-25s) -> %-5b [%s]%n\",",
-    "                descriptions[i], result, status);",
-    "        }",
-    "        ",
-    "        System.out.println();",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"TYPE STRINGS (like JS Object.prototype.toString):\");",
+    "        System.out.println(\"ARRAY.ISARRAY POLYFILL (Java Equivalent)\");",
     "        System.out.println(\"=\".repeat(60));",
     "        ",
-    "        for (int i = 0; i < testCases.length; i++) {",
-    "            String typeStr = getTypeString(testCases[i]);",
-    "            System.out.printf(\"  %-25s -> %s%n\", descriptions[i], typeStr);",
-    "        }",
+    "        // Test 1: Actual arrays",
+    "        System.out.println(\"\\n[Test 1] Actual arrays:\");",
+    "        System.out.println(\"  isArray(new int[0])       = \" + isArray(new int[0]));",
+    "        System.out.println(\"  isArray(new Object[]{1})  = \" + isArray(new Object[]{1, 2}));",
+    "        System.out.println(\"  isArray(new String[]{})   = \" + isArray(new String[]{}));",
     "        ",
-    "        System.out.println();",
+    "        // Test 2: Non-arrays (should be False)",
+    "        System.out.println(\"\\n[Test 2] Non-arrays:\");",
+    "        System.out.println(\"  isArray(\\\"array\\\")       = \" + isArray(\"array\"));",
+    "        System.out.println(\"  isArray(new ArrayList()) = \" + isArray(new ArrayList<>()));",
+    "        System.out.println(\"  isArray(new HashMap())   = \" + isArray(new HashMap<>()));",
+    "        ",
+    "        // Test 3: Edge cases",
+    "        System.out.println(\"\\n[Test 3] Edge cases:\");",
+    "        System.out.println(\"  isArray(null)    = \" + isArray(null));",
+    "        System.out.println(\"  isArray(42)      = \" + isArray(42));",
+    "        System.out.println(\"  isArray(3.14)    = \" + isArray(3.14));",
+    "        ",
+    "        // Test 4: Object arrays vs primitive arrays",
+    "        System.out.println(\"\\n[Test 4] Object vs primitive arrays:\");",
+    "        System.out.println(\"  isObjectArray(new int[]{1})    = \" + isObjectArray(new int[]{1}));",
+    "        System.out.println(\"  isObjectArray(new Integer[]{}) = \" + isObjectArray(new Integer[]{}));",
+    "        ",
+    "        System.out.println(\"\\n\" + \"=\".repeat(60));",
+    "        System.out.println(\"JavaScript canonical solution:\");",
+    "        System.out.println(JAVASCRIPT_SOLUTION);",
     "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println(\"THE JAVASCRIPT SOLUTION:\");",
-    "        System.out.println(\"=\".repeat(60));",
-    "        System.out.println();",
-    "        System.out.println(\"  function isArray(obj) {\");",
-    "        System.out.println(\"    return Object.prototype.toString.call(obj)\");",
-    "        System.out.println(\"           === '[object Array]';\");",
-    "        System.out.println(\"  }\");",
-    "        System.out.println();",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-15",
-      "explanation": "JavaScript implementation: The core isArray function using Object.prototype.toString.call(). This is the entire polyfill - remarkably simple once you know the trick."
+      "lines": "1-5",
+      "explanation": "Imports and class declaration with documentation"
     },
     {
-      "lines": "17-35",
-      "explanation": "Alternative implementations showing WHY other approaches fail - typeof, instanceof, and constructor checks all have edge cases."
+      "lines": "38-48",
+      "explanation": "isArray method: null check + Class.isArray() for reliable detection"
     },
     {
-      "lines": "37-60",
-      "explanation": "Comprehensive test suite demonstrating the polyfill works for all edge cases including null, undefined, array-like objects, and actual arrays."
+      "lines": "50-58",
+      "explanation": "isObjectArray variant: specifically checks Object[] using instanceof"
+    },
+    {
+      "lines": "60-75",
+      "explanation": "JavaScript canonical solution using Object.prototype.toString"
+    },
+    {
+      "lines": "77-110",
+      "explanation": "Comprehensive tests covering arrays, non-arrays, and edge cases"
     }
   ],
   "complexity_analysis": {
@@ -413,362 +375,299 @@
       "new_methods": {
         "isArray": {
           "complexity": "O(1)",
-          "explanation": "Single toString call and string comparison - constant time operations"
+          "explanation": "Single null check and type introspection call"
         }
       },
-      "overall_change": "N/A - this is a new utility function, not modifying previous parts"
+      "overall_change": "No change to previous parts. isArray is independent O(1) operation."
     },
     "space": {
       "additional_space": "O(1)",
-      "explanation": "Only creates one temporary string for the toString result comparison"
+      "explanation": "Pure function with no data storage. Only returns boolean."
     }
   },
   "dry_run": {
-    "example_input": "Testing isArray([1, 2, 3]), isArray({length: 0}), isArray(null)",
+    "example_input": "isArray([1, 2, 3]), isArray({length: 0}), isArray(null)",
     "steps": [
       {
         "step": 1,
         "action": "isArray([1, 2, 3])",
-        "state": "Object.prototype.toString.call([1,2,3]) returns '[object Array]'",
-        "explanation": "Array's internal [[Class]] is 'Array', so toString returns '[object Array]'"
+        "state": "value = [1,2,3]",
+        "explanation": "toString.call returns '[object Array]', matches target string"
       },
       {
         "step": 2,
-        "action": "Compare '[object Array]' === '[object Array]'",
-        "state": "true",
-        "explanation": "Strings match, return true"
+        "action": "Return comparison result",
+        "state": "'[object Array]' === '[object Array]'",
+        "explanation": "Returns true"
       },
       {
         "step": 3,
         "action": "isArray({length: 0})",
-        "state": "Object.prototype.toString.call({length:0}) returns '[object Object]'",
-        "explanation": "Regular object's [[Class]] is 'Object', even if it has array-like properties"
+        "state": "value = {length: 0}",
+        "explanation": "toString.call returns '[object Object]', not Array"
       },
       {
         "step": 4,
-        "action": "Compare '[object Object]' === '[object Array]'",
-        "state": "false",
-        "explanation": "Strings don't match, return false"
+        "action": "Return comparison result",
+        "state": "'[object Object]' === '[object Array]'",
+        "explanation": "Returns false"
       },
       {
         "step": 5,
         "action": "isArray(null)",
-        "state": "Object.prototype.toString.call(null) returns '[object Null]'",
-        "explanation": "null has its own [[Class]] tag, safely handled"
+        "state": "value = null",
+        "explanation": "toString.call returns '[object Null]'"
       },
       {
         "step": 6,
-        "action": "Compare '[object Null]' === '[object Array]'",
-        "state": "false",
-        "explanation": "Strings don't match, return false"
+        "action": "Return comparison result",
+        "state": "'[object Null]' === '[object Array]'",
+        "explanation": "Returns false"
       }
     ],
     "final_output": "[true, false, false]"
   },
   "debugging_playbook": {
     "fast_sanity_checks": [
-      "isArray([]) should return true",
-      "isArray({}) should return false",
-      "isArray(null) should return false without throwing"
+      "isArray([]) should be true",
+      "isArray({}) should be false"
     ],
     "likely_bugs": [
-      "Forgetting .call() - toString() alone won't work",
-      "Using obj.toString() instead of Object.prototype.toString.call(obj)",
-      "Typo in '[object Array]' string"
+      "Using instanceof instead of toString (fails cross-realm)",
+      "Forgetting .call() - would check prototype not value"
     ],
     "recommended_logs_or_asserts": [
-      "console.log(Object.prototype.toString.call(value)) to see actual tag",
-      "assert isArray([]) === true",
-      "assert isArray({length: 0}) === false"
+      "console.log(Object.prototype.toString.call(value)) to see actual type string"
     ],
-    "how_to_localize": "Log the actual toString result for failing cases to see what tag is being compared"
+    "how_to_localize": "If wrong result, log the toString output to see what type string is returned"
   },
   "edge_cases": [
     {
       "case": "Empty array []",
-      "handling": "Returns true - still an array instance",
-      "gotcha": "Don't confuse 'empty' with 'not an array'"
+      "handling": "Returns true - still an array",
+      "gotcha": "Some might think empty = falsy"
     },
     {
-      "case": "null value",
-      "handling": "Returns false - toString.call(null) returns '[object Null]'",
-      "gotcha": "typeof null is 'object' but it's not an array"
+      "case": "null",
+      "handling": "Returns false - toString returns '[object Null]'",
+      "gotcha": "typeof null === 'object' trap"
     },
     {
-      "case": "undefined value",
-      "handling": "Returns false - toString.call(undefined) returns '[object Undefined]'",
-      "gotcha": "Doesn't throw, handles gracefully"
+      "case": "undefined",
+      "handling": "Returns false - toString returns '[object Undefined]'",
+      "gotcha": "Must handle gracefully"
     },
     {
-      "case": "Array-like object {length: 0}",
-      "handling": "Returns false - not a real array despite having length",
-      "gotcha": "Array-like !== Array; arguments object, NodeList are also not arrays"
+      "case": "Array-like objects",
+      "handling": "Returns false - {length: 0} is Object not Array",
+      "gotcha": "NodeList, arguments are NOT arrays"
     },
     {
-      "case": "String 'array'",
-      "handling": "Returns false - strings are iterable but not arrays",
-      "gotcha": "Strings have length and indices but are not arrays"
+      "case": "Strings",
+      "handling": "Returns false - toString returns '[object String]'",
+      "gotcha": "Strings have length, are iterable, but not arrays"
     },
     {
       "case": "new Array()",
-      "handling": "Returns true - Array constructor creates real arrays",
-      "gotcha": "Both literal [] and new Array() are valid arrays"
-    },
-    {
-      "case": "Cross-iframe array",
-      "handling": "Returns true - toString approach works across realms",
-      "gotcha": "This is THE reason to use toString over instanceof"
+      "handling": "Returns true - same as []",
+      "gotcha": "Constructor or literal, both are arrays"
     }
   ],
   "test_cases": [
     {
-      "name": "Basic array",
-      "input": "[1, 2, 3]",
+      "name": "Basic array detection",
+      "input": "isArray([1, 2, 3])",
       "expected": "true",
-      "explanation": "Standard array literal should return true"
+      "explanation": "Standard array literal returns true"
     },
     {
       "name": "Empty array",
-      "input": "[]",
+      "input": "isArray([])",
       "expected": "true",
       "explanation": "Empty array is still an array"
     },
     {
-      "name": "Array constructor",
-      "input": "new Array(5)",
-      "expected": "true",
-      "explanation": "Array created with constructor is an array"
-    },
-    {
-      "name": "Plain object",
-      "input": "{}",
-      "expected": "false",
-      "explanation": "Plain objects are not arrays"
-    },
-    {
       "name": "Array-like object",
-      "input": "{length: 3, 0: 'a', 1: 'b', 2: 'c'}",
+      "input": "isArray({length: 0})",
       "expected": "false",
-      "explanation": "Array-like objects are NOT arrays"
+      "explanation": "Object with length property is NOT an array"
     },
     {
-      "name": "null",
-      "input": "null",
+      "name": "String (iterable but not array)",
+      "input": "isArray('array')",
       "expected": "false",
-      "explanation": "null is not an array (typeof null is 'object' but isArray is false)"
+      "explanation": "Strings have length and are iterable but are not arrays"
     },
     {
-      "name": "undefined",
-      "input": "undefined",
+      "name": "null handling",
+      "input": "isArray(null)",
       "expected": "false",
-      "explanation": "undefined is not an array"
-    },
-    {
-      "name": "String",
-      "input": "'hello'",
-      "expected": "false",
-      "explanation": "Strings are iterable but not arrays"
-    },
-    {
-      "name": "Number",
-      "input": "42",
-      "expected": "false",
-      "explanation": "Numbers are not arrays"
-    },
-    {
-      "name": "Function",
-      "input": "function(){}",
-      "expected": "false",
-      "explanation": "Functions are not arrays"
+      "explanation": "null is not an array, even though typeof null === 'object'"
     }
   ],
   "common_mistakes": [
     {
       "mistake": "Using typeof check",
-      "why_wrong": "typeof [] returns 'object', same as typeof {} and typeof null",
+      "why_wrong": "typeof [] returns 'object', same as {}, null",
       "correct_approach": "Use Object.prototype.toString.call()",
-      "code_example_wrong": "function isArray(obj) { return typeof obj === 'array'; }",
-      "code_example_correct": "function isArray(obj) { return Object.prototype.toString.call(obj) === '[object Array]'; }"
+      "code_example_wrong": "function isArray(v) { return typeof v === 'object'; }",
+      "code_example_correct": "function isArray(v) { return Object.prototype.toString.call(v) === '[object Array]'; }"
     },
     {
       "mistake": "Using instanceof",
-      "why_wrong": "Fails when array comes from different iframe/realm",
+      "why_wrong": "Fails across iframes - each has own Array constructor",
       "correct_approach": "Use Object.prototype.toString.call()",
-      "code_example_wrong": "function isArray(obj) { return obj instanceof Array; }",
-      "code_example_correct": "function isArray(obj) { return Object.prototype.toString.call(obj) === '[object Array]'; }"
+      "code_example_wrong": "function isArray(v) { return v instanceof Array; }",
+      "code_example_correct": "function isArray(v) { return Object.prototype.toString.call(v) === '[object Array]'; }"
     },
     {
       "mistake": "Forgetting .call()",
-      "why_wrong": "Object.prototype.toString() without call uses wrong this context",
-      "correct_approach": "Always use .call(obj) to set the this context",
-      "code_example_wrong": "function isArray(obj) { return Object.prototype.toString() === '[object Array]'; }",
-      "code_example_correct": "function isArray(obj) { return Object.prototype.toString.call(obj) === '[object Array]'; }"
+      "why_wrong": "Without .call(), toString is called on prototype, not value",
+      "correct_approach": "Always use .call(value) to set the 'this' context",
+      "code_example_wrong": "Object.prototype.toString(value)",
+      "code_example_correct": "Object.prototype.toString.call(value)"
     },
     {
-      "mistake": "Using constructor check",
-      "why_wrong": "constructor property can be overwritten; fails across realms",
-      "correct_approach": "Use Object.prototype.toString.call()",
-      "code_example_wrong": "function isArray(obj) { return obj && obj.constructor === Array; }",
-      "code_example_correct": "function isArray(obj) { return Object.prototype.toString.call(obj) === '[object Array]'; }"
-    },
-    {
-      "mistake": "Not handling null/undefined",
-      "why_wrong": "Some approaches throw when accessing properties of null/undefined",
-      "correct_approach": "Object.prototype.toString.call() handles null/undefined gracefully",
-      "code_example_wrong": "function isArray(obj) { return obj.constructor === Array; } // Throws on null",
-      "code_example_correct": "function isArray(obj) { return Object.prototype.toString.call(obj) === '[object Array]'; }"
+      "mistake": "Checking constructor property",
+      "why_wrong": "Constructor can be overwritten: arr.constructor = Object",
+      "correct_approach": "toString [[Class]] cannot be forged",
+      "code_example_wrong": "function isArray(v) { return v && v.constructor === Array; }",
+      "code_example_correct": "function isArray(v) { return Object.prototype.toString.call(v) === '[object Array]'; }"
     }
   ],
   "interview_tips": {
-    "how_to_present": "Start by explaining WHY we need a polyfill (typeof fails, instanceof fails across iframes), then present the elegant toString solution",
+    "how_to_present": "Start by explaining WHY typeof and instanceof fail, then present the toString solution as the reliable alternative.",
     "what_to_mention": [
-      "The cross-realm/iframe problem with instanceof",
-      "JavaScript's internal [[Class]] property",
-      "Why Object.prototype.toString.call() is reliable",
-      "This is how the actual Array.isArray is implemented in polyfills"
+      "Cross-realm/iframe issue with instanceof",
+      "typeof [] === 'object' JavaScript quirk",
+      "Internal [[Class]] tag concept",
+      "This is how lodash, jQuery, and native Array.isArray work"
     ],
-    "time_allocation": "5-8 minutes total: 2 min explaining the problem, 2 min for solution, 3 min for edge cases and discussion",
+    "time_allocation": "5-8 minutes: 2 min explaining the problem, 3 min implementation, 2 min edge cases",
     "if_stuck": [
-      "Think about what Object.prototype.toString returns",
-      "Remember you need to call it with a specific this value",
-      "The result format is '[object TypeName]'"
+      "Think about what makes arrays unique internally",
+      "Consider how typeof fails for multiple types"
     ]
   },
-  "connection_to_next_part": "Part 5 might extend to implementing a full type-checking utility (isObject, isFunction, isNull, etc.) using the same Object.prototype.toString pattern, or might move to implementing Array.prototype methods like map/filter polyfills.",
+  "connection_to_next_part": "Part 4 demonstrates type introspection techniques. Future parts might involve implementing other type checking utilities like isObject, isFunction, or exploring the Reflect API.",
   "communication_script": {
-    "transition_from_previous": "Great, Part 3 covered Function.prototype.bind. For Part 4, we're implementing Array.isArray, which seems simple but has interesting edge cases around JavaScript's type system.",
-    "explaining_changes": "The key challenge here is that typeof doesn't distinguish arrays from objects, and instanceof fails across iframe boundaries. I'll use Object.prototype.toString.call() which accesses the internal [[Class]] property.",
+    "transition_from_previous": "Great, Part 3's bind polyfill is complete. Part 4 asks for Array.isArray. This is actually tricky because JavaScript's typeof returns 'object' for arrays, objects, AND null!",
+    "explaining_changes": "The key insight is using Object.prototype.toString.call() which returns an internal [[Class]] tag like '[object Array]'. This can't be forged and works across iframes.",
     "while_extending_code": [
-      "Let me implement the core function first...",
-      "The trick is using .call() to set the this context...",
-      "I'll compare against '[object Array]' exactly..."
+      "I'm adding isArray as a standalone utility function",
+      "This doesn't depend on previous parts, but fits the polyfills theme"
     ],
-    "after_completing": "This implementation handles all edge cases including null, array-like objects, and cross-realm arrays. It's O(1) time and space. Ready for the next part?"
+    "after_completing": "isArray is O(1) - just one method call and string comparison. It handles all edge cases including null, undefined, and array-like objects."
   },
   "time_milestones": {
-    "time_budget": "5-10 minutes for this part",
-    "by_2_min": "Explain the problem with typeof and instanceof, propose toString solution",
-    "by_5_min": "Implementation complete, testing edge cases",
-    "by_8_min": "Discussed cross-realm issue and why this is production-ready",
-    "warning_signs": "If spending more than 3 minutes on implementation, you may be overcomplicating it"
+    "time_budget": "5-10 minutes for this easy part",
+    "by_2_min": "Explain why typeof and instanceof fail",
+    "by_5_min": "Implementation complete with toString approach",
+    "by_8_min": "Edge cases discussed and tested",
+    "warning_signs": "If spending more than 3 min on implementation, move faster - this is a one-liner"
   },
   "recovery_strategies": {
-    "if_part_builds_wrong": "Part 4 is largely independent - focus on the type checking concept, not previous code",
-    "if_new_requirement_unclear": "Ask: 'Should this work identically to native Array.isArray, including across iframes?'",
-    "if_running_behind": "The core solution is one line - focus on getting that right, then discuss edge cases verbally"
+    "if_part_builds_wrong": "Part 4 is independent, so Part 3 bugs don't affect it",
+    "if_new_requirement_unclear": "Ask: 'Should this detect typed arrays like Int8Array, or just regular arrays?'",
+    "if_running_behind": "Just write the one-liner: Object.prototype.toString.call(v) === '[object Array]'"
   },
   "signal_points": {
     "wow_factors_for_followup": [
-      "Immediately mentioning the cross-realm/iframe issue",
-      "Explaining JavaScript's internal [[Class]] mechanism",
-      "Noting this is how libraries like Lodash implement type checking",
-      "Mentioning you could build isObject, isFunction, etc. with the same pattern"
+      "Mentioning the cross-realm/iframe issue without prompting",
+      "Knowing this is how ES5's Array.isArray was polyfilled",
+      "Explaining [[Class]] internal slot concept",
+      "Mentioning typeof null === 'object' JavaScript bug"
     ]
   },
   "pattern_recognition": {
-    "pattern": "Internal Type Tag Pattern",
+    "pattern": "Type Introspection via toString",
     "indicators": [
-      "Need to distinguish between similar types (array vs object)",
-      "Cross-environment compatibility required",
-      "Cannot trust user-modifiable properties"
+      "Need to distinguish arrays from objects",
+      "typeof returns same value for different types",
+      "Cross-realm compatibility needed"
     ],
     "similar_problems": [
-      "Implementing isPlainObject",
-      "Implementing isFunction",
-      "Type checking in utility libraries (Lodash _.isArray)"
+      "isObject implementation",
+      "isFunction implementation",
+      "getType utility",
+      "Deep equality with type checking"
     ],
-    "template": "function isType(obj) { return Object.prototype.toString.call(obj) === '[object Type]'; }"
+    "template": "Object.prototype.toString.call(value) === '[object TypeName]'"
   },
   "thinking_process": [
     {
       "step": 1,
-      "thought": "When I see 'check if array', I immediately think about JavaScript's quirky type system",
-      "why": "typeof [] is 'object', so we need a different approach"
+      "thought": "When I see 'typeof returns object for arrays', I immediately think about the toString hack",
+      "why": "Because typeof is famously unreliable for distinguishing objects"
     },
     {
       "step": 2,
-      "thought": "instanceof seems obvious but has the iframe problem",
-      "why": "Each iframe has its own global Array constructor"
+      "thought": "The cross-realm issue with instanceof is classic interview knowledge",
+      "why": "It's why libraries like lodash exist"
     },
     {
       "step": 3,
-      "thought": "Object.prototype.toString gives us the internal [[Class]] tag",
-      "why": "This is immutable and consistent across realms"
-    },
-    {
-      "step": 4,
-      "thought": "Must use .call() to bind the correct this",
-      "why": "Without call, toString would use the wrong context"
+      "thought": "Object.prototype.toString is the canonical solution",
+      "why": "It accesses the internal [[Class]] slot that cannot be modified"
     }
   ],
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "Understanding of JavaScript's type system quirks",
-      "Knowledge of cross-realm/iframe issues",
-      "Awareness of Object.prototype.toString pattern",
-      "Handling edge cases (null, undefined)"
+      "Do you know JavaScript's type system quirks?",
+      "Can you explain why simpler approaches fail?",
+      "Do you know the standard solution?"
     ],
     "bonus_points": [
-      "Explaining the [[Class]] internal slot",
-      "Mentioning this is how polyfills work in production",
-      "Extending to discuss other type checks",
-      "Knowing when native Array.isArray was added (ES5)"
+      "Mentioning iframe/cross-realm issues",
+      "Knowing this is how native Array.isArray works",
+      "Discussing [[Class]] internal slot"
     ],
     "red_flags": [
-      "Using typeof === 'array' (shows fundamental misunderstanding)",
-      "Not knowing about the iframe issue",
-      "Forgetting .call() in the toString approach",
-      "Overcomplicating a simple problem"
+      "Using typeof === 'object'",
+      "Using instanceof without acknowledging its limits",
+      "Not knowing about toString approach"
     ]
   },
   "ai_copilot_tips": {
     "what_to_do": [
-      "Let AI help remember exact syntax for Object.prototype.toString",
-      "Use AI to generate test cases"
+      "Let AI autocomplete the toString string '[object Array]'"
     ],
     "what_not_to_do": [
-      "Don't just accept 'instanceof Array' without understanding its limitations",
-      "Make sure you can explain WHY the toString approach works"
+      "Don't accept instanceof-based solutions without discussion"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Jumping straight to code without explaining the approach",
-      "Not discussing why simpler approaches fail"
+      "Jumping to implementation without explaining why typeof fails"
     ],
     "technical": [
-      "Using typeof for array detection",
-      "Using instanceof without mentioning its limitations",
-      "Not handling null/undefined"
+      "Using broken approaches like instanceof or typeof"
     ],
     "communication": [
-      "Not explaining the cross-realm problem",
-      "Missing the opportunity to show depth of JavaScript knowledge"
+      "Not explaining the cross-realm issue"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Does it return true for arrays, false for everything else?",
-      "Does it handle null and undefined without throwing?",
-      "Does it correctly reject array-like objects?",
-      "Am I using Object.prototype.toString.call() correctly?"
+      "Does it handle null and undefined?",
+      "Does it return false for array-like objects?",
+      "Did I use .call() not just .toString()?",
+      "Did I explain why simpler approaches fail?"
     ],
     "quick_code_review": [
       "String comparison is exact: '[object Array]'",
-      "Using .call(obj) not just .call()",
-      "Function returns boolean"
+      "No null check needed - toString handles it"
     ]
   },
   "production_considerations": {
     "what_i_would_add": [
-      "Check for native Array.isArray first and use it if available",
-      "Add JSDoc comments",
-      "Consider bundling with other type utilities"
+      "TypeScript type guard: obj is any[]",
+      "Support for typed arrays if needed"
     ],
-    "why_not_in_interview": "The core algorithm is the focus; native check is a minor optimization",
-    "how_to_mention": "Say: 'In production, I'd first check if Array.isArray exists and use the native version for performance.'"
+    "why_not_in_interview": "Core algorithm is the focus",
+    "how_to_mention": "Say: 'In TypeScript, I'd add type narrowing so after isArray check, TypeScript knows it's an array.'"
   },
-  "generated_at": "2026-01-18T21:32:17.429691",
+  "generated_at": "2026-01-19T05:04:27.892232",
   "_meta": {
     "problem_id": "javascript_polyfills_and_memoization",
     "part_number": 4,

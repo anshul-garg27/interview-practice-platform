@@ -4,732 +4,435 @@
   "category": "LLD/OOP Design",
   "estimated_time": "45-60 minutes",
   "problem_analysis": {
-    "first_impressions": "This is a classic **Rules Engine / Strategy Pattern** problem. The core challenge is designing a flexible, extensible system where new rule types can be added without modifying existing code. The problem tests OOP fundamentals, interface design, and the candidate's understanding of SOLID principles\u2014particularly Open/Closed Principle.",
-    "pattern_recognition": "**Strategy Pattern** (each rule is a strategy) + **HashMap** for field lookups + **Polymorphism** for rule evaluation. This is similar to validation frameworks, policy engines, and filter chains in real systems.",
+    "first_impressions": "This is a classic **Strategy Pattern** problem disguised as an expense validation system. The core challenge is designing an extensible rule evaluation framework where each rule type is independent, self-contained, and easy to add without modifying existing code.",
+    "pattern_recognition": "**Strategy Pattern** + **Polymorphism** + **Open/Closed Principle**. Each rule is a strategy that implements a common interface. The engine orchestrates rule evaluation without knowing rule specifics.",
     "key_constraints": [
-      "Amounts are STRINGS - must parse to Decimal for accurate currency math",
-      "One expense can violate MULTIPLE rules - must check all rules, not short-circuit",
-      "Up to 50 rules \u00d7 1000 expenses = 50,000 evaluations max - O(R\u00d7E) is acceptable",
-      "Boundary conditions matter - $75.00 exactly should PASS a $75 limit"
+      "Amounts are **strings** - must parse to Decimal for comparison (float precision issues)",
+      "One expense can violate **multiple rules** - don't short-circuit on first violation",
+      "Rules must be **extensible** - new rule types shouldn't require modifying existing code",
+      "Return detailed violations - expense_id, rule_name, and reason"
     ],
     "clarifying_questions": [
-      "**Q1: Are amounts always valid decimal strings?** - Determines if we need try/catch for parsing. In interview, assume yes but mention validation in production.",
-      "**Q2: Is $75.00 within a $75.00 limit (inclusive)?** - Critical for boundary handling. Example 3 shows it IS inclusive (\u2264 not <).",
-      "**Q3: Should violations be ordered?** - Ask if order matters (by expense, by rule, etc.). Typically doesn't matter.",
-      "**Q4: Can fields be missing from expenses?** - Determines if we need null checks. Assume all fields present unless told otherwise.",
-      "**Q5: How should the rule configuration come in?** - JSON/dict vs constructor. For interview, use constructor parameters.",
-      "**Q6: Should BanRule support regex/partial matches?** - Scope clarification. Start with exact match, mention extensibility."
+      "Should rules be evaluated in order, or can violations be returned in any order? - Affects output consistency",
+      "How should we handle invalid expense data (missing fields)? - Defensive programming needs",
+      "Is $75.00 exactly at the limit a violation or allowed? - Boundary condition clarity (examples show it's allowed)",
+      "Can the same rule type be applied multiple times with different values? - e.g., multiple BanRules",
+      "Should violation messages follow a specific format? - Output standardization",
+      "Are all expense fields guaranteed to be present? - Input validation requirements"
     ],
     "edge_cases_to_consider": [
-      "Expense at exactly the limit ($75.00 when limit is $75.00) - should PASS",
-      "Expense just over limit ($75.01 when limit is $75.00) - should FAIL",
-      "Expense violates multiple rules simultaneously",
-      "Empty rules list - return empty violations",
-      "Empty expenses list - return empty violations",
-      "BanRule field doesn't exist on expense (defensive programming)",
-      "Very small amounts ($0.01) and very large amounts ($100,000.00)"
+      "Expense exactly at limit ($75.00 with $75 limit) - should PASS",
+      "Expense just over limit ($75.01 with $75 limit) - should FAIL",
+      "Same expense violating multiple rules - return ALL violations",
+      "No violations at all - return empty list",
+      "BanRule on non-existent field - should not match",
+      "Very large amounts as strings ('99999.99')",
+      "Zero amount expenses"
     ]
   },
   "requirements_coverage": {
     "checklist": [
       {
-        "requirement": "Design a flexible Rule interface/base class",
-        "how_met": "Abstract `Rule` class with `evaluate(expense) -> Optional[Violation]` method. Each rule type extends this.",
+        "requirement": "Design flexible Rule interface/base class",
+        "how_met": "Abstract Rule class with evaluate() method returning Optional[Violation]",
         "gotchas": [
-          "Don't forget `get_name()` or similar for identifying rule in violations"
+          "Don't forget get_name() for identifying which rule triggered"
         ]
       },
       {
-        "requirement": "Each rule type should be its own class",
-        "how_met": "`BanRule`, `MaxAmountRule`, `VendorTypeLimitRule` are separate classes implementing `Rule`",
+        "requirement": "evaluateRules(rules, expenses) -> violations",
+        "how_met": "ExpenseRulesEngine.evaluate_rules() iterates all expenses \u00d7 all rules",
         "gotchas": [
-          "Keep logic self-contained within each rule - no cross-rule dependencies"
-        ]
-      },
-      {
-        "requirement": "Must be easy to add new rule types",
-        "how_met": "New rules just implement `Rule` interface - no changes to engine or existing rules",
-        "gotchas": [
-          "Don't use if/else or switch on rule type in engine - violates Open/Closed"
-        ]
-      },
-      {
-        "requirement": "evaluateRules returns detailed violations",
-        "how_met": "`Violation` dataclass with `expense_id`, `rule_name`, `reason`",
-        "gotchas": [
-          "Return ALL violations, not just first one per expense"
+          "Don't short-circuit - one expense can have multiple violations"
         ]
       },
       {
         "requirement": "BanRule blocks by field value",
-        "how_met": "Uses `getattr()` to dynamically access field by name",
+        "how_met": "BanRule checks if expense[field] == banned_value",
         "gotchas": [
-          "Handle missing field gracefully - don't crash"
+          "Field name is configurable - can ban expense_type, vendor_type, or vendor_name"
         ]
       },
       {
         "requirement": "MaxAmountRule caps individual expense",
-        "how_met": "Simple comparison: `expense.amount_usd > self.max_amount`",
+        "how_met": "MaxAmountRule compares parsed amount against max_amount",
         "gotchas": [
-          "Use Decimal not float for currency comparison"
+          "Use Decimal for precision, boundary is > not >="
         ]
       },
       {
-        "requirement": "VendorTypeLimitRule caps by vendor type",
-        "how_met": "Check vendor_type matches AND amount exceeds limit",
+        "requirement": "VendorTypeLimitRule caps amount for specific vendor type",
+        "how_met": "VendorTypeLimitRule checks vendor_type match THEN amount",
         "gotchas": [
-          "Both conditions must be true - don't forget the vendor type check"
+          "Only applies if vendor_type matches - skip otherwise"
         ]
       }
     ],
     "complexity_targets": [
       {
         "operation": "evaluate_rules",
-        "target": "O(R \u00d7 E)",
-        "achieved": "O(R \u00d7 E)",
-        "why": "Must check each rule against each expense - no way around this"
-      },
-      {
-        "operation": "Single rule evaluation",
-        "target": "O(1)",
-        "achieved": "O(1)",
-        "why": "Each rule does constant-time field access and comparison"
+        "target": "O(E \u00d7 R)",
+        "achieved": "O(E \u00d7 R)",
+        "why": "Must check each expense against each rule"
       }
     ],
     "non_goals": [
-      "Persisting rules/expenses to database",
-      "Rule priority/ordering (all rules are equal)",
-      "Rule composition (AND/OR of multiple rules)",
-      "Async/parallel evaluation (keep it simple)"
+      "Persisting rules or expenses to database",
+      "Async rule evaluation",
+      "Rule priority or ordering",
+      "Combining rules with AND/OR logic (Part 2+)",
+      "Trip-level aggregation (Part 2)"
     ]
   },
   "assumptions": [
-    "All expense fields are always present (no null checks needed)",
-    "Amount strings are always valid decimal numbers",
-    "Expense IDs are unique across the input",
-    "Rules are applied independently (no rule depends on another)",
-    "Limits are inclusive (\u2264 passes, > fails) - confirmed by Example 3"
+    "All expenses have required fields: expense_id, amount_usd, expense_type, vendor_type",
+    "Amounts are valid decimal strings (no currency symbols)",
+    "Limit comparisons use > (strictly greater than) - exactly at limit passes",
+    "Violations can be returned in any order",
+    "Same rule type can appear multiple times with different parameters"
   ],
   "tradeoffs": [
     {
-      "decision": "Each rule returns Optional[Violation] vs boolean + separate violation builder",
-      "chosen": "Return Optional[Violation] directly from rule",
-      "why": "Keeps violation logic with the rule that understands the context. Easier to create meaningful error messages.",
-      "alternative": "Return boolean, let engine build violations",
-      "when_to_switch": "If violations need aggregation or transformation before returning"
+      "decision": "Abstract class vs Interface for Rule",
+      "chosen": "Abstract class (Python ABC)",
+      "why": "Allows shared helper methods if needed, clear contract",
+      "alternative": "Pure interface (Protocol in Python)",
+      "when_to_switch": "If rules need multiple inheritance"
     },
     {
-      "decision": "Use getattr() for BanRule vs separate rule classes per field",
-      "chosen": "Single BanRule with dynamic field access",
-      "why": "More flexible, less code duplication. One class handles expense_type, vendor_type, vendor_name.",
-      "alternative": "BanExpenseTypeRule, BanVendorTypeRule, BanVendorNameRule",
-      "when_to_switch": "If field-specific logic differs significantly between fields"
+      "decision": "Return type for evaluate()",
+      "chosen": "Optional[Violation]",
+      "why": "Clean API - None means pass, Violation means fail",
+      "alternative": "List[Violation] per rule",
+      "when_to_switch": "If a single rule could produce multiple violations"
     },
     {
-      "decision": "Decimal vs float for currency",
-      "chosen": "Decimal (Python) / BigDecimal (Java)",
-      "why": "Precise currency math. 0.1 + 0.1 + 0.1 = 0.3 with Decimal, but 0.30000000000000004 with float.",
-      "alternative": "Store cents as integers (4999 instead of $49.99)",
-      "when_to_switch": "If performance is critical and you can guarantee integer representation"
+      "decision": "Decimal vs float for amounts",
+      "chosen": "Decimal",
+      "why": "Financial precision - 0.1 + 0.1 + 0.1 must equal 0.3",
+      "alternative": "Float with rounding",
+      "when_to_switch": "Never for financial systems"
     }
   ],
   "extensibility_and_followups": {
     "design_principles": [
       "**Open/Closed Principle**: Add new rules by creating new classes, not modifying engine",
-      "**Single Responsibility**: Each rule handles exactly one type of validation",
-      "**Dependency Inversion**: Engine depends on abstract Rule interface, not concrete implementations",
-      "**Liskov Substitution**: Any Rule subclass can be used wherever Rule is expected"
+      "**Single Responsibility**: Each rule handles one type of validation",
+      "**Strategy Pattern**: Rules are interchangeable strategies with common interface",
+      "**Dependency Inversion**: Engine depends on Rule abstraction, not concrete implementations"
     ],
-    "why_this_design_scales": "The engine's `evaluate_rules` method never changes. New rule types like `TripTotalLimitRule` (Part 2) just implement the same `evaluate()` interface. The data structures (HashMap for aggregation) can be added inside new rule classes without affecting existing code.",
+    "why_this_design_scales": "Adding a new rule type (e.g., TripTotalRule) requires ONLY creating a new class that implements Rule. The ExpenseRulesEngine doesn't change at all. This is the power of polymorphism.",
     "expected_followup_hooks": [
-      "`evaluate()` method is the extension point for new rules",
-      "Expense class might need additional fields for future rules",
-      "Engine might need pre-processing hooks for aggregation-based rules (Part 2)",
-      "Violation class might need severity levels or correction suggestions"
+      "Rule.evaluate() signature will need modification for trip-level rules (needs all expenses)",
+      "May need RuleContext object to pass additional state",
+      "Violation class might need severity levels or auto-approval flags"
     ],
     "invariants": [
-      "Every expense is evaluated against every rule (no filtering/optimization)",
-      "A violation always includes expense_id, rule_name, and reason",
-      "Rules are stateless - same expense always produces same result"
+      "Every rule must return a Violation with expense_id matching the input expense",
+      "Rules are pure functions - same input always produces same output",
+      "Violations preserve original expense_id for traceability"
     ]
   },
   "visual_explanation": {
-    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    EXPENSE RULES ENGINE FLOW                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                     \u2502\n\u2502   RULES (Configured by Manager)          EXPENSES (Submitted)       \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510           \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510     \u2502\n\u2502   \u2502 1. BanRule              \u2502           \u2502 E001: $49.99        \u2502     \u2502\n\u2502   \u2502    field: expense_type  \u2502           \u2502   restaurant        \u2502     \u2502\n\u2502   \u2502    value: entertainment \u2502           \u2502   client_hosting    \u2502     \u2502\n\u2502   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524     \u2502\n\u2502   \u2502 2. MaxAmountRule        \u2502           \u2502 E002: $350.00       \u2502     \u2502\n\u2502   \u2502    max: $250            \u2502           \u2502   airline           \u2502     \u2502\n\u2502   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524           \u2502   airfare           \u2502     \u2502\n\u2502   \u2502 3. VendorTypeLimitRule  \u2502           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524     \u2502\n\u2502   \u2502    vendor_type:         \u2502           \u2502 E003: $85.00        \u2502     \u2502\n\u2502   \u2502    restaurant           \u2502           \u2502   restaurant        \u2502     \u2502\n\u2502   \u2502    max: $75             \u2502           \u2502   meals             \u2502     \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518     \u2502\n\u2502               \u2502                                    \u2502                \u2502\n\u2502               \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                \u2502\n\u2502                            \u2502                                        \u2502\n\u2502                            \u25bc                                        \u2502\n\u2502              \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                        \u2502\n\u2502              \u2502     RULES ENGINE            \u2502                        \u2502\n\u2502              \u2502  for expense in expenses:   \u2502                        \u2502\n\u2502              \u2502    for rule in rules:       \u2502                        \u2502\n\u2502              \u2502      if rule.evaluate(exp): \u2502                        \u2502\n\u2502              \u2502        violations.add(...)  \u2502                        \u2502\n\u2502              \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                        \u2502\n\u2502                             \u2502                                       \u2502\n\u2502                             \u25bc                                       \u2502\n\u2502              \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                        \u2502\n\u2502              \u2502       VIOLATIONS            \u2502                        \u2502\n\u2502              \u2502 E002: BanRule - airfare     \u2502                        \u2502\n\u2502              \u2502 E002: MaxAmount - $350>$250 \u2502                        \u2502\n\u2502              \u2502 E003: VendorLimit - $85>$75 \u2502                        \u2502\n\u2502              \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                        \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-    "data_structure_state": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    CLASS HIERARCHY                             \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                \u2502\n\u2502                    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                        \u2502\n\u2502                    \u2502   <<abstract>>   \u2502                        \u2502\n\u2502                    \u2502      Rule        \u2502                        \u2502\n\u2502                    \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524                        \u2502\n\u2502                    \u2502 +evaluate(exp)   \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2510                 \u2502\n\u2502                    \u2502 +get_name()      \u2502      \u2502 Returns         \u2502\n\u2502                    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502                 \u2502\n\u2502                             \u2502                \u25bc                 \u2502\n\u2502           \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                \u2502\n\u2502           \u2502                 \u2502                 \u2502    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502\n\u2502           \u25bc                 \u25bc                 \u25bc    \u2502Violation\u2502 \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502 \u2502\n\u2502   \u2502   BanRule     \u2502 \u2502MaxAmountRule  \u2502 \u2502VendorType \u2502\u2502exp_id   \u2502 \u2502\n\u2502   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524 \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524 \u2502LimitRule  \u2502\u2502rule_name\u2502 \u2502\n\u2502   \u2502 -field: str   \u2502 \u2502 -max_amount   \u2502 \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\u2502reason   \u2502 \u2502\n\u2502   \u2502 -value: str   \u2502 \u2502               \u2502 \u2502-vendor_typ\u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502-max_amount\u2502            \u2502\n\u2502                                       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518            \u2502\n\u2502                                                                \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502                  ExpenseRulesEngine                    \u2502   \u2502\n\u2502   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524   \u2502\n\u2502   \u2502 +evaluate_rules(rules, expenses) -> List[Violation]    \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "problem_visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    EXPENSE RULES ENGINE                             \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                                     \u2502\n\u2502   RULES (Strategies)                                                \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u2502\n\u2502   \u2502  BanRule    \u2502  \u2502 MaxAmount   \u2502  \u2502 VendorTypeLimit       \u2502      \u2502\n\u2502   \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502      \u2502\n\u2502   \u2502field:       \u2502  \u2502max: $250    \u2502  \u2502vendor: restaurant     \u2502      \u2502\n\u2502   \u2502expense_type \u2502  \u2502             \u2502  \u2502max: $75               \u2502      \u2502\n\u2502   \u2502value:       \u2502  \u2502             \u2502  \u2502                       \u2502      \u2502\n\u2502   \u2502entertainment\u2502  \u2502             \u2502  \u2502                       \u2502      \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2502\n\u2502          \u2502                \u2502                     \u2502                   \u2502\n\u2502          \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                   \u2502\n\u2502                           \u2502                                         \u2502\n\u2502                    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2510                                  \u2502\n\u2502                    \u2502 evaluate()  \u2502                                  \u2502\n\u2502                    \u2502  interface  \u2502                                  \u2502\n\u2502                    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518                                  \u2502\n\u2502                           \u2502                                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   EXPENSES               \u25bc                                          \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502 E001 \u2502 $49.99  \u2502 client_hosting \u2502 restaurant \u2502 Outback    \u2502   \u2502\n\u2502   \u2502 E002 \u2502 $150.00 \u2502 entertainment  \u2502 theater    \u2502 AMC        \u2502\u25c4\u2500\u2500\u253c\u2500\u2500 Violates BanRule\n\u2502   \u2502 E003 \u2502 $85.00  \u2502 meals          \u2502 restaurant \u2502 Subway     \u2502\u25c4\u2500\u2500\u253c\u2500\u2500 Violates VendorLimit\n\u2502   \u2502 E004 \u2502 $350.00 \u2502 airfare        \u2502 airline    \u2502 Delta      \u2502\u25c4\u2500\u2500\u253c\u2500\u2500 Violates MaxAmount\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                                     \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502   VIOLATIONS                                                        \u2502\n\u2502   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502   \u2502 E002 \u2502 BanRule        \u2502 expense_type 'entertainment' banned \u2502   \u2502\n\u2502   \u2502 E003 \u2502 VendorLimit    \u2502 restaurant $85 > limit $75          \u2502   \u2502\n\u2502   \u2502 E004 \u2502 MaxAmountRule  \u2502 $350 exceeds max $250               \u2502   \u2502\n\u2502   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
+    "data_structure_state": "```\nCLASS HIERARCHY (Strategy Pattern)\n\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u2502   <<abstract>>    \u2502\n         \u2502       Rule        \u2502\n         \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n         \u2502+ evaluate(expense)\u2502\n         \u2502+ get_name()       \u2502\n         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                   \u2502\n       \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n       \u2502           \u2502               \u2502\n   \u250c\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u250c\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502BanRule\u2502   \u2502MaxAmount  \u2502   \u2502VendorTypeLimit\u2502\n   \u2502       \u2502   \u2502Rule       \u2502   \u2502Rule           \u2502\n   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524   \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n   \u2502-field \u2502   \u2502-max_amount\u2502   \u2502-vendor_type   \u2502\n   \u2502-value \u2502   \u2502           \u2502   \u2502-max_amount    \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n                    \u2502\n                    \u25bc\n       \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n       \u2502  ExpenseRulesEngine    \u2502\n       \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n       \u2502+ evaluate_rules(       \u2502\n       \u2502    rules, expenses     \u2502\n       \u2502  ) -> List[Violation]  \u2502\n       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
     "algorithm_flow": [
       {
         "step": 1,
-        "description": "Parse expenses from dict to Expense objects",
-        "visualization": "```\nDict: {'expense_id': 'E001', 'amount_usd': '49.99', ...}\n                        \u2502\n                        \u25bc\nExpense(expense_id='E001', amount_usd=Decimal('49.99'), ...)\n```",
-        "key_point": "Convert amount string to Decimal immediately for safe comparisons"
+        "description": "Initialize empty violations list",
+        "visualization": "violations = []",
+        "key_point": "We collect ALL violations, not just first one"
       },
       {
         "step": 2,
-        "description": "For each expense, apply all rules",
-        "visualization": "```\n     E001 \u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u25ba Rule 1 (BanRule)      \u2500\u2500\u2500\u25ba None (passes)\n              \u2502\n              \u251c\u2500\u2500\u2500\u2500\u25ba Rule 2 (MaxAmount)    \u2500\u2500\u2500\u25ba None (passes)\n              \u2502\n              \u2514\u2500\u2500\u2500\u2500\u25ba Rule 3 (VendorLimit)  \u2500\u2500\u2500\u25ba None (passes)\n```",
-        "key_point": "Even if one rule fails, continue checking ALL rules"
+        "description": "Outer loop: iterate through each expense",
+        "visualization": "for expense in expenses:  # E001, E002, ...",
+        "key_point": "Process one expense at a time"
       },
       {
         "step": 3,
-        "description": "Collect violations from failed rule checks",
-        "visualization": "```\n     E002 \u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u25ba Rule 1 (BanRule)      \u2500\u2500\u2500\u25ba Violation!\n              \u2502                                    \u2502\n              \u251c\u2500\u2500\u2500\u2500\u25ba Rule 2 (MaxAmount)    \u2500\u2500\u2500\u25ba Violation!\n              \u2502                                    \u2502\n              \u2514\u2500\u2500\u2500\u2500\u25ba Rule 3 (VendorLimit)  \u2500\u2500\u2500\u25ba None       \n                                                   \u2502\n     violations.extend([...])  \u25c4\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-        "key_point": "One expense can generate multiple violations"
+        "description": "Inner loop: check expense against each rule",
+        "visualization": "  for rule in rules:  # BanRule, MaxRule, ...",
+        "key_point": "Every expense is checked against every rule"
       },
       {
         "step": 4,
+        "description": "Evaluate and collect violations",
+        "visualization": "    violation = rule.evaluate(expense)\n    if violation: violations.append(violation)",
+        "key_point": "None means pass, Violation object means fail"
+      },
+      {
+        "step": 5,
         "description": "Return all collected violations",
-        "visualization": "```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Return: [                                       \u2502\n\u2502   Violation('E002', 'BanRule', 'airfare...'),   \u2502\n\u2502   Violation('E002', 'MaxAmount', '$350...'),    \u2502\n\u2502   Violation('E003', 'VendorLimit', '$85...')    \u2502\n\u2502 ]                                               \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```",
-        "key_point": "Violations contain all info needed to understand the failure"
+        "visualization": "return violations",
+        "key_point": "Could be empty if all expenses pass all rules"
       }
     ],
-    "dry_run_table": "| Expense | Rule | Field/Condition Check | Amount Check | Result |\n|---------|------|----------------------|--------------|--------|\n| E001 $49.99 restaurant | BanRule(entertainment) | expense_type='client_hosting' \u2260 'entertainment' | - | \u2713 PASS |\n| E001 $49.99 restaurant | MaxAmountRule($250) | - | $49.99 \u2264 $250 | \u2713 PASS |\n| E001 $49.99 restaurant | VendorTypeLimit(restaurant, $75) | vendor_type='restaurant' \u2713 | $49.99 \u2264 $75 | \u2713 PASS |\n| E002 $350 airfare | BanRule(airfare) | expense_type='airfare' = 'airfare' | - | \u2717 FAIL |\n| E002 $350 airfare | MaxAmountRule($250) | - | $350 > $250 | \u2717 FAIL |\n| E002 $350 airfare | VendorTypeLimit(restaurant, $75) | vendor_type='airline' \u2260 'restaurant' | - | \u2713 PASS |\n| E003 $85 restaurant | BanRule(airfare) | expense_type='meals' \u2260 'airfare' | - | \u2713 PASS |\n| E003 $85 restaurant | MaxAmountRule($250) | - | $85 \u2264 $250 | \u2713 PASS |\n| E003 $85 restaurant | VendorTypeLimit(restaurant, $75) | vendor_type='restaurant' \u2713 | $85 > $75 | \u2717 FAIL |"
+    "dry_run_table": "| Step | Expense | Rule | Amount Check | Result | Violation |\n|------|---------|------|--------------|--------|----------|\n| 1 | E001 ($49.99, restaurant, client_hosting) | BanRule(entertainment) | N/A | PASS | - |\n| 2 | E001 | MaxAmountRule($250) | $49.99 \u2264 $250 | PASS | - |\n| 3 | E001 | VendorTypeLimitRule(restaurant, $75) | $49.99 \u2264 $75 | PASS | - |\n| 4 | E002 ($150, theater, entertainment) | BanRule(entertainment) | Match! | **FAIL** | \u2713 |\n| 5 | E002 | MaxAmountRule($250) | $150 \u2264 $250 | PASS | - |\n| 6 | E002 | VendorTypeLimitRule(restaurant, $75) | vendor\u2260restaurant | SKIP | - |"
   },
   "thinking_process": {
     "step_by_step": [
-      "**When I see 'rules engine'**, I immediately think Strategy Pattern - each rule is a strategy with a common interface",
-      "**When I see 'easy to add new rule types'**, I know I need Open/Closed Principle - new rules shouldn't require modifying existing code",
-      "**When I see 'expense can violate multiple rules'**, I know I need to check ALL rules, not short-circuit on first failure",
-      "**When I see 'amounts as strings'**, I think currency precision - must use Decimal/BigDecimal, not float",
-      "**When I see 'detailed violation information'**, I need a proper return type with expense_id, rule_name, reason",
-      "**When I see 'BanRule with field parameter'**, I think dynamic attribute access - getattr() in Python or reflection in Java"
+      "When I see 'rules engine' with multiple rule types, I immediately think **Strategy Pattern** - each rule type is a strategy with a common evaluate interface",
+      "The requirement 'easy to add new rule types' screams **Open/Closed Principle** - I need an abstraction that allows extension without modification",
+      "One expense can violate multiple rules means I must NOT short-circuit - iterate ALL rules for EACH expense",
+      "Amounts as strings + financial context = I MUST use Decimal, not float, for precision",
+      "The key insight: polymorphism lets the engine call evaluate() without knowing which rule type it is"
     ],
-    "key_insight": "The **core insight** is that each rule is completely self-contained. A rule doesn't know or care about other rules. It takes an expense, checks its specific condition, and returns either a Violation or None. The engine is just a simple nested loop that applies this abstraction. This separation of concerns makes the system infinitely extensible.",
-    "why_this_works": "The Strategy Pattern works because:\n1. **Polymorphism**: All rules implement the same interface, so the engine can treat them uniformly\n2. **Encapsulation**: Each rule's logic is hidden inside its class\n3. **Open/Closed**: Adding `TripTotalLimitRule` later just means creating a new class - nothing else changes\n4. **Single Responsibility**: Engine handles iteration, rules handle validation"
+    "key_insight": "The engine doesn't need to know anything about specific rules. It just calls `rule.evaluate(expense)` on each rule. This is the power of polymorphism and the Strategy Pattern - the complexity of 'which rule does what' is encapsulated in each rule class.",
+    "why_this_works": "By defining a common Rule interface with `evaluate(expense) -> Optional[Violation]`, we achieve:\n1. **Extensibility**: New rules just implement the interface\n2. **Testability**: Each rule can be tested in isolation\n3. **Maintainability**: Changing BanRule logic doesn't affect MaxAmountRule\n4. **Clean separation**: Engine orchestrates, rules decide"
   },
   "approaches": [
     {
-      "name": "Naive Approach - Switch/Case in Engine",
-      "description": "Put all rule logic in the engine using if/else or switch/case based on rule type",
-      "pseudocode": "for expense in expenses:\n  for rule in rules:\n    if rule.type == 'ban':\n      if expense[rule.field] == rule.value:\n        violations.append(...)\n    elif rule.type == 'max_amount':\n      if expense.amount > rule.max:\n        violations.append(...)\n    elif rule.type == 'vendor_limit':\n      ...",
-      "time_complexity": "O(R \u00d7 E)",
-      "space_complexity": "O(V) where V = violations",
+      "name": "Brute Force (Procedural)",
+      "description": "Giant if-else chain checking rule types in main function",
+      "pseudocode": "def evaluate(rules, expenses):\n  violations = []\n  for expense in expenses:\n    for rule in rules:\n      if rule.type == 'ban':\n        # ban logic\n      elif rule.type == 'max':\n        # max logic\n      elif rule.type == 'vendor':\n        # vendor logic\n  return violations",
+      "time_complexity": "O(E \u00d7 R)",
+      "space_complexity": "O(V) for violations",
       "pros": [
-        "Quick to implement",
-        "All logic in one place"
+        "Quick to write for simple cases"
       ],
       "cons": [
-        "Violates Open/Closed - adding rule requires modifying engine",
-        "Switch/case grows unbounded",
+        "Violates Open/Closed - adding new rule requires modifying main function",
         "Hard to test individual rules",
-        "Violates Single Responsibility"
+        "Code becomes spaghetti quickly",
+        "Doesn't meet extensibility requirement"
       ],
-      "when_to_use": "Never in a real interview - this is the anti-pattern they're testing against"
+      "when_to_use": "Never in a real interview asking for OOP design"
     },
     {
       "name": "Optimal: Strategy Pattern with Polymorphism",
-      "description": "Each rule is its own class implementing a common interface. Engine just iterates and delegates.",
-      "pseudocode": "class Rule:\n  def evaluate(expense) -> Violation|None\n\nclass BanRule(Rule):\n  def evaluate(expense):\n    if expense[field] == banned_value:\n      return Violation(...)\n    return None\n\nclass Engine:\n  def evaluate(rules, expenses):\n    for expense in expenses:\n      for rule in rules:\n        v = rule.evaluate(expense)\n        if v: violations.append(v)\n    return violations",
-      "time_complexity": "O(R \u00d7 E) - same as naive",
-      "space_complexity": "O(V) where V = violations",
+      "description": "Abstract Rule interface with concrete implementations. Engine uses polymorphic evaluate() calls.",
+      "pseudocode": "class Rule:\n  def evaluate(expense) -> Violation?\n\nclass BanRule(Rule):  # Implements evaluate\nclass MaxAmountRule(Rule):  # Implements evaluate\nclass VendorTypeLimitRule(Rule):  # Implements evaluate\n\ndef evaluate_rules(rules, expenses):\n  violations = []\n  for expense in expenses:\n    for rule in rules:  # Polymorphism!\n      violation = rule.evaluate(expense)\n      if violation: violations.append(violation)\n  return violations",
+      "time_complexity": "O(E \u00d7 R) where E=expenses, R=rules",
+      "space_complexity": "O(V) where V=violations",
       "pros": [
-        "Open/Closed compliant",
-        "Each rule is independently testable",
         "Clean separation of concerns",
-        "Infinitely extensible"
+        "Easy to add new rules (Open/Closed)",
+        "Each rule testable in isolation",
+        "Interviewer-friendly design"
       ],
       "cons": [
-        "Slightly more classes to write initially",
-        "Need to understand polymorphism"
+        "Slightly more code upfront"
       ],
-      "key_insight": "The time complexity is the same, but the **code complexity** is dramatically lower. Real interviews value maintainable, extensible code over micro-optimizations."
+      "key_insight": "The engine calls evaluate() on each rule without knowing the rule type - that's polymorphism at work"
     }
   ],
   "optimal_solution": {
     "name": "Strategy Pattern with Decimal Precision",
-    "explanation_md": "## Approach\n\nThe solution uses the **Strategy Pattern** where each rule type is a concrete implementation of an abstract `Rule` interface.\n\n### Key Components\n\n1. **`Rule` (Abstract Base Class)**\n   - Defines `evaluate(expense) -> Optional[Violation]`\n   - Each concrete rule implements its own validation logic\n\n2. **`Violation` (Data Class)**\n   - Immutable container for violation details\n   - Contains: `expense_id`, `rule_name`, `reason`\n\n3. **Concrete Rules**\n   - `BanRule`: Uses `getattr()` for dynamic field access\n   - `MaxAmountRule`: Simple comparison against limit\n   - `VendorTypeLimitRule`: Checks vendor type AND amount\n\n4. **`ExpenseRulesEngine`**\n   - Simple nested loop: for each expense, for each rule\n   - Collects all violations (doesn't short-circuit)\n\n### Why Decimal?\n```python\n# Float is dangerous for currency!\n>>> 0.1 + 0.1 + 0.1\n0.30000000000000004  # WRONG!\n\n# Decimal is precise\n>>> Decimal('0.1') + Decimal('0.1') + Decimal('0.1')\nDecimal('0.3')  # CORRECT!\n```",
+    "explanation_md": "## Approach\n\nWe implement the **Strategy Pattern** where each rule type is a concrete strategy implementing a common `Rule` interface.\n\n### Core Components\n\n1. **Violation dataclass** - Immutable result object with expense_id, rule_name, reason\n2. **Rule abstract class** - Defines `evaluate(expense)` and `get_name()` contract\n3. **Concrete rules** - BanRule, MaxAmountRule, VendorTypeLimitRule\n4. **ExpenseRulesEngine** - Orchestrates evaluation without knowing rule specifics\n\n### Why This Works\n\nThe engine's `evaluate_rules()` method iterates through all expenses and all rules, calling `rule.evaluate(expense)` polymorphically. Each rule:\n- Receives an expense dict\n- Decides if it applies (VendorTypeLimitRule only applies to matching vendor_type)\n- Returns `None` (pass) or `Violation` (fail)\n\n### Precision Matters\n\nWe use `Decimal` for all monetary comparisons because:\n```python\n# Float fails:\nfloat(0.1) + float(0.1) + float(0.1) == 0.30000000000000004\n\n# Decimal works:\nDecimal('0.1') + Decimal('0.1') + Decimal('0.1') == Decimal('0.3')\n```",
     "data_structures": [
       {
-        "structure": "Abstract Rule class",
-        "purpose": "Common interface for all rules - enables polymorphism"
+        "structure": "ABC Rule class",
+        "purpose": "Define contract for all rule types"
       },
       {
         "structure": "Violation dataclass",
-        "purpose": "Structured return type with expense_id, rule_name, reason"
+        "purpose": "Immutable violation result with context"
       },
       {
-        "structure": "Expense dataclass",
-        "purpose": "Type-safe expense object with Decimal amount"
+        "structure": "Decimal",
+        "purpose": "Precise monetary comparisons"
       },
       {
         "structure": "List[Violation]",
-        "purpose": "Collect all violations across all expense-rule pairs"
+        "purpose": "Collect all violations"
       }
     ],
     "algorithm_steps": [
-      "1. **Parse expenses**: Convert dict to Expense objects, parsing amount strings to Decimal",
-      "2. **Iterate expenses**: For each expense in the list",
-      "3. **Apply all rules**: For each rule, call `rule.evaluate(expense)`",
-      "4. **Collect violations**: If evaluate returns a Violation, add it to the list",
-      "5. **Return all violations**: Return the complete list (may be empty)"
+      "1. Define Violation dataclass with expense_id, rule_name, reason",
+      "2. Define abstract Rule class with evaluate() and get_name()",
+      "3. Implement BanRule: check if expense[field] matches banned value",
+      "4. Implement MaxAmountRule: check if amount > max_amount",
+      "5. Implement VendorTypeLimitRule: if vendor matches, check amount",
+      "6. Engine iterates all expenses \u00d7 all rules, collecting violations"
     ],
-    "why_decimal": "Financial calculations require exact precision. Using `float` for $0.10 + $0.10 + $0.10 gives `0.30000000000000004`, not `0.30`. This causes incorrect comparisons at boundaries (e.g., $75.00 vs $75.00 limit). `Decimal` guarantees exact decimal arithmetic."
+    "why_decimal": "Financial systems must never use float. `0.1 + 0.1 + 0.1 != 0.3` in IEEE 754 floating point. Decimal ensures exact decimal arithmetic."
   },
   "solution_python_lines": [
-    "\"\"\"",
-    "Corporate Expense Rules Engine - Strategy Pattern Implementation",
-    "",
-    "This module implements a flexible rules engine for validating corporate expenses.",
-    "Uses the Strategy Pattern to allow easy addition of new rule types.",
-    "\"\"\"",
-    "",
     "from abc import ABC, abstractmethod",
     "from dataclasses import dataclass",
     "from decimal import Decimal",
     "from typing import List, Dict, Optional",
     "",
     "",
-    "@dataclass(frozen=True)",
-    "class Expense:",
-    "    \"\"\"",
-    "    Represents a corporate expense with all relevant fields.",
-    "    ",
-    "    Attributes:",
-    "        expense_id: Unique identifier for the expense",
-    "        trip_id: Associated business trip ID",
-    "        amount_usd: Expense amount in USD (Decimal for precision)",
-    "        expense_type: Category like 'meals', 'airfare', 'entertainment'",
-    "        vendor_type: Type of vendor like 'restaurant', 'airline'",
-    "        vendor_name: Specific vendor name",
-    "    \"\"\"",
-    "    expense_id: str",
-    "    trip_id: str",
-    "    amount_usd: Decimal",
-    "    expense_type: str",
-    "    vendor_type: str",
-    "    vendor_name: str",
-    "    ",
-    "    @classmethod",
-    "    def from_dict(cls, data: Dict[str, str]) -> 'Expense':",
-    "        \"\"\"Factory method to create Expense from dictionary.\"\"\"",
-    "        return cls(",
-    "            expense_id=data['expense_id'],",
-    "            trip_id=data['trip_id'],",
-    "            amount_usd=Decimal(data['amount_usd']),",
-    "            expense_type=data['expense_type'],",
-    "            vendor_type=data['vendor_type'],",
-    "            vendor_name=data['vendor_name']",
-    "        )",
-    "",
-    "",
-    "@dataclass(frozen=True)",
+    "@dataclass",
     "class Violation:",
-    "    \"\"\"",
-    "    Represents a rule violation for an expense.",
-    "    ",
-    "    Attributes:",
-    "        expense_id: ID of the expense that violated the rule",
-    "        rule_name: Name of the rule that was violated",
-    "        reason: Human-readable explanation of the violation",
-    "    \"\"\"",
+    "    \"\"\"Immutable result when expense fails a rule.\"\"\"",
     "    expense_id: str",
     "    rule_name: str",
     "    reason: str",
     "",
     "",
     "class Rule(ABC):",
-    "    \"\"\"",
-    "    Abstract base class for all expense validation rules.",
-    "    ",
-    "    Each concrete rule implements evaluate() to check a specific condition.",
-    "    This enables the Strategy Pattern - rules are interchangeable strategies.",
-    "    \"\"\"",
+    "    \"\"\"Strategy interface - all rule types implement this.\"\"\"",
     "    ",
     "    @abstractmethod",
-    "    def evaluate(self, expense: Expense) -> Optional[Violation]:",
-    "        \"\"\"",
-    "        Evaluate the expense against this rule.",
-    "        ",
-    "        Args:",
-    "            expense: The expense to validate",
-    "            ",
-    "        Returns:",
-    "            Violation if the expense violates this rule, None otherwise",
-    "        \"\"\"",
+    "    def evaluate(self, expense: Dict[str, str]) -> Optional[Violation]:",
+    "        \"\"\"Returns Violation if expense fails, None if passes.\"\"\"",
     "        pass",
     "    ",
     "    @abstractmethod",
     "    def get_name(self) -> str:",
-    "        \"\"\"Return the name of this rule for violation reporting.\"\"\"",
+    "        \"\"\"Rule type identifier for violation reporting.\"\"\"",
     "        pass",
     "",
     "",
     "class BanRule(Rule):",
-    "    \"\"\"",
-    "    Rule that bans expenses with a specific field value.",
+    "    \"\"\"Blocks expenses where field matches banned value.\"\"\"",
     "    ",
-    "    Can ban by expense_type, vendor_type, or vendor_name.",
-    "    ",
-    "    Example:",
-    "        >>> rule = BanRule('expense_type', 'entertainment')",
-    "        >>> # Blocks all entertainment expenses",
-    "    \"\"\"",
-    "    ",
-    "    def __init__(self, field: str, banned_value: str):",
-    "        \"\"\"",
-    "        Initialize BanRule.",
-    "        ",
-    "        Args:",
-    "            field: The expense field to check ('expense_type', 'vendor_type', 'vendor_name')",
-    "            banned_value: The value that is not allowed",
-    "        \"\"\"",
+    "    def __init__(self, field: str, value: str):",
     "        self.field = field",
-    "        self.banned_value = banned_value",
+    "        self.banned_value = value",
     "    ",
-    "    def evaluate(self, expense: Expense) -> Optional[Violation]:",
-    "        \"\"\"Check if expense has banned field value.\"\"\"",
-    "        actual_value = getattr(expense, self.field, None)",
-    "        if actual_value == self.banned_value:",
+    "    def evaluate(self, expense: Dict[str, str]) -> Optional[Violation]:",
+    "        if expense.get(self.field) == self.banned_value:",
     "            return Violation(",
-    "                expense_id=expense.expense_id,",
+    "                expense_id=expense['expense_id'],",
     "                rule_name=self.get_name(),",
     "                reason=f\"{self.field} '{self.banned_value}' is not allowed\"",
     "            )",
     "        return None",
     "    ",
     "    def get_name(self) -> str:",
-    "        return \"BanRule\"",
+    "        return 'BanRule'",
     "",
     "",
     "class MaxAmountRule(Rule):",
-    "    \"\"\"",
-    "    Rule that limits the maximum amount for any single expense.",
+    "    \"\"\"Caps individual expense at max_amount.\"\"\"",
     "    ",
-    "    Example:",
-    "        >>> rule = MaxAmountRule(Decimal('250.00'))",
-    "        >>> # No expense can exceed $250",
-    "    \"\"\"",
+    "    def __init__(self, max_amount: float):",
+    "        self.max_amount = Decimal(str(max_amount))",
     "    ",
-    "    def __init__(self, max_amount: Decimal):",
-    "        \"\"\"",
-    "        Initialize MaxAmountRule.",
-    "        ",
-    "        Args:",
-    "            max_amount: Maximum allowed amount for a single expense",
-    "        \"\"\"",
-    "        self.max_amount = max_amount",
-    "    ",
-    "    def evaluate(self, expense: Expense) -> Optional[Violation]:",
-    "        \"\"\"Check if expense exceeds maximum amount.\"\"\"",
-    "        if expense.amount_usd > self.max_amount:",
+    "    def evaluate(self, expense: Dict[str, str]) -> Optional[Violation]:",
+    "        amount = Decimal(expense['amount_usd'])",
+    "        if amount > self.max_amount:",
     "            return Violation(",
-    "                expense_id=expense.expense_id,",
+    "                expense_id=expense['expense_id'],",
     "                rule_name=self.get_name(),",
-    "                reason=f\"amount ${expense.amount_usd} exceeds maximum ${self.max_amount}\"",
+    "                reason=f\"amount ${amount:.2f} exceeds maximum ${self.max_amount:.2f}\"",
     "            )",
     "        return None",
     "    ",
     "    def get_name(self) -> str:",
-    "        return \"MaxAmountRule\"",
+    "        return 'MaxAmountRule'",
     "",
     "",
     "class VendorTypeLimitRule(Rule):",
-    "    \"\"\"",
-    "    Rule that limits spending at a specific vendor type.",
+    "    \"\"\"Caps amount for specific vendor_type.\"\"\"",
     "    ",
-    "    Only applies to expenses matching the specified vendor_type.",
-    "    ",
-    "    Example:",
-    "        >>> rule = VendorTypeLimitRule('restaurant', Decimal('75.00'))",
-    "        >>> # Restaurant expenses cannot exceed $75",
-    "    \"\"\"",
-    "    ",
-    "    def __init__(self, vendor_type: str, max_amount: Decimal):",
-    "        \"\"\"",
-    "        Initialize VendorTypeLimitRule.",
-    "        ",
-    "        Args:",
-    "            vendor_type: The vendor type this limit applies to",
-    "            max_amount: Maximum allowed amount for this vendor type",
-    "        \"\"\"",
+    "    def __init__(self, vendor_type: str, max_amount: float):",
     "        self.vendor_type = vendor_type",
-    "        self.max_amount = max_amount",
+    "        self.max_amount = Decimal(str(max_amount))",
     "    ",
-    "    def evaluate(self, expense: Expense) -> Optional[Violation]:",
-    "        \"\"\"Check if expense at matching vendor type exceeds limit.\"\"\"",
-    "        # Only check if vendor type matches",
-    "        if expense.vendor_type != self.vendor_type:",
+    "    def evaluate(self, expense: Dict[str, str]) -> Optional[Violation]:",
+    "        # Rule only applies to matching vendor type",
+    "        if expense.get('vendor_type') != self.vendor_type:",
     "            return None",
     "        ",
-    "        if expense.amount_usd > self.max_amount:",
+    "        amount = Decimal(expense['amount_usd'])",
+    "        if amount > self.max_amount:",
     "            return Violation(",
-    "                expense_id=expense.expense_id,",
+    "                expense_id=expense['expense_id'],",
     "                rule_name=self.get_name(),",
-    "                reason=f\"{self.vendor_type} expense ${expense.amount_usd} exceeds limit ${self.max_amount}\"",
+    "                reason=f\"{self.vendor_type} expense ${amount:.2f} exceeds limit ${self.max_amount:.2f}\"",
     "            )",
     "        return None",
     "    ",
     "    def get_name(self) -> str:",
-    "        return \"VendorTypeLimitRule\"",
+    "        return 'VendorTypeLimitRule'",
     "",
     "",
     "class ExpenseRulesEngine:",
-    "    \"\"\"",
-    "    Engine that evaluates expenses against a set of rules.",
+    "    \"\"\"Evaluates expenses against rules, returns all violations.\"\"\"",
     "    ",
-    "    Applies all rules to all expenses and collects violations.",
-    "    An expense can violate multiple rules.",
-    "    ",
-    "    Example:",
-    "        >>> engine = ExpenseRulesEngine()",
-    "        >>> violations = engine.evaluate_rules(rules, expenses)",
-    "    \"\"\"",
-    "    ",
-    "    def evaluate_rules(",
-    "        self,",
-    "        rules: List[Rule],",
-    "        expenses: List[Dict[str, str]]",
-    "    ) -> List[Violation]:",
-    "        \"\"\"",
-    "        Evaluate all expenses against all rules.",
-    "        ",
-    "        Args:",
-    "            rules: List of Rule objects to apply",
-    "            expenses: List of expense dictionaries",
-    "            ",
-    "        Returns:",
-    "            List of all violations found",
-    "        \"\"\"",
-    "        violations: List[Violation] = []",
-    "        ",
-    "        # Convert expenses from dicts to Expense objects",
-    "        expense_objects = [Expense.from_dict(e) for e in expenses]",
-    "        ",
-    "        # Check each expense against each rule",
-    "        for expense in expense_objects:",
+    "    def evaluate_rules(self, rules: List[Rule], ",
+    "                       expenses: List[Dict[str, str]]) -> List[Violation]:",
+    "        violations = []",
+    "        for expense in expenses:",
     "            for rule in rules:",
     "                violation = rule.evaluate(expense)",
-    "                if violation is not None:",
+    "                if violation:",
     "                    violations.append(violation)",
-    "        ",
     "        return violations",
     "",
     "",
-    "# ============================================================================",
-    "# DEMO AND TESTS",
-    "# ============================================================================",
-    "",
-    "def print_separator(title: str) -> None:",
-    "    \"\"\"Print a formatted section separator.\"\"\"",
-    "    print(\"\\n\" + \"=\" * 60)",
-    "    print(f\"  {title}\")",
-    "    print(\"=\" * 60)",
-    "",
-    "",
-    "def run_demo() -> None:",
-    "    \"\"\"Run demonstration of the expense rules engine.\"\"\"",
-    "    print_separator(\"CORPORATE EXPENSE RULES ENGINE DEMO\")",
+    "if __name__ == '__main__':",
+    "    # Demo: Basic expense evaluation",
+    "    engine = ExpenseRulesEngine()",
     "    ",
-    "    # Create rules",
-    "    rules: List[Rule] = [",
+    "    rules = [",
     "        BanRule('expense_type', 'entertainment'),",
     "        BanRule('expense_type', 'airfare'),",
-    "        MaxAmountRule(Decimal('250.00')),",
-    "        VendorTypeLimitRule('restaurant', Decimal('75.00'))",
+    "        MaxAmountRule(250),",
+    "        VendorTypeLimitRule('restaurant', 75)",
     "    ]",
     "    ",
-    "    print(\"\\n\ud83d\udccb Rules Configured:\")",
-    "    print(\"  1. BanRule: No 'entertainment' expenses\")",
-    "    print(\"  2. BanRule: No 'airfare' expenses\")",
-    "    print(\"  3. MaxAmountRule: No expense over $250\")",
-    "    print(\"  4. VendorTypeLimitRule: Restaurant expenses \u2264 $75\")",
-    "    ",
-    "    # Create expenses",
     "    expenses = [",
-    "        {",
-    "            'expense_id': 'E001',",
-    "            'trip_id': 'T001',",
-    "            'amount_usd': '49.99',",
-    "            'expense_type': 'client_hosting',",
-    "            'vendor_type': 'restaurant',",
-    "            'vendor_name': 'Outback Roadhouse'",
-    "        },",
-    "        {",
-    "            'expense_id': 'E002',",
-    "            'trip_id': 'T001',",
-    "            'amount_usd': '350.00',",
-    "            'expense_type': 'airfare',",
-    "            'vendor_type': 'airline',",
-    "            'vendor_name': 'Delta Airlines'",
-    "        },",
-    "        {",
-    "            'expense_id': 'E003',",
-    "            'trip_id': 'T002',",
-    "            'amount_usd': '85.00',",
-    "            'expense_type': 'meals',",
-    "            'vendor_type': 'restaurant',",
-    "            'vendor_name': 'Cheesecake Factory'",
-    "        },",
-    "        {",
-    "            'expense_id': 'E004',",
-    "            'trip_id': 'T002',",
-    "            'amount_usd': '150.00',",
-    "            'expense_type': 'entertainment',",
-    "            'vendor_type': 'theater',",
-    "            'vendor_name': 'AMC Theaters'",
-    "        }",
+    "        {'expense_id': 'E001', 'amount_usd': '49.99', ",
+    "         'expense_type': 'client_hosting', 'vendor_type': 'restaurant'},",
+    "        {'expense_id': 'E002', 'amount_usd': '150.00',",
+    "         'expense_type': 'entertainment', 'vendor_type': 'theater'},",
+    "        {'expense_id': 'E003', 'amount_usd': '85.00',",
+    "         'expense_type': 'meals', 'vendor_type': 'restaurant'},",
+    "        {'expense_id': 'E004', 'amount_usd': '350.00',",
+    "         'expense_type': 'airfare', 'vendor_type': 'airline'}",
     "    ]",
     "    ",
-    "    print(\"\\n\ud83d\udcb3 Expenses Submitted:\")",
-    "    for exp in expenses:",
-    "        print(f\"  {exp['expense_id']}: ${exp['amount_usd']} - {exp['expense_type']} at {exp['vendor_name']}\")",
-    "    ",
-    "    # Evaluate rules",
-    "    engine = ExpenseRulesEngine()",
     "    violations = engine.evaluate_rules(rules, expenses)",
     "    ",
-    "    print(\"\\n\ud83d\udea8 Violations Found:\")",
+    "    print('=' * 60)",
+    "    print('EXPENSE RULES ENGINE - VIOLATION REPORT')",
+    "    print('=' * 60)",
+    "    ",
     "    if not violations:",
-    "        print(\"  None - all expenses comply with policy!\")",
+    "        print('No violations found!')",
     "    else:",
     "        for v in violations:",
-    "            print(f\"  \u274c {v.expense_id} | {v.rule_name} | {v.reason}\")",
+    "            print(f'[{v.expense_id}] {v.rule_name}: {v.reason}')",
     "    ",
-    "    # Run boundary test",
-    "    print_separator(\"BOUNDARY TEST: $75.00 LIMIT\")",
-    "    ",
-    "    boundary_rules = [VendorTypeLimitRule('restaurant', Decimal('75.00'))]",
-    "    boundary_expenses = [",
-    "        {'expense_id': 'B1', 'trip_id': 'T', 'amount_usd': '74.99',",
-    "         'expense_type': 'meals', 'vendor_type': 'restaurant', 'vendor_name': 'A'},",
-    "        {'expense_id': 'B2', 'trip_id': 'T', 'amount_usd': '75.00',",
-    "         'expense_type': 'meals', 'vendor_type': 'restaurant', 'vendor_name': 'B'},",
-    "        {'expense_id': 'B3', 'trip_id': 'T', 'amount_usd': '75.01',",
-    "         'expense_type': 'meals', 'vendor_type': 'restaurant', 'vendor_name': 'C'}",
-    "    ]",
-    "    ",
-    "    boundary_violations = engine.evaluate_rules(boundary_rules, boundary_expenses)",
-    "    ",
-    "    print(\"\\n$75.00 limit test:\")",
-    "    print(\"  B1 ($74.99): \u2713 PASS\" if 'B1' not in [v.expense_id for v in boundary_violations] else \"  B1 ($74.99): \u2717 FAIL\")",
-    "    print(\"  B2 ($75.00): \u2713 PASS\" if 'B2' not in [v.expense_id for v in boundary_violations] else \"  B2 ($75.00): \u2717 FAIL\")",
-    "    print(\"  B3 ($75.01): \u2717 FAIL\" if 'B3' in [v.expense_id for v in boundary_violations] else \"  B3 ($75.01): \u2713 PASS\")",
-    "    ",
-    "    print_separator(\"DEMO COMPLETE\")",
-    "",
-    "",
-    "if __name__ == '__main__':",
-    "    run_demo()"
+    "    # Expected output:",
+    "    # [E002] BanRule: expense_type 'entertainment' is not allowed",
+    "    # [E003] VendorTypeLimitRule: restaurant expense $85.00 exceeds limit $75.00",
+    "    # [E004] BanRule: expense_type 'airfare' is not allowed",
+    "    # [E004] MaxAmountRule: amount $350.00 exceeds maximum $250.00"
   ],
   "solution_java_lines": [
     "import java.math.BigDecimal;",
     "import java.util.*;",
     "",
-    "/**",
-    " * Corporate Expense Rules Engine - Strategy Pattern Implementation",
-    " * ",
-    " * This implementation demonstrates clean OOP design with the Strategy Pattern",
-    " * for flexible, extensible rule evaluation.",
-    " */",
-    "",
-    "// ============================================================================",
-    "// DATA CLASSES",
-    "// ============================================================================",
-    "",
-    "/**",
-    " * Represents a corporate expense record.",
-    " */",
-    "class Expense {",
-    "    private final String expenseId;",
-    "    private final String tripId;",
-    "    private final BigDecimal amountUsd;",
-    "    private final String expenseType;",
-    "    private final String vendorType;",
-    "    private final String vendorName;",
-    "    ",
-    "    public Expense(String expenseId, String tripId, String amountUsd,",
-    "                   String expenseType, String vendorType, String vendorName) {",
-    "        this.expenseId = expenseId;",
-    "        this.tripId = tripId;",
-    "        this.amountUsd = new BigDecimal(amountUsd);",
-    "        this.expenseType = expenseType;",
-    "        this.vendorType = vendorType;",
-    "        this.vendorName = vendorName;",
-    "    }",
-    "    ",
-    "    public String getExpenseId() { return expenseId; }",
-    "    public String getTripId() { return tripId; }",
-    "    public BigDecimal getAmountUsd() { return amountUsd; }",
-    "    public String getExpenseType() { return expenseType; }",
-    "    public String getVendorType() { return vendorType; }",
-    "    public String getVendorName() { return vendorName; }",
-    "    ",
-    "    /**",
-    "     * Get field value by name (for dynamic field access in BanRule).",
-    "     */",
-    "    public String getFieldValue(String fieldName) {",
-    "        switch (fieldName) {",
-    "            case \"expense_type\": return expenseType;",
-    "            case \"vendor_type\": return vendorType;",
-    "            case \"vendor_name\": return vendorName;",
-    "            default: return null;",
-    "        }",
-    "    }",
-    "}",
-    "",
-    "/**",
-    " * Represents a rule violation.",
-    " */",
+    "// Immutable violation result",
     "class Violation {",
-    "    private final String expenseId;",
-    "    private final String ruleName;",
-    "    private final String reason;",
+    "    public final String expenseId;",
+    "    public final String ruleName;",
+    "    public final String reason;",
     "    ",
     "    public Violation(String expenseId, String ruleName, String reason) {",
     "        this.expenseId = expenseId;",
     "        this.ruleName = ruleName;",
     "        this.reason = reason;",
     "    }",
-    "    ",
-    "    public String getExpenseId() { return expenseId; }",
-    "    public String getRuleName() { return ruleName; }",
-    "    public String getReason() { return reason; }",
-    "    ",
-    "    @Override",
-    "    public String toString() {",
-    "        return String.format(\"%s | %s | %s\", expenseId, ruleName, reason);",
-    "    }",
     "}",
     "",
-    "// ============================================================================",
-    "// RULE INTERFACE AND IMPLEMENTATIONS",
-    "// ============================================================================",
-    "",
-    "/**",
-    " * Abstract base class for all expense validation rules.",
-    " * Implements the Strategy Pattern - each rule is a validation strategy.",
-    " */",
-    "abstract class Rule {",
-    "    /**",
-    "     * Evaluate the expense against this rule.",
-    "     * @param expense The expense to validate",
-    "     * @return Optional containing Violation if rule is violated, empty otherwise",
-    "     */",
-    "    public abstract Optional<Violation> evaluate(Expense expense);",
-    "    ",
-    "    /**",
-    "     * Get the name of this rule for violation reporting.",
-    "     */",
-    "    public abstract String getName();",
+    "// Strategy interface",
+    "interface Rule {",
+    "    Optional<Violation> evaluate(Map<String, String> expense);",
+    "    String getName();",
     "}",
     "",
-    "/**",
-    " * Rule that bans expenses with a specific field value.",
-    " */",
-    "class BanRule extends Rule {",
+    "class BanRule implements Rule {",
     "    private final String field;",
     "    private final String bannedValue;",
     "    ",
-    "    public BanRule(String field, String bannedValue) {",
+    "    public BanRule(String field, String value) {",
     "        this.field = field;",
-    "        this.bannedValue = bannedValue;",
+    "        this.bannedValue = value;",
     "    }",
     "    ",
     "    @Override",
-    "    public Optional<Violation> evaluate(Expense expense) {",
-    "        String actualValue = expense.getFieldValue(field);",
-    "        if (bannedValue.equals(actualValue)) {",
+    "    public Optional<Violation> evaluate(Map<String, String> expense) {",
+    "        if (bannedValue.equals(expense.get(field))) {",
     "            return Optional.of(new Violation(",
-    "                expense.getExpenseId(),",
+    "                expense.get(\"expense_id\"),",
     "                getName(),",
     "                String.format(\"%s '%s' is not allowed\", field, bannedValue)",
     "            ));",
@@ -741,24 +444,21 @@
     "    public String getName() { return \"BanRule\"; }",
     "}",
     "",
-    "/**",
-    " * Rule that limits the maximum amount for any single expense.",
-    " */",
-    "class MaxAmountRule extends Rule {",
+    "class MaxAmountRule implements Rule {",
     "    private final BigDecimal maxAmount;",
     "    ",
-    "    public MaxAmountRule(BigDecimal maxAmount) {",
-    "        this.maxAmount = maxAmount;",
+    "    public MaxAmountRule(double maxAmount) {",
+    "        this.maxAmount = BigDecimal.valueOf(maxAmount);",
     "    }",
     "    ",
     "    @Override",
-    "    public Optional<Violation> evaluate(Expense expense) {",
-    "        if (expense.getAmountUsd().compareTo(maxAmount) > 0) {",
+    "    public Optional<Violation> evaluate(Map<String, String> expense) {",
+    "        BigDecimal amount = new BigDecimal(expense.get(\"amount_usd\"));",
+    "        if (amount.compareTo(maxAmount) > 0) {",
     "            return Optional.of(new Violation(",
-    "                expense.getExpenseId(),",
+    "                expense.get(\"expense_id\"),",
     "                getName(),",
-    "                String.format(\"amount $%s exceeds maximum $%s\",",
-    "                    expense.getAmountUsd(), maxAmount)",
+    "                String.format(\"amount $%.2f exceeds maximum $%.2f\", amount, maxAmount)",
     "            ));",
     "        }",
     "        return Optional.empty();",
@@ -768,31 +468,28 @@
     "    public String getName() { return \"MaxAmountRule\"; }",
     "}",
     "",
-    "/**",
-    " * Rule that limits spending at a specific vendor type.",
-    " */",
-    "class VendorTypeLimitRule extends Rule {",
+    "class VendorTypeLimitRule implements Rule {",
     "    private final String vendorType;",
     "    private final BigDecimal maxAmount;",
     "    ",
-    "    public VendorTypeLimitRule(String vendorType, BigDecimal maxAmount) {",
+    "    public VendorTypeLimitRule(String vendorType, double maxAmount) {",
     "        this.vendorType = vendorType;",
-    "        this.maxAmount = maxAmount;",
+    "        this.maxAmount = BigDecimal.valueOf(maxAmount);",
     "    }",
     "    ",
     "    @Override",
-    "    public Optional<Violation> evaluate(Expense expense) {",
-    "        // Only check if vendor type matches",
-    "        if (!vendorType.equals(expense.getVendorType())) {",
-    "            return Optional.empty();",
+    "    public Optional<Violation> evaluate(Map<String, String> expense) {",
+    "        if (!vendorType.equals(expense.get(\"vendor_type\"))) {",
+    "            return Optional.empty();  // Rule doesn't apply",
     "        }",
     "        ",
-    "        if (expense.getAmountUsd().compareTo(maxAmount) > 0) {",
+    "        BigDecimal amount = new BigDecimal(expense.get(\"amount_usd\"));",
+    "        if (amount.compareTo(maxAmount) > 0) {",
     "            return Optional.of(new Violation(",
-    "                expense.getExpenseId(),",
+    "                expense.get(\"expense_id\"),",
     "                getName(),",
-    "                String.format(\"%s expense $%s exceeds limit $%s\",",
-    "                    vendorType, expense.getAmountUsd(), maxAmount)",
+    "                String.format(\"%s expense $%.2f exceeds limit $%.2f\", ",
+    "                              vendorType, amount, maxAmount)",
     "            ));",
     "        }",
     "        return Optional.empty();",
@@ -802,471 +499,416 @@
     "    public String getName() { return \"VendorTypeLimitRule\"; }",
     "}",
     "",
-    "// ============================================================================",
-    "// RULES ENGINE",
-    "// ============================================================================",
-    "",
-    "/**",
-    " * Engine that evaluates expenses against a set of rules.",
-    " */",
-    "class ExpenseRulesEngine {",
-    "    /**",
-    "     * Evaluate all expenses against all rules.",
-    "     * @param rules List of rules to apply",
-    "     * @param expenses List of expenses to validate",
-    "     * @return List of all violations found",
-    "     */",
-    "    public List<Violation> evaluateRules(List<Rule> rules, List<Expense> expenses) {",
+    "public class ExpenseRulesEngine {",
+    "    ",
+    "    public List<Violation> evaluateRules(List<Rule> rules, ",
+    "                                         List<Map<String, String>> expenses) {",
     "        List<Violation> violations = new ArrayList<>();",
-    "        ",
-    "        for (Expense expense : expenses) {",
+    "        for (Map<String, String> expense : expenses) {",
     "            for (Rule rule : rules) {",
-    "                Optional<Violation> violation = rule.evaluate(expense);",
-    "                violation.ifPresent(violations::add);",
+    "                rule.evaluate(expense).ifPresent(violations::add);",
     "            }",
     "        }",
-    "        ",
     "        return violations;",
     "    }",
-    "}",
-    "",
-    "// ============================================================================",
-    "// DEMO",
-    "// ============================================================================",
-    "",
-    "public class ExpenseRulesDemo {",
+    "    ",
     "    public static void main(String[] args) {",
-    "        System.out.println(\"============================================================\");",
-    "        System.out.println(\"  CORPORATE EXPENSE RULES ENGINE DEMO\");",
-    "        System.out.println(\"============================================================\");",
+    "        ExpenseRulesEngine engine = new ExpenseRulesEngine();",
     "        ",
-    "        // Create rules",
     "        List<Rule> rules = Arrays.asList(",
     "            new BanRule(\"expense_type\", \"entertainment\"),",
-    "            new BanRule(\"expense_type\", \"airfare\"),",
-    "            new MaxAmountRule(new BigDecimal(\"250.00\")),",
-    "            new VendorTypeLimitRule(\"restaurant\", new BigDecimal(\"75.00\"))",
+    "            new MaxAmountRule(250),",
+    "            new VendorTypeLimitRule(\"restaurant\", 75)",
     "        );",
     "        ",
-    "        System.out.println(\"\\nRules Configured:\");",
-    "        System.out.println(\"  1. BanRule: No 'entertainment' expenses\");",
-    "        System.out.println(\"  2. BanRule: No 'airfare' expenses\");",
-    "        System.out.println(\"  3. MaxAmountRule: No expense over $250\");",
-    "        System.out.println(\"  4. VendorTypeLimitRule: Restaurant expenses <= $75\");",
+    "        List<Map<String, String>> expenses = new ArrayList<>();",
+    "        Map<String, String> e1 = new HashMap<>();",
+    "        e1.put(\"expense_id\", \"E001\");",
+    "        e1.put(\"amount_usd\", \"49.99\");",
+    "        e1.put(\"expense_type\", \"client_hosting\");",
+    "        e1.put(\"vendor_type\", \"restaurant\");",
+    "        expenses.add(e1);",
     "        ",
-    "        // Create expenses",
-    "        List<Expense> expenses = Arrays.asList(",
-    "            new Expense(\"E001\", \"T001\", \"49.99\", \"client_hosting\", \"restaurant\", \"Outback\"),",
-    "            new Expense(\"E002\", \"T001\", \"350.00\", \"airfare\", \"airline\", \"Delta\"),",
-    "            new Expense(\"E003\", \"T002\", \"85.00\", \"meals\", \"restaurant\", \"Cheesecake Factory\"),",
-    "            new Expense(\"E004\", \"T002\", \"150.00\", \"entertainment\", \"theater\", \"AMC\")",
-    "        );",
+    "        Map<String, String> e2 = new HashMap<>();",
+    "        e2.put(\"expense_id\", \"E002\");",
+    "        e2.put(\"amount_usd\", \"150.00\");",
+    "        e2.put(\"expense_type\", \"entertainment\");",
+    "        e2.put(\"vendor_type\", \"theater\");",
+    "        expenses.add(e2);",
     "        ",
-    "        System.out.println(\"\\nExpenses Submitted:\");",
-    "        for (Expense exp : expenses) {",
-    "            System.out.printf(\"  %s: $%s - %s at %s%n\",",
-    "                exp.getExpenseId(), exp.getAmountUsd(),",
-    "                exp.getExpenseType(), exp.getVendorName());",
-    "        }",
-    "        ",
-    "        // Evaluate rules",
-    "        ExpenseRulesEngine engine = new ExpenseRulesEngine();",
     "        List<Violation> violations = engine.evaluateRules(rules, expenses);",
     "        ",
-    "        System.out.println(\"\\nViolations Found:\");",
-    "        if (violations.isEmpty()) {",
-    "            System.out.println(\"  None - all expenses comply with policy!\");",
-    "        } else {",
-    "            for (Violation v : violations) {",
-    "                System.out.println(\"  X \" + v);",
-    "            }",
+    "        System.out.println(\"VIOLATION REPORT\");",
+    "        for (Violation v : violations) {",
+    "            System.out.printf(\"[%s] %s: %s%n\", v.expenseId, v.ruleName, v.reason);",
     "        }",
-    "        ",
-    "        System.out.println(\"\\n============================================================\");",
-    "        System.out.println(\"  DEMO COMPLETE\");",
-    "        System.out.println(\"============================================================\");",
     "    }",
     "}"
   ],
   "code_walkthrough": [
     {
-      "lines": "1-11",
-      "section": "Module Docstring and Imports",
-      "explanation": "We import `ABC` and `abstractmethod` for abstract base classes, `dataclass` for clean data structures, `Decimal` for precise currency math, and typing for type hints. This sets up a properly typed, production-quality module."
+      "lines": "1-4",
+      "section": "Imports",
+      "explanation": "We import `ABC` for abstract class, `dataclass` for clean data containers, `Decimal` for precise financial math, and typing hints. **Critical**: Using Decimal prevents float precision bugs like `0.1 + 0.1 + 0.1 \u2260 0.3`"
     },
     {
-      "lines": "14-43",
-      "section": "Expense Dataclass",
-      "explanation": "The `Expense` class uses `@dataclass(frozen=True)` for immutability. Key feature: `amount_usd` is stored as `Decimal`, not string. The `from_dict()` factory method handles the string-to-Decimal conversion, centralizing this logic."
+      "lines": "7-12",
+      "section": "Violation dataclass",
+      "explanation": "Immutable result object capturing: **which expense** failed, **which rule** caught it, and **why**. Using dataclass gives us `__init__`, `__repr__`, and `__eq__` for free."
     },
     {
-      "lines": "46-59",
-      "section": "Violation Dataclass",
-      "explanation": "The `Violation` class captures three key pieces: which expense failed (`expense_id`), what rule it violated (`rule_name`), and why (`reason`). Using `frozen=True` ensures violations are immutable once created."
+      "lines": "15-26",
+      "section": "Rule abstract class",
+      "explanation": "This is the **Strategy interface**. All concrete rules must implement:\n- `evaluate()`: Returns `None` if expense passes, `Violation` if it fails\n- `get_name()`: Returns rule type for violation reporting\n\nThis abstraction is what enables extensibility - the engine doesn't need to know about specific rule implementations."
     },
     {
-      "lines": "62-83",
-      "section": "Abstract Rule Base Class",
-      "explanation": "This is the Strategy Pattern interface. The `@abstractmethod` decorator ensures every concrete rule implements `evaluate()` and `get_name()`. The docstrings clarify the contract: return `Violation` or `None`."
+      "lines": "29-46",
+      "section": "BanRule implementation",
+      "explanation": "Checks if `expense[field]` matches `banned_value`. Uses `expense.get(field)` to safely handle missing fields (returns `None`, won't match). The field is configurable - can ban by `expense_type`, `vendor_type`, or `vendor_name`."
     },
     {
-      "lines": "86-115",
-      "section": "BanRule Implementation",
-      "explanation": "The BanRule uses `getattr(expense, self.field, None)` for dynamic field access. This single class handles banning by `expense_type`, `vendor_type`, or `vendor_name` - no need for three separate classes."
+      "lines": "49-66",
+      "section": "MaxAmountRule implementation",
+      "explanation": "Parses amount string to Decimal, compares with `>` (strictly greater - exactly at limit passes). Note we convert `max_amount` to Decimal in `__init__` once, not in every `evaluate()` call."
     },
     {
-      "lines": "118-145",
-      "section": "MaxAmountRule Implementation",
-      "explanation": "Simple comparison: `expense.amount_usd > self.max_amount`. Using `>` (not `>=`) means exactly-at-limit expenses PASS. The violation message includes both the actual amount and the limit for clarity."
+      "lines": "69-90",
+      "section": "VendorTypeLimitRule implementation",
+      "explanation": "**Two-step check**: First verifies vendor_type matches (returns `None` early if not), then checks amount. This is a good example of a rule that only applies conditionally."
     },
     {
-      "lines": "148-183",
-      "section": "VendorTypeLimitRule Implementation",
-      "explanation": "This rule has TWO conditions: vendor type must match AND amount must exceed limit. Note the early return if vendor type doesn't match - this is cleaner than nested if statements."
+      "lines": "93-102",
+      "section": "ExpenseRulesEngine.evaluate_rules",
+      "explanation": "The **orchestrator** that doesn't know rule specifics. It simply:\n1. Iterates all expenses\n2. For each expense, iterates all rules\n3. Calls `rule.evaluate()` polymorphically\n4. Collects non-None results\n\n**Key**: We don't short-circuit - one expense can have multiple violations."
     },
     {
-      "lines": "186-217",
-      "section": "ExpenseRulesEngine",
-      "explanation": "The engine is deliberately simple: convert expenses, then nested loop over expenses and rules. The key insight is that we DON'T short-circuit - we check ALL rules for ALL expenses to catch multiple violations."
-    },
-    {
-      "lines": "220-280",
-      "section": "Demo and Tests",
-      "explanation": "The demo creates realistic test data including an expense that violates multiple rules (E002: airfare + over $250) and boundary tests (exactly $75.00 should pass). This proves the solution handles edge cases."
+      "lines": "105-140",
+      "section": "Demo with test cases",
+      "explanation": "Demonstrates:\n- E001: $49.99 restaurant passes all rules\n- E002: $150 entertainment fails BanRule\n- E003: $85 restaurant fails VendorTypeLimitRule\n- E004: $350 airfare fails BanRule AND MaxAmountRule (multiple violations)"
     }
   ],
   "debugging_strategy": {
-    "how_to_test_incrementally": "1. First test with single rule, single expense\n2. Add second expense that should fail\n3. Add second rule, verify both rules checked\n4. Add expense that fails multiple rules\n5. Test boundary conditions ($75.00 exactly)",
+    "how_to_test_incrementally": "1. Test each rule in isolation first: create one BanRule, one expense, verify violation\n2. Test edge cases: exactly at limit ($75.00), just over ($75.01)\n3. Test multiple rules on one expense\n4. Test expense that passes all rules (should return empty list)",
     "what_to_print_or_assert": [
-      "print(f'Checking expense {expense.expense_id} against {rule.get_name()}')",
-      "print(f'Amount: {expense.amount_usd}, Limit: {self.max_amount}, Exceeds: {expense.amount_usd > self.max_amount}')",
-      "assert len(violations) == 3, f'Expected 3 violations, got {len(violations)}'"
+      "print(f'Evaluating {rule.get_name()} on {expense[\"expense_id\"]}')",
+      "print(f'Amount: {amount}, Max: {self.max_amount}, Exceeds: {amount > self.max_amount}')",
+      "assert len(violations) == expected_count",
+      "assert violations[0].expense_id == 'E002'"
     ],
     "common_failure_modes": [
-      "**Forgetting to parse string amounts**: Comparing '350' > '250' as strings gives wrong result",
-      "**Using float instead of Decimal**: Boundary conditions fail due to precision errors",
-      "**Short-circuiting on first violation**: Missing multiple violations per expense",
-      "**Wrong comparison operator**: Using >= instead of > for limit checks",
-      "**Typo in field name**: 'expense_type' vs 'expenseType'"
+      "String amount not parsed to Decimal - comparison fails silently",
+      "Using >= instead of > for limit check (boundary condition)",
+      "Short-circuiting on first violation per expense",
+      "Typo in field name ('expenseType' vs 'expense_type')"
     ],
-    "how_to_fix_fast": "1. Add print statement right before the comparison that's failing\n2. Print the types: `print(type(amount), type(limit))`\n3. For boundary issues, test with exact limit value\n4. Count violations and compare to expected"
+    "how_to_fix_fast": "Add a print inside each rule's evaluate() showing the comparison values. If amount shows as string or comparisons seem wrong, check Decimal conversion. If violations missing, check if evaluate() returns None when it shouldn't."
   },
   "complexity_analysis": {
     "time": {
       "evaluate_rules": {
-        "complexity": "O(R \u00d7 E)",
-        "explanation": "For each expense (E), we check each rule (R). Each rule evaluation is O(1)."
+        "complexity": "O(E \u00d7 R)",
+        "explanation": "Each expense checked against each rule"
       },
-      "individual_rule_evaluate": {
+      "BanRule.evaluate": {
         "complexity": "O(1)",
-        "explanation": "Field access, comparison, and Violation creation are all constant time"
+        "explanation": "Dictionary lookup + string comparison"
       },
-      "overall": "O(R \u00d7 E) where R = number of rules, E = number of expenses. With R \u2264 50 and E \u2264 1000, this is 50,000 operations - very fast."
+      "MaxAmountRule.evaluate": {
+        "complexity": "O(1)",
+        "explanation": "Parse amount + decimal comparison"
+      },
+      "VendorTypeLimitRule.evaluate": {
+        "complexity": "O(1)",
+        "explanation": "Two string comparisons + decimal comparison"
+      },
+      "overall": "O(E \u00d7 R) where E=number of expenses, R=number of rules"
     },
     "space": {
-      "complexity": "O(V) where V = number of violations",
-      "breakdown": "- Expense objects: O(E) - we create Expense from each dict\n- Rules storage: O(R) - passed in, not duplicated\n- Violations list: O(V) - worst case V = R \u00d7 E\n- Working memory: O(1) per rule evaluation",
-      "note": "In the worst case (every expense violates every rule), V = R \u00d7 E = 50,000 violations."
+      "complexity": "O(V)",
+      "breakdown": "- Rules storage: O(R)\n- Expenses storage: O(E) (passed in, not owned)\n- Violations list: O(V) where V \u2264 E \u00d7 R worst case",
+      "note": "In practice, violations are sparse - most expenses pass most rules"
     },
-    "can_we_do_better": "For Part 1, O(R \u00d7 E) is optimal - we must check every expense against every rule. Part 2 (aggregation) might need additional data structures, but the core complexity remains the same."
+    "can_we_do_better": "For this problem, O(E \u00d7 R) is necessary - we must check each expense against each rule. Could optimize with rule indexing if many rules exist (e.g., HashMap from field->BanRules), but unnecessary for given constraints (\u226450 rules, \u22641000 expenses)."
   },
   "dry_run": {
-    "example": "Rules: [BanRule(airfare), MaxAmount($250), VendorLimit(restaurant, $75)]\nExpenses: [E002: $350 airfare at airline]",
-    "trace_table": "| Step | Expense | Rule | Check | Result |\n|------|---------|------|-------|--------|\n| 1 | E002 ($350, airfare, airline) | BanRule(expense_type=airfare) | 'airfare' == 'airfare'? YES | **VIOLATION** |\n| 2 | E002 ($350, airfare, airline) | MaxAmountRule($250) | $350 > $250? YES | **VIOLATION** |\n| 3 | E002 ($350, airfare, airline) | VendorTypeLimitRule(restaurant, $75) | vendor_type='airline' != 'restaurant' | PASS (not applicable) |\n\n**Final violations list: 2 violations for E002**",
-    "final_answer": "[Violation(E002, BanRule, airfare not allowed), Violation(E002, MaxAmountRule, $350 exceeds $250)]"
+    "example": "Rules: [BanRule(entertainment), MaxAmountRule($250), VendorTypeLimitRule(restaurant, $75)]\nExpenses: [E001: $49.99 restaurant, E002: $150 entertainment, E003: $85 restaurant]",
+    "trace_table": "| Expense | Rule | Check | Result | Violation Added |\n|---------|------|-------|--------|----------------|\n| E001 ($49.99, restaurant) | BanRule(entertainment) | expense_type='client_hosting' \u2260 'entertainment' | PASS | - |\n| E001 | MaxAmountRule($250) | $49.99 > $250? No | PASS | - |\n| E001 | VendorTypeLimitRule(restaurant, $75) | vendor=restaurant \u2713, $49.99 > $75? No | PASS | - |\n| E002 ($150, theater, entertainment) | BanRule(entertainment) | expense_type='entertainment' = 'entertainment' | **FAIL** | \u2705 |\n| E002 | MaxAmountRule($250) | $150 > $250? No | PASS | - |\n| E002 | VendorTypeLimitRule(restaurant, $75) | vendor='theater' \u2260 'restaurant' | SKIP | - |\n| E003 ($85, restaurant, meals) | BanRule(entertainment) | expense_type='meals' \u2260 'entertainment' | PASS | - |\n| E003 | MaxAmountRule($250) | $85 > $250? No | PASS | - |\n| E003 | VendorTypeLimitRule(restaurant, $75) | vendor=restaurant \u2713, $85 > $75? Yes | **FAIL** | \u2705 |",
+    "final_answer": "2 violations: [E002 BanRule, E003 VendorTypeLimitRule]"
   },
   "test_cases": [
     {
-      "name": "Basic - Single expense passes all rules",
+      "name": "Basic - Single expense passes single rule",
       "category": "Happy Path",
-      "input": "BanRule(entertainment), MaxAmount($250), VendorLimit(restaurant, $75)\nE001: $49.99 client_hosting at restaurant",
-      "expected": "[] (empty - no violations)",
-      "explanation": "Not entertainment, under $250, restaurant amount under $75"
+      "input": "rules=[MaxAmountRule(100)], expenses=[{id:E001, amount:50}]",
+      "expected": "[]",
+      "explanation": "$50 < $100 limit, no violation"
     },
     {
-      "name": "Single expense violates BanRule",
-      "category": "Basic Failure",
-      "input": "BanRule(entertainment)\nE001: $50 entertainment at theater",
-      "expected": "[Violation(E001, BanRule, entertainment not allowed)]",
-      "explanation": "expense_type matches banned value"
+      "name": "Basic - Single expense fails single rule",
+      "category": "Happy Path",
+      "input": "rules=[MaxAmountRule(100)], expenses=[{id:E001, amount:150}]",
+      "expected": "[Violation(E001, MaxAmountRule, ...)]",
+      "explanation": "$150 > $100 limit"
     },
     {
-      "name": "Multiple violations on single expense",
-      "category": "Multiple Failures",
-      "input": "BanRule(airfare), MaxAmount($250)\nE001: $350 airfare at airline",
-      "expected": "2 violations: BanRule and MaxAmountRule",
-      "explanation": "Expense is banned type AND exceeds max amount"
+      "name": "One expense, multiple violations",
+      "category": "Core Logic",
+      "input": "rules=[BanRule(airfare), MaxAmountRule(250)], expenses=[{id:E001, amount:350, type:airfare}]",
+      "expected": "2 violations for E001",
+      "explanation": "Same expense triggers BanRule AND MaxAmountRule"
     },
     {
-      "name": "Boundary: exactly at limit",
+      "name": "Boundary - Exactly at limit",
       "category": "Edge Case",
-      "input": "VendorLimit(restaurant, $75)\nE001: $75.00 at restaurant",
-      "expected": "[] (empty - passes)",
-      "explanation": "$75.00 \u2264 $75.00 limit (limit is inclusive)"
+      "input": "rules=[MaxAmountRule(75)], expenses=[{id:E001, amount:75.00}]",
+      "expected": "[] (passes)",
+      "explanation": "Limit is > not >=, so exactly $75.00 passes"
     },
     {
-      "name": "Boundary: just over limit",
+      "name": "Boundary - Just over limit",
       "category": "Edge Case",
-      "input": "VendorLimit(restaurant, $75)\nE001: $75.01 at restaurant",
-      "expected": "[Violation(E001, VendorTypeLimitRule, ...)]",
-      "explanation": "$75.01 > $75.00 limit"
+      "input": "rules=[MaxAmountRule(75)], expenses=[{id:E001, amount:75.01}]",
+      "expected": "[Violation(E001, MaxAmountRule, ...)]",
+      "explanation": "$75.01 > $75 triggers violation"
     },
     {
-      "name": "VendorLimit doesn't apply to wrong vendor type",
-      "category": "Conditional Rule",
-      "input": "VendorLimit(restaurant, $75)\nE001: $500 at airline",
-      "expected": "[] (empty - vendor type doesn't match)",
-      "explanation": "Rule only applies to restaurant vendor type"
+      "name": "VendorTypeLimitRule - Non-matching vendor",
+      "category": "Rule Logic",
+      "input": "rules=[VendorTypeLimitRule(restaurant, 75)], expenses=[{id:E001, amount:100, vendor:hotel}]",
+      "expected": "[]",
+      "explanation": "Rule only applies to restaurant vendors, hotel expense skipped"
     },
     {
-      "name": "Empty expenses list",
+      "name": "No violations - All pass",
       "category": "Edge Case",
-      "input": "BanRule(entertainment)\nNo expenses",
-      "expected": "[] (empty)",
-      "explanation": "No expenses to check means no violations"
-    },
-    {
-      "name": "Empty rules list",
-      "category": "Edge Case",
-      "input": "No rules\nE001: $1000 gambling at casino",
-      "expected": "[] (empty)",
-      "explanation": "No rules means nothing can be violated"
+      "input": "Multiple rules, multiple expenses, all compliant",
+      "expected": "[]",
+      "explanation": "Empty list when no violations found"
     }
   ],
   "common_mistakes": [
     {
-      "mistake": "Not parsing string amounts to numeric",
-      "why_wrong": "String comparison: '9' > '10' is True (lexicographic). '$99.99' > '$100' gives wrong result.",
-      "correct_approach": "Always convert to Decimal before comparison",
-      "code_wrong": "if expense['amount_usd'] > self.max_amount:  # string comparison!",
-      "code_correct": "if Decimal(expense['amount_usd']) > self.max_amount:  # numeric comparison"
+      "mistake": "Not parsing string amounts",
+      "why_wrong": "expense['amount_usd'] is '49.99' (string), not 49.99 (number)",
+      "correct_approach": "Parse with Decimal(expense['amount_usd'])",
+      "code_wrong": "if expense['amount_usd'] > self.max_amount:  # Compares strings!",
+      "code_correct": "amount = Decimal(expense['amount_usd'])\nif amount > self.max_amount:"
+    },
+    {
+      "mistake": "Short-circuiting on first violation",
+      "why_wrong": "An expense can violate multiple rules - must report ALL",
+      "correct_approach": "Continue checking all rules even after finding a violation",
+      "code_wrong": "for rule in rules:\n    violation = rule.evaluate(expense)\n    if violation:\n        return [violation]  # WRONG - stops too early!",
+      "code_correct": "for rule in rules:\n    violation = rule.evaluate(expense)\n    if violation:\n        violations.append(violation)  # Continue checking"
     },
     {
       "mistake": "Using float for currency",
-      "why_wrong": "0.1 + 0.1 + 0.1 = 0.30000000000000004, not 0.3. Boundary tests fail.",
-      "correct_approach": "Use Decimal (Python) or BigDecimal (Java)",
+      "why_wrong": "0.1 + 0.1 + 0.1 = 0.30000000000000004 in float",
+      "correct_approach": "Use Decimal for exact decimal arithmetic",
       "code_wrong": "amount = float(expense['amount_usd'])",
       "code_correct": "amount = Decimal(expense['amount_usd'])"
     },
     {
-      "mistake": "Short-circuiting on first violation",
-      "why_wrong": "Problem states one expense can violate multiple rules. Must check ALL rules.",
-      "correct_approach": "Continue iterating even after finding a violation",
-      "code_wrong": "if violation:\n    violations.append(violation)\n    break  # WRONG - stops checking other rules",
-      "code_correct": "if violation:\n    violations.append(violation)\n# Continue to next rule"
+      "mistake": "Hardcoding rule logic in engine",
+      "why_wrong": "Violates Open/Closed Principle, can't add new rules without modification",
+      "correct_approach": "Rules implement common interface, engine uses polymorphism",
+      "code_wrong": "if rule.type == 'ban': # check ban\nelif rule.type == 'max': # check max",
+      "code_correct": "violation = rule.evaluate(expense)  # Polymorphism!"
     },
     {
-      "mistake": "Switch/case on rule type in engine",
-      "why_wrong": "Violates Open/Closed Principle. Adding new rule requires modifying engine.",
-      "correct_approach": "Use polymorphism - call rule.evaluate() regardless of type",
-      "code_wrong": "if isinstance(rule, BanRule):\n    check_ban(expense, rule)\nelif isinstance(rule, MaxAmountRule):\n    check_max(expense, rule)",
-      "code_correct": "violation = rule.evaluate(expense)  # Polymorphism handles the rest"
-    },
-    {
-      "mistake": "Using >= instead of > for limit comparison",
-      "why_wrong": "Example 3 shows $75.00 exactly should PASS a $75 limit. Using >= would fail it.",
-      "correct_approach": "Use > for exceeds limit (violation occurs when amount > limit)",
-      "code_wrong": "if expense.amount_usd >= self.max_amount:",
-      "code_correct": "if expense.amount_usd > self.max_amount:"
+      "mistake": "Wrong boundary condition (>= instead of >)",
+      "why_wrong": "Examples show $75.00 exactly at $75 limit passes",
+      "correct_approach": "Use > for comparison, not >=",
+      "code_wrong": "if amount >= self.max_amount:",
+      "code_correct": "if amount > self.max_amount:"
     }
   ],
   "interview_tips": {
-    "opening": "Thank you for this problem. Before I start coding, I'd like to clarify a few things about the requirements and share my initial design thoughts.",
+    "opening": "Thank you for this problem. Before I start coding, I'd like to clarify a few things and share my initial thoughts on the design approach.",
     "clarifying_questions_to_ask": [
+      "For limits like $75, should exactly $75.00 pass or fail? (Looking at examples, it seems to pass)",
       "Are amounts always valid decimal strings, or should I handle parsing errors?",
-      "For the VendorTypeLimitRule, is $75.00 at the limit a pass or fail? (Clarify boundary behavior)",
-      "Should violations be in any particular order, or is any order acceptable?",
-      "For BanRule, should I support only exact matches, or also partial/regex matches?",
-      "Can the same expense appear multiple times in the input, or are expense IDs unique?"
+      "Can multiple rules of the same type exist? e.g., two BanRules with different values",
+      "Should violations be returned in any particular order?",
+      "For VendorTypeLimitRule, what if an expense doesn't have a vendor_type field?"
     ],
     "what_to_mention_proactively": [
-      "I'll use the Strategy Pattern - each rule is a self-contained strategy implementing a common interface",
-      "I'll use Decimal for currency to avoid floating-point precision issues",
-      "The design will follow Open/Closed Principle - new rules won't require engine changes",
-      "I'll check ALL rules for each expense since one expense can have multiple violations"
+      "I'll use the Strategy Pattern - each rule type implements a common interface",
+      "This follows Open/Closed Principle - we can add new rules without modifying the engine",
+      "I'll use Decimal for monetary precision, not float",
+      "I'll make sure to collect ALL violations, not short-circuit on the first one"
     ],
     "communication_during_coding": [
-      "I'm creating an abstract Rule class that defines the evaluate() interface",
-      "Each concrete rule will implement its own validation logic",
-      "Using getattr() here lets one BanRule class handle multiple field types",
-      "The engine is just a simple nested loop - the rules do all the work"
+      "I'm defining an abstract Rule class as my strategy interface",
+      "Each concrete rule will implement evaluate() which returns None for pass, Violation for fail",
+      "The engine just iterates and calls evaluate() - it doesn't know rule specifics",
+      "Let me trace through an example to verify..."
     ],
     "if_stuck": [
-      "Step back: What's the core pattern here? \u2192 Strategy Pattern",
-      "Think about the interface: What does every rule need to do? \u2192 Take expense, return violation or none",
-      "Draw it: Sketch the class hierarchy on paper/whiteboard",
-      "Start simple: Implement one rule first, get it working, then generalize"
+      "Think: What's the key pattern here? Rules engine = Strategy Pattern",
+      "Draw the class hierarchy on paper",
+      "Focus on one rule type first, then generalize"
     ],
-    "time_management": "0-5min: Understand & clarify | 5-12min: Design & explain approach | 12-30min: Implement core | 30-40min: Test & edge cases | 40-45min: Discuss follow-ups"
+    "time_management": "0-5min: Clarify requirements | 5-10min: Design classes on paper | 10-25min: Implement | 25-35min: Test/trace | 35-45min: Follow-ups"
   },
   "pattern_recognition": {
-    "pattern_name": "Strategy Pattern + Rules Engine",
+    "pattern_name": "Strategy Pattern + Polymorphism",
     "indicators": [
-      "Multiple algorithms/rules that need to be interchangeable",
-      "Need to add new rules without modifying existing code",
-      "Each rule has same interface but different implementation",
-      "Open/Closed Principle mentioned in requirements"
+      "Multiple types of 'things' that do similar operations (rules evaluating expenses)",
+      "Need to be easily extensible (add new rule types)",
+      "Same interface, different implementations"
     ],
     "similar_problems": [
-      "Validation frameworks (form validation, input sanitization)",
-      "Policy engines (access control, rate limiting)",
-      "Filter chains (request/response filters)",
-      "Payment processing (different payment method handlers)",
-      "Discount engines (different discount rules)"
+      "Notification System: EmailNotifier, SMSNotifier, PushNotifier all implement Notifier.send()",
+      "Payment Processing: CreditCard, PayPal, Crypto all implement PaymentMethod.process()",
+      "File Parser: JSONParser, XMLParser, CSVParser all implement Parser.parse()"
     ],
-    "template": "```\nabstract class Strategy {\n  abstract Result execute(Input input);\n}\n\nclass ConcreteStrategyA extends Strategy {...}\nclass ConcreteStrategyB extends Strategy {...}\n\nclass Context {\n  List<Result> applyAll(List<Strategy> strategies, List<Input> inputs) {\n    for input in inputs:\n      for strategy in strategies:\n        result = strategy.execute(input)\n        if result: collect(result)\n    return collected\n  }\n}\n```"
+    "template": "1. Define interface with operation method\n2. Create concrete implementations\n3. Client code uses interface, unaware of concrete types\n4. Easy to add new implementations without changing client"
   },
   "follow_up_preparation": {
-    "part_2_hint": "Part 2 adds **Trip-Level Aggregation Rules** (e.g., 'total trip expenses cannot exceed $1000'). You'll need to:\n- Pre-aggregate expenses by trip_id before evaluation\n- Rules might need access to aggregated data, not just individual expenses\n- Consider adding a pre-processing step in the engine",
-    "part_3_hint": "Part 3 adds a **Rule Creation API** - parsing rule definitions from JSON/config. You'll need:\n- Factory pattern to create rules from config\n- Validation of rule configurations\n- Possibly a RuleBuilder or RuleFactory class",
-    "data_structure_evolution": "Part 1: Simple Rule interface, no aggregation needed\nPart 2: Add HashMap<trip_id, List<Expense>> for aggregation\nPart 3: Add RuleFactory, RuleConfig, validation logic"
+    "part_2_hint": "Part 2 adds **Trip-Level Aggregation Rules** like 'total restaurant spend per trip \u2264 $200'. You'll need to:\n- Group expenses by trip_id\n- Aggregate amounts before comparison\n- Consider passing all expenses to rule.evaluate() instead of one at a time",
+    "part_3_hint": "Part 3 adds a **Rule Creation API** - parsing rule definitions from JSON/config. You'll need:\n- Rule factory pattern\n- Validation of rule parameters\n- Possibly a rule DSL",
+    "data_structure_evolution": "Part 1: Rule interface + concrete classes \u2192 Part 2: Add TripAggregationRule that needs expense grouping \u2192 Part 3: Add RuleFactory to create rules from config"
   },
   "communication_script": {
-    "opening_verbatim": "Thank you for this problem. This looks like a classic rules engine design problem. Before I dive into implementation, I'd like to clarify a few requirements and then walk you through my design approach. Is that okay?",
-    "after_clarification": "Great, so to summarize: I need to design a flexible rules engine using OOP principles, support three rule types initially, and make it easy to add new rules later. I'll use the Strategy Pattern where each rule implements a common interface. The engine will check all rules against all expenses. Sound good?",
+    "opening_verbatim": "Thank you for this problem. I see this is a rules engine for expense validation. Before I start coding, let me confirm a few things and share my design approach.",
+    "after_clarification": "Great, so to summarize: I need to design an extensible rule system where each rule evaluates expenses independently, and one expense can have multiple violations. I'll use the Strategy Pattern for this. Sound good?",
     "while_coding": [
-      "I'm starting with the data classes - Expense and Violation. Using Decimal for amounts to avoid precision issues.",
-      "Now I'm creating the abstract Rule class - this is the Strategy interface. Every rule will implement evaluate().",
-      "For BanRule, I'm using getattr() for dynamic field access - this lets one class handle multiple field types.",
-      "The engine is intentionally simple - just a nested loop. The rules do all the complex work.",
-      "Notice I'm not short-circuiting - I check ALL rules because one expense can have multiple violations."
+      "I'm creating a Violation dataclass to capture the three pieces of info we need: expense_id, rule_name, and reason",
+      "This Rule abstract class is my strategy interface - all rule types will implement evaluate()",
+      "Notice I'm using Decimal here for the amount comparison to avoid float precision issues",
+      "The engine's job is simple - just iterate and call evaluate() on each rule polymorphically"
     ],
-    "after_coding": "Let me trace through this with Example 2 to verify it works. E001 is $350 airfare. BanRule checks expense_type... 'airfare' equals 'airfare', so that's a violation. MaxAmountRule checks $350 > $250, that's also a violation. VendorTypeLimitRule checks vendor_type... 'airline' doesn't equal 'restaurant', so that passes. We get two violations for E001.",
-    "when_stuck_verbatim": "I'm thinking about how to handle this... Let me step back and think about what the rule needs to return. It should either return a violation or nothing, so Optional makes sense here.",
-    "after_mistake": "Actually, I see an issue - I was using >= for the comparison, but the examples show that $75.00 exactly should pass a $75 limit. Let me fix that to use > instead.",
-    "before_moving_on": "This handles Part 1. The time complexity is O(R \u00d7 E) where R is rules and E is expenses. Space is O(V) for violations. The design follows Open/Closed Principle - adding new rules just means creating new classes. Ready for Part 2?"
+    "after_coding": "Let me trace through Example 1 to verify this works correctly...",
+    "when_stuck_verbatim": "Let me step back and think about what pattern fits here. Multiple rule types with the same interface... this is a classic Strategy Pattern scenario.",
+    "after_mistake": "Good catch - I see the issue. The boundary should be > not >=. Let me fix that.",
+    "before_moving_on": "This solution handles all three rule types and properly collects all violations. Time complexity is O(E\u00d7R), space is O(V) for violations. Ready for Part 2?"
   },
   "interviewer_perspective": {
     "what_they_evaluate": [
-      "**Problem Decomposition**: Can you break down a complex system into clean components?",
-      "**OOP Fundamentals**: Do you understand interfaces, polymorphism, encapsulation?",
-      "**Design Patterns**: Do you recognize and apply Strategy Pattern appropriately?",
-      "**Code Quality**: Clean naming, proper types, good structure?",
-      "**Edge Case Handling**: Do you think about boundaries and special cases?",
-      "**Communication**: Can you explain your thinking clearly?"
+      "OOP design skills - proper use of abstraction and polymorphism",
+      "Understanding of SOLID principles, especially Open/Closed",
+      "Attention to detail - boundary conditions, decimal precision",
+      "Communication - explaining design decisions clearly",
+      "Testing instinct - tracing through examples"
     ],
     "bonus_points": [
-      "Mentioning Decimal/BigDecimal for currency without being prompted",
-      "Drawing a class diagram before coding",
-      "Explicitly stating you're using Strategy Pattern and why",
-      "Asking about boundary behavior ($75 vs $75.00 limit)",
-      "Testing with boundary values unprompted",
-      "Mentioning SOLID principles by name"
+      "Mentioning Strategy Pattern by name",
+      "Proactively bringing up Decimal for currency",
+      "Drawing class diagram before coding",
+      "Identifying that one expense can have multiple violations",
+      "Asking about boundary conditions (> vs >=)"
     ],
     "red_flags": [
-      "Using if/else or switch on rule type in the engine",
-      "Using float for currency amounts",
+      "Giant if-else chain in main function",
+      "Hardcoding rule types instead of using polymorphism",
+      "Using float for currency without mentioning precision concerns",
       "Only returning first violation per expense",
-      "Not asking any clarifying questions",
-      "Starting to code without explaining approach",
-      "Hardcoding rule logic instead of using polymorphism"
+      "Not asking any clarifying questions"
     ],
-    "what_differentiates_strong_candidates": "Strong candidates immediately recognize this as a Strategy Pattern problem. They ask about boundary conditions (is $75 at limit a pass?). They use proper types (Decimal for money). They write clean, well-structured code with good naming. They test with edge cases and explain their thinking throughout. They mention extensibility and SOLID principles naturally, not as buzzwords."
+    "what_differentiates_strong_candidates": "Strong candidates immediately recognize the Strategy Pattern, discuss design tradeoffs before coding, use proper types for currency, and systematically verify their solution with examples. They treat the problem as a collaboration, explaining their reasoning as they go."
   },
   "time_milestones": {
-    "by_5_min": "Understood problem, asked 3-4 clarifying questions, confirmed boundary behavior",
-    "by_10_min": "Explained Strategy Pattern approach, sketched class hierarchy, got interviewer buy-in",
-    "by_15_min": "Expense and Violation classes done, Rule interface defined",
-    "by_25_min": "All three concrete rules implemented",
-    "by_30_min": "Engine implemented, basic testing started",
-    "by_35_min": "Edge cases tested, complexity discussed",
-    "by_40_min": "Part 1 complete, discussing design decisions and extensibility",
-    "warning_signs": "If still clarifying at 10 min, or still implementing rules at 35 min, you're behind. If stuck, simplify - get one rule working first."
+    "by_5_min": "Understand problem, ask clarifying questions, identify Strategy Pattern",
+    "by_10_min": "Explain design approach, sketch class hierarchy, get interviewer buy-in",
+    "by_20_min": "Violation class + Rule interface + at least one concrete rule done",
+    "by_30_min": "All three rule types + engine implemented",
+    "by_35_min": "Dry run through example complete, bugs fixed",
+    "by_40_min": "Complexity discussed, ready for Part 2",
+    "warning_signs": "If you're still discussing design at 15 min or still implementing rules at 35 min, you need to speed up"
   },
   "recovery_strategies": {
-    "when_you_make_a_bug": "Don't panic. Say: 'I see an issue here - I'm comparing strings instead of Decimals. Let me fix that.' Fix it, explain briefly, move on. Bugs are expected; recovery matters.",
-    "when_you_dont_know_syntax": "Say: 'I don't remember the exact decorator syntax for abstract methods in Python. It's something like @abstractmethod. Let me write it and we can verify.' This is fine - concepts matter more than syntax.",
-    "when_approach_is_wrong": "Say: 'Actually, I realize putting all rule logic in the engine violates Open/Closed. Let me refactor to use polymorphism.' Catching your own mistakes shows senior thinking.",
-    "when_completely_stuck": "Say: 'I'm stuck on how to dynamically access fields by name. In Python, I think there's a getattr function - could you confirm?' Asking for help is better than wasting time.",
-    "when_running_out_of_time": "Say: 'I'm running low on time. Let me finish the core implementation and explain what I'd add for the remaining edge cases.' Prioritize working code over complete code."
+    "when_you_make_a_bug": "Say: 'Actually, I see an issue - I'm using >= when I should use >. Let me fix that.' Fix it, verify with a quick trace, move on.",
+    "when_you_dont_know_syntax": "Say: 'I don't remember the exact syntax for Python ABC, but I need an abstract method. Let me write it as I remember and we can adjust.' This is fine.",
+    "when_approach_is_wrong": "Say: 'Actually, if I hardcode rule types in the engine, I can't easily add new rules. Let me use polymorphism instead.' Pivoting shows adaptability.",
+    "when_completely_stuck": "Say: 'I'm thinking about how to make this extensible. Could you confirm if I'm on the right track with using an interface for rules?'",
+    "when_running_out_of_time": "Say: 'I'm running low on time. Let me focus on getting the core working and explain what I'd add.'"
   },
   "ai_copilot_tips": {
-    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them strategically but demonstrate YOUR understanding.",
+    "when_using_cursor_or_copilot": "Rippling allows AI tools. Use them strategically but demonstrate understanding.",
     "what_to_do": [
-      "Use AI for boilerplate (dataclass definitions, imports)",
-      "Let it autocomplete obvious patterns (getters, __init__)",
-      "Use for generating test data",
-      "Ask for syntax you forgot"
+      "Let AI generate boilerplate (imports, dataclass structure)",
+      "Use AI for test case generation",
+      "Accept obvious autocompletes for repetitive code",
+      "Use AI to check syntax you're unsure about"
     ],
     "what_not_to_do": [
-      "Don't paste the entire problem and ask for solution",
-      "Don't accept suggestions without understanding them",
-      "Don't let AI decide your architecture - YOU choose Strategy Pattern",
+      "Don't paste the entire problem and accept the solution",
+      "Don't accept complex suggestions without understanding them",
+      "Don't let AI design your class hierarchy",
       "Don't use AI-generated code you can't explain"
     ],
-    "how_to_demonstrate_understanding": "When AI suggests something, explain it: 'The AI suggested using getattr here, which is right because it lets us access fields dynamically by name. I could also use a switch statement, but getattr is more Pythonic.'",
-    "expectation_adjustment": "With AI, you're expected to complete MORE parts and have MORE polished code. If you're slower with AI than without, don't use it."
+    "how_to_demonstrate_understanding": "When AI suggests something, say: 'This uses the Strategy Pattern, which is exactly what I wanted because...' The interviewer evaluates YOUR understanding.",
+    "expectation_adjustment": "With AI, you should complete more parts. If you're slower with AI than without, turn it off."
   },
   "signal_points": {
     "wow_factors": [
-      "Drawing a class hierarchy diagram before coding",
-      "Saying 'I'll use Decimal for currency precision' unprompted",
-      "Asking 'Is the limit inclusive or exclusive?' for boundary clarification",
-      "Mentioning Open/Closed Principle by name and explaining why it matters",
-      "Adding meaningful docstrings and type hints naturally",
-      "Testing with $75.00 exactly to verify boundary behavior"
+      "Drawing a UML-style class diagram before coding",
+      "Naming Strategy Pattern explicitly",
+      "Mentioning Open/Closed Principle",
+      "Using Decimal and explaining why",
+      "Proactively identifying the 'multiple violations per expense' requirement"
     ],
     "subtle_signals_of_experience": [
-      "Using `@dataclass(frozen=True)` for immutability",
-      "Using `Optional[Violation]` return type instead of null checks",
-      "Creating a `from_dict` factory method for parsing",
-      "Separating the engine from the rules cleanly",
-      "Writing `if expense.vendor_type != self.vendor_type: return None` (early return pattern)"
+      "Checking boundary conditions with examples",
+      "Using Optional return type instead of null",
+      "Making Violation immutable (dataclass)",
+      "Good variable names (banned_value not val)",
+      "Comments explaining 'why' not 'what'"
     ]
   },
   "red_flags_to_avoid": {
     "behavioral": [
-      "Staying silent for more than 30 seconds without explaining your thinking",
-      "Getting defensive when interviewer points out an issue",
-      "Not asking any clarifying questions",
-      "Rushing to code without discussing approach"
+      "Coding silently for more than 60 seconds",
+      "Getting defensive when interviewer questions design",
+      "Rushing to code without confirming approach",
+      "Ignoring interviewer hints"
     ],
     "technical": [
-      "Using if/else or switch on rule type in the engine (violates Open/Closed)",
-      "Using float for currency (precision errors)",
-      "Hardcoding rule logic instead of using polymorphism",
-      "Only checking first rule that fails (missing multiple violations)",
-      "String comparison for amounts ('350' > '100' works, but '9' > '10' doesn't)"
+      "Using float for money",
+      "If-else chain instead of polymorphism",
+      "Returning only first violation",
+      "Hardcoding field names in base class",
+      "Not handling missing fields safely"
     ],
     "communication": [
-      "Using jargon without explaining (assuming interviewer knows Strategy Pattern)",
-      "Not summarizing approach before coding",
-      "Forgetting to trace through an example after coding",
-      "Not discussing complexity at the end"
+      "Not explaining design decisions",
+      "Using jargon without explanation",
+      "Not testing with examples",
+      "Not discussing complexity"
     ]
   },
   "final_checklist": {
     "before_saying_done": [
-      "Did I implement all three rule types (Ban, MaxAmount, VendorTypeLimit)?",
-      "Did I use Decimal/BigDecimal for currency?",
-      "Does my engine check ALL rules for each expense?",
-      "Did I trace through at least one example?",
-      "Did I test a boundary case ($75.00 at $75 limit)?",
-      "Did I mention time and space complexity?",
-      "Is my code clean with good variable names?"
+      "\u2713 Rule interface with evaluate() method defined",
+      "\u2713 All three rule types implemented (Ban, MaxAmount, VendorTypeLimit)",
+      "\u2713 Engine collects ALL violations, not just first",
+      "\u2713 Amounts parsed from strings to Decimal",
+      "\u2713 Boundary condition is > not >=",
+      "\u2713 Traced through at least one example",
+      "\u2713 Discussed time/space complexity"
     ],
     "quick_code_review": [
-      "No magic numbers (limits should be parameters)",
-      "Consistent naming (snake_case in Python, camelCase in Java)",
-      "Type hints on all methods",
-      "No unused imports or variables",
-      "Error messages include relevant values (actual amount, limit)"
+      "No magic numbers",
+      "Consistent naming (snake_case for Python)",
+      "Proper imports",
+      "Type hints present",
+      "Readable variable names"
     ]
   },
   "production_considerations": {
     "what_id_add_in_production": [
-      "**Input validation**: Check for missing fields, invalid amounts, null values",
-      "**Logging**: Log each rule evaluation for audit trail",
-      "**Metrics**: Track violation rates by rule type",
-      "**Configuration**: Load rules from database or config file, not hardcoded",
-      "**Caching**: If same rules applied repeatedly, consider caching compiled rules",
-      "**Thread safety**: If rules engine is shared across threads",
-      "**Rule versioning**: Track which version of rules approved an expense"
+      "Input validation - check required fields exist",
+      "Custom exceptions for parsing failures",
+      "Logging for debugging and audit trail",
+      "Rule priority/ordering if needed",
+      "Configuration-driven rule loading",
+      "Async evaluation for large expense volumes"
     ],
-    "why_not_in_interview": "Interview code should focus on the core algorithm and design. Mention these verbally to show senior thinking, but don't over-engineer the solution.",
-    "how_to_mention": "Say: 'In production, I'd add input validation, logging for audit purposes, and probably load rules from a database. But for this interview, I'll focus on the core logic to stay within time.'"
+    "why_not_in_interview": "Interview code should focus on core logic. Mention these verbally: 'In production I'd also add logging and validation, but for now I'll focus on the rule logic.'",
+    "how_to_mention": "After completing core implementation, say: 'In a production system, I'd add input validation, logging for the audit trail, and potentially async evaluation if we're processing thousands of expenses. But for this interview, let's focus on the core design.'"
   },
-  "generated_at": "2026-01-18T18:34:46.399256",
+  "generated_at": "2026-01-19T04:02:11.805001",
   "_meta": {
     "problem_id": "expense_rules_engine",
     "part_number": null,
