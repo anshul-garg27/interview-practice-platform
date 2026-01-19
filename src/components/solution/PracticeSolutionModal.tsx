@@ -483,6 +483,7 @@ function Section({
   defaultOpen = true,
   accentColor = colors.phaseUnderstand,
   isMobile = false,
+  copyContent,
 }: {
   title: string
   icon?: string
@@ -490,8 +491,22 @@ function Section({
   defaultOpen?: boolean
   accentColor?: string
   isMobile?: boolean
+  copyContent?: string
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle')
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!copyContent) return
+    try {
+      await navigator.clipboard.writeText(copyContent)
+      setCopyStatus('copied')
+      setTimeout(() => setCopyStatus('idle'), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
 
   return (
     <div style={{
@@ -520,11 +535,11 @@ function Section({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flex: 1, minWidth: 0 }}>
           {icon && <span style={{ fontSize: isMobile ? 12 : 15, flexShrink: 0 }}>{icon}</span>}
-          <h3 style={{ 
-            fontSize: isMobile ? 11 : 13, 
-            fontWeight: 700, 
-            color: colors.textBright, 
-            textTransform: 'uppercase', 
+          <h3 style={{
+            fontSize: isMobile ? 11 : 13,
+            fontWeight: 700,
+            color: colors.textBright,
+            textTransform: 'uppercase',
             letterSpacing: '0.03em',
             margin: 0,
             overflow: 'hidden',
@@ -533,22 +548,73 @@ function Section({
           }}>
             {title}
           </h3>
-          </div>
-        <svg
-          style={{ 
-            width: isMobile ? 14 : 16, 
-            height: isMobile ? 14 : 16, 
-            color: colors.textMuted,
-            transform: isOpen ? 'rotate(180deg)' : 'rotate(0)',
-            transition: 'transform 0.2s ease',
-            flexShrink: 0
-          }}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {copyContent && (
+            <div
+              onClick={handleCopy}
+              style={{
+                padding: isMobile ? '4px 8px' : '4px 10px',
+                borderRadius: 6,
+                backgroundColor: copyStatus === 'copied' ? colors.phaseVerify : colors.bgGraphite,
+                color: copyStatus === 'copied' ? '#fff' : colors.textSecondary,
+                fontSize: isMobile ? 10 : 11,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                border: `1px solid ${copyStatus === 'copied' ? colors.phaseVerify : colors.borderSubtle}`,
+              }}
+              onMouseEnter={(e) => {
+                if (copyStatus !== 'copied') {
+                  e.currentTarget.style.backgroundColor = accentColor
+                  e.currentTarget.style.color = '#fff'
+                  e.currentTarget.style.borderColor = accentColor
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (copyStatus !== 'copied') {
+                  e.currentTarget.style.backgroundColor = colors.bgGraphite
+                  e.currentTarget.style.color = colors.textSecondary
+                  e.currentTarget.style.borderColor = colors.borderSubtle
+                }
+              }}
+            >
+              {copyStatus === 'copied' ? (
+                <>
+                  <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                <>
+                  <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </>
+              )}
+            </div>
+          )}
+          <svg
+            style={{
+              width: isMobile ? 14 : 16,
+              height: isMobile ? 14 : 16,
+              color: colors.textMuted,
+              transform: isOpen ? 'rotate(180deg)' : 'rotate(0)',
+              transition: 'transform 0.2s ease',
+              flexShrink: 0
+            }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </button>
         {isOpen && (
         <div style={{ 
@@ -1102,7 +1168,12 @@ function PhaseUnderstand({ solution }: { solution: PracticeSolution }) {
                 )}
 
                 {solution.problem_analysis?.clarifying_questions && Array.isArray(solution.problem_analysis.clarifying_questions) && (
-        <Section title="Clarifying Questions to Ask" icon="❓" defaultOpen={false}>
+        <Section
+          title="Clarifying Questions to Ask"
+          icon="❓"
+          defaultOpen={false}
+          copyContent={`❓ CLARIFYING QUESTIONS TO ASK:\n\n${solution.problem_analysis.clarifying_questions.map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}`}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {solution.problem_analysis.clarifying_questions.map((q: string, i: number) => (
               <div key={i} style={{
@@ -1153,7 +1224,22 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
       )}
 
             {solution.thinking_process && (
-        <Section title="Thinking Process" icon="🧠" accentColor={colors.phaseApproach}>
+        <Section
+          title="Thinking Process"
+          icon="🧠"
+          accentColor={colors.phaseApproach}
+          copyContent={`🧠 THINKING PROCESS:\n\n${
+            Array.isArray(solution.thinking_process)
+              ? solution.thinking_process.map((item: any, i: number) =>
+                  `Step ${item.step || i + 1}: ${item.thought}${item.why ? `\n   → Why: ${item.why}` : ''}`
+                ).join('\n\n')
+              : [
+                  solution.thinking_process.step_by_step?.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n'),
+                  solution.thinking_process.key_insight ? `\n💡 Key Insight: ${solution.thinking_process.key_insight}` : '',
+                  solution.thinking_process.why_this_works ? `\n✅ Why This Works: ${solution.thinking_process.why_this_works}` : ''
+                ].filter(Boolean).join('\n')
+          }`}
+        >
           {/* Handle array format: [{ step, thought, why }, ...] */}
           {Array.isArray(solution.thinking_process) && solution.thinking_process.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1396,7 +1482,21 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
 
       {/* Optimal Solution Details */}
       {solution.optimal_solution && (
-        <Section title="Optimal Solution" icon="🎯" accentColor={colors.phaseSolution} defaultOpen={true}>
+        <Section
+          title="Optimal Solution"
+          icon="🎯"
+          accentColor={colors.phaseSolution}
+          defaultOpen={true}
+          copyContent={`🎯 OPTIMAL SOLUTION:\n\n${
+            [
+              solution.optimal_solution.name ? `✓ ${solution.optimal_solution.name}` : '',
+              solution.optimal_solution.explanation_md ? `\n${solution.optimal_solution.explanation_md}` : '',
+              solution.optimal_solution.data_structures?.length ? `\n📦 Data Structures:\n${solution.optimal_solution.data_structures.map((ds: any) => `• ${ds.structure}: ${ds.purpose}`).join('\n')}` : '',
+              solution.optimal_solution.algorithm_steps?.length ? `\n📝 Algorithm Steps:\n${solution.optimal_solution.algorithm_steps.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n')}` : '',
+              solution.optimal_solution.why_decimal ? `\n⚠️ Why Decimal: ${solution.optimal_solution.why_decimal}` : ''
+            ].filter(Boolean).join('\n')
+          }`}
+        >
           {solution.optimal_solution.name && (
             <div style={{ 
               fontSize: 16, 
@@ -1592,7 +1692,26 @@ function PhaseApproach({ solution }: { solution: PracticeSolution }) {
       )}
 
       {solution.approaches && solution.approaches.length > 0 && (
-        <Section title="Approaches Comparison" icon="🔄" defaultOpen={false}>
+        <Section
+          title="Approaches Comparison"
+          icon="🔄"
+          defaultOpen={false}
+          copyContent={`🔄 APPROACHES COMPARISON:\n\n${
+            solution.approaches.map((approach: any, i: number) => {
+              const isOptimal = approach.name.toLowerCase().includes('optimal') || i === solution.approaches!.length - 1
+              return [
+                `${isOptimal ? '✓ ' : ''}${approach.name}`,
+                `   Time: ${approach.time_complexity} | Space: ${approach.space_complexity}`,
+                approach.description ? `   ${approach.description}` : '',
+                approach.why_not_optimal ? `   ⚠️ Why not optimal: ${approach.why_not_optimal}` : '',
+                approach.key_insight ? `   💡 Key Insight: ${approach.key_insight}` : '',
+                approach.pros?.length ? `   ✅ Pros: ${approach.pros.join(', ')}` : '',
+                approach.cons?.length ? `   ❌ Cons: ${approach.cons.join(', ')}` : '',
+                approach.when_to_use ? `   📌 When to use: ${approach.when_to_use}` : ''
+              ].filter(Boolean).join('\n')
+            }).join('\n\n')
+          }`}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {solution.approaches.map((approach: any, i: number) => {
               const isOptimal = approach.name.toLowerCase().includes('optimal') || i === solution.approaches!.length - 1
@@ -1862,7 +1981,12 @@ function PhaseSolution({ solution }: { solution: PracticeSolution }) {
       )}
 
       {(hasPython || hasJava) && (
-        <Section title="Solution Code" icon="💻" accentColor={colors.phaseSolution}>
+        <Section
+          title="Solution Code"
+          icon="💻"
+          accentColor={colors.phaseSolution}
+          copyContent={`💻 SOLUTION CODE (Python):\n\n${getCodeString(solution.solution_python_lines, solution.solution_python)}`}
+        >
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             {hasPython && (
                     <button
