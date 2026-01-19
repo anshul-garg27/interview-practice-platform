@@ -190,10 +190,13 @@ function formatSolutionForCopy(solution: PracticeSolution, partLabel: string): s
   }
 
   // Solution Code (Python only)
-  if (solution.solution_python) {
+  const pythonCode = solution.solution_python ||
+    (solution.solution_python_lines?.length ? solution.solution_python_lines.join('\n') : null)
+
+  if (pythonCode) {
     sections.push('\n💻 SOLUTION CODE (PYTHON):')
     sections.push('```python')
-    sections.push(solution.solution_python)
+    sections.push(pythonCode)
     sections.push('```')
   }
 
