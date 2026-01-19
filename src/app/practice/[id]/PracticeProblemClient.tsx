@@ -93,6 +93,233 @@ const difficultyConfig = {
   hard: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' },
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COPY ALL FEATURE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function stripMarkdown(text: string): string {
+  // Simple markdown stripping - remove common markdown syntax
+  return text
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```\w*\n?/g, '').trim()) // Keep code block content
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
+    .replace(/\*([^*]+)\*/g, '$1') // Italic
+    .replace(/`([^`]+)`/g, '$1') // Inline code
+    .replace(/^#{1,6}\s+/gm, '') // Headers
+    .replace(/^\s*[-*+]\s+/gm, '• ') // List items
+    .replace(/^\s*\d+\.\s+/gm, (match) => match.trim() + ' ') // Numbered lists
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links
+    .trim()
+}
+
+function formatSolutionForCopy(solution: PracticeSolution, partLabel: string): string {
+  const sections: string[] = []
+
+  sections.push(`\n${'='.repeat(60)}\n${partLabel}\n${'='.repeat(60)}`)
+
+  // Clarifying Questions
+  if (solution.problem_analysis?.clarifying_questions?.length) {
+    sections.push('\n📋 CLARIFYING QUESTIONS TO ASK:')
+    solution.problem_analysis.clarifying_questions.forEach((q, i) => {
+      sections.push(`${i + 1}. ${q}`)
+    })
+  }
+
+  // Thinking Process
+  if (solution.thinking_process) {
+    sections.push('\n🧠 THINKING PROCESS:')
+    if (solution.thinking_process.step_by_step?.length) {
+      solution.thinking_process.step_by_step.forEach((step, i) => {
+        sections.push(`${i + 1}. ${step}`)
+      })
+    }
+    if (solution.thinking_process.key_insight) {
+      sections.push(`\nKey Insight: ${solution.thinking_process.key_insight}`)
+    }
+    if (solution.thinking_process.why_this_works) {
+      sections.push(`Why This Works: ${solution.thinking_process.why_this_works}`)
+    }
+  }
+
+  // Optimal Solution
+  if (solution.optimal_solution) {
+    sections.push('\n🎯 OPTIMAL SOLUTION:')
+    if (solution.optimal_solution.name) {
+      sections.push(`Approach: ${solution.optimal_solution.name}`)
+    }
+    if (solution.optimal_solution.explanation_md) {
+      sections.push(stripMarkdown(solution.optimal_solution.explanation_md))
+    }
+    if (solution.optimal_solution.data_structures?.length) {
+      sections.push('\nData Structures:')
+      solution.optimal_solution.data_structures.forEach(ds => {
+        sections.push(`• ${ds.structure}: ${ds.purpose}`)
+      })
+    }
+    if (solution.optimal_solution.algorithm_steps?.length) {
+      sections.push('\nAlgorithm Steps:')
+      solution.optimal_solution.algorithm_steps.forEach((step, i) => {
+        sections.push(`${i + 1}. ${step}`)
+      })
+    }
+  }
+
+  // Approaches Comparison
+  if (solution.approaches?.length) {
+    sections.push('\n📊 APPROACHES COMPARISON:')
+    solution.approaches.forEach((approach, i) => {
+      sections.push(`\n${i + 1}. ${approach.name}`)
+      sections.push(`   Description: ${approach.description}`)
+      sections.push(`   Time: ${approach.time_complexity} | Space: ${approach.space_complexity}`)
+      if (approach.why_not_optimal) {
+        sections.push(`   Why not optimal: ${approach.why_not_optimal}`)
+      }
+    })
+  }
+
+  // Complexity Analysis
+  if (solution.complexity_analysis) {
+    sections.push('\n⏱️ COMPLEXITY ANALYSIS:')
+    const time = typeof solution.complexity_analysis.time === 'string'
+      ? solution.complexity_analysis.time
+      : JSON.stringify(solution.complexity_analysis.time)
+    const space = typeof solution.complexity_analysis.space === 'string'
+      ? solution.complexity_analysis.space
+      : JSON.stringify(solution.complexity_analysis.space)
+    sections.push(`Time Complexity: ${time}`)
+    sections.push(`Space Complexity: ${space}`)
+  }
+
+  // Solution Code (Python only)
+  if (solution.solution_python) {
+    sections.push('\n💻 SOLUTION CODE (PYTHON):')
+    sections.push('```python')
+    sections.push(solution.solution_python)
+    sections.push('```')
+  }
+
+  return sections.join('\n')
+}
+
+async function copyAllProblemContent(
+  problem: Problem,
+  basePath: string
+): Promise<{ success: boolean; message: string }> {
+  const sections: string[] = []
+
+  // Header
+  sections.push(`${'═'.repeat(60)}`)
+  sections.push(`📝 ${problem.title}`)
+  sections.push(`${'═'.repeat(60)}`)
+  sections.push(`Difficulty: ${problem.difficulty.overall} | Category: ${problem.category}`)
+  sections.push(`Time: ${problem.estimated_time} | Tags: ${problem.tags.join(', ')}`)
+
+  // Problem Statement
+  sections.push('\n' + '─'.repeat(40))
+  sections.push('📄 PROBLEM STATEMENT')
+  sections.push('─'.repeat(40))
+  sections.push(stripMarkdown(problem.problem_statement.description_md))
+
+  if (problem.problem_statement.requirements_md) {
+    sections.push('\nRequirements:')
+    sections.push(stripMarkdown(problem.problem_statement.requirements_md))
+  }
+
+  // Method Signatures
+  if (problem.problem_statement.method_signatures?.length) {
+    sections.push('\n' + '─'.repeat(40))
+    sections.push('📝 METHOD SIGNATURES')
+    sections.push('─'.repeat(40))
+    problem.problem_statement.method_signatures.forEach(method => {
+      sections.push(`\n${method.name}:`)
+      if (method.signature_python) sections.push(`  Python: ${method.signature_python}`)
+      if (method.signature_java) sections.push(`  Java: ${method.signature_java}`)
+      if (method.parameters?.length) {
+        sections.push('  Parameters:')
+        method.parameters.forEach(p => {
+          sections.push(`    • ${p.name} (${p.type}): ${p.description}`)
+        })
+      }
+      if (method.returns) {
+        sections.push(`  Returns: ${method.returns.type} - ${method.returns.description}`)
+      }
+    })
+  }
+
+  // Constraints
+  if (problem.problem_statement.constraints_md) {
+    sections.push('\n' + '─'.repeat(40))
+    sections.push('⚠️ CONSTRAINTS')
+    sections.push('─'.repeat(40))
+    sections.push(stripMarkdown(problem.problem_statement.constraints_md))
+  }
+
+  // Examples
+  if (problem.examples?.length) {
+    sections.push('\n' + '─'.repeat(40))
+    sections.push('📌 EXAMPLES')
+    sections.push('─'.repeat(40))
+    problem.examples.forEach((example, i) => {
+      sections.push(`\nExample ${i + 1}: ${example.title}`)
+      if (example.explanation_md) {
+        sections.push(stripMarkdown(example.explanation_md))
+      }
+    })
+  }
+
+  // Fetch and add main solution
+  try {
+    const mainUrl = `${basePath}/data/practice_solutions/${problem.problem_id}_main.json`
+    const mainRes = await fetch(mainUrl)
+    if (mainRes.ok) {
+      const mainSolution = await mainRes.json()
+      sections.push(formatSolutionForCopy(mainSolution, '🎯 MAIN PROBLEM SOLUTION'))
+    }
+  } catch {
+    // Main solution not available
+  }
+
+  // Fetch and add follow-up solutions
+  const followUps = problem.follow_ups || []
+  for (let i = 0; i < followUps.length; i++) {
+    const followUp = followUps[i]
+    const partNum = followUp.part_number || (i + 2)
+
+    // Add follow-up problem statement
+    sections.push(`\n${'═'.repeat(60)}`)
+    sections.push(`🚀 FOLLOW-UP ${partNum}: ${followUp.title}`)
+    sections.push(`${'═'.repeat(60)}`)
+    sections.push(stripMarkdown(followUp.description_md))
+
+    if (followUp.method_signatures?.length) {
+      sections.push('\nMethod Signatures:')
+      followUp.method_signatures.forEach(method => {
+        if (method.signature_python) sections.push(`  ${method.name}: ${method.signature_python}`)
+      })
+    }
+
+    // Fetch follow-up solution
+    try {
+      const partUrl = `${basePath}/data/practice_solutions/${problem.problem_id}_part${partNum}.json`
+      const partRes = await fetch(partUrl)
+      if (partRes.ok) {
+        const partSolution = await partRes.json()
+        sections.push(formatSolutionForCopy(partSolution, `📋 PART ${partNum} SOLUTION`))
+      }
+    } catch {
+      // Part solution not available
+    }
+  }
+
+  // Copy to clipboard
+  const fullContent = sections.join('\n')
+  try {
+    await navigator.clipboard.writeText(fullContent)
+    return { success: true, message: 'Copied all content!' }
+  } catch {
+    return { success: false, message: 'Failed to copy' }
+  }
+}
+
 function Section({
   title,
   icon,
@@ -358,6 +585,15 @@ export function PracticeProblemClient() {
   const [activeFollowUp, setActiveFollowUp] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<'problem' | 'followups'>('problem')
   const [activeSolution, setActiveSolution] = useState<PracticeSolution | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'success' | 'error'>('idle')
+
+  const handleCopyAll = async () => {
+    if (!problem) return
+    setCopyStatus('copying')
+    const result = await copyAllProblemContent(problem, basePath)
+    setCopyStatus(result.success ? 'success' : 'error')
+    setTimeout(() => setCopyStatus('idle'), 2000)
+  }
 
   useEffect(() => {
     fetch(`${basePath}/data/all_problems.json`)
@@ -459,18 +695,65 @@ export function PracticeProblemClient() {
             </div>
           </div>
 
-          {/* Tags - Scroll on mobile */}
-          <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4 max-h-16 overflow-y-auto">
-            {problem.tags.slice(0, 6).map((tag, i) => (
-              <span key={i} className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 text-slate-600 text-[10px] sm:text-xs font-medium rounded-md sm:rounded-lg">
-                {tag}
-              </span>
-            ))}
-            {problem.tags.length > 6 && (
-              <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 text-slate-400 text-[10px] sm:text-xs rounded-md sm:rounded-lg">
-                +{problem.tags.length - 6} more
-              </span>
-            )}
+          {/* Tags and Copy All Button */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 sm:mt-4">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-16 overflow-y-auto flex-1">
+              {problem.tags.slice(0, 6).map((tag, i) => (
+                <span key={i} className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 text-slate-600 text-[10px] sm:text-xs font-medium rounded-md sm:rounded-lg">
+                  {tag}
+                </span>
+              ))}
+              {problem.tags.length > 6 && (
+                <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 text-slate-400 text-[10px] sm:text-xs rounded-md sm:rounded-lg">
+                  +{problem.tags.length - 6} more
+                </span>
+              )}
+            </div>
+
+            {/* Copy All Button */}
+            <button
+              onClick={handleCopyAll}
+              disabled={copyStatus === 'copying'}
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                copyStatus === 'success'
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : copyStatus === 'error'
+                  ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                  : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 shadow-sm hover:shadow'
+              }`}
+            >
+              {copyStatus === 'copying' ? (
+                <>
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="hidden sm:inline">Copying...</span>
+                </>
+              ) : copyStatus === 'success' ? (
+                <>
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="hidden sm:inline">Copied!</span>
+                </>
+              ) : copyStatus === 'error' ? (
+                <>
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="hidden sm:inline">Failed</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Copy All</span>
+                  <span className="sm:hidden">Copy</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Tabs - Scroll on mobile */}
